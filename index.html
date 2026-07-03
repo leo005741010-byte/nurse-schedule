@@ -160,8 +160,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 </div>
 
 <div id="tabs">
-  <div class="tab active" onclick="switchTab('schedule')">📅 排班表</div>
   <div class="tab" onclick="switchTab('master')">🗂 月班總表</div>
+  <div class="tab active" onclick="switchTab('schedule')">📅 排班表</div>
   <div class="tab" onclick="switchTab('nurses')">👩‍⚕️ 護理師設定</div>
   <div class="tab" onclick="switchTab('prereq')">📝 預假/預班</div>
   <div class="tab" onclick="switchTab('stats')">📈 統計報表</div>
@@ -858,7 +858,7 @@ function autoSchedule(){
   Object.assign(state.schedule, newSched);
   autoSave();
   renderCalendar();
-  switchTab('schedule');
+  switchTab('master');
   const empty=countEmpty(newSched);
   showToast(empty>0?`排班完成，${empty} 個職位因休息時數／連續上班天數／階級資格等鐵則限制無法排入，維持空班。`:'✅ 自動排班完成，已全數排滿！',empty>0?'warn':'ok');
 }
@@ -1282,6 +1282,25 @@ function delPR(date,prId){
   if(!state.preRequests[date].length) delete state.preRequests[date];
   autoSave(); renderPRList(); renderCalendar();
 }
+let _prMergedGroups={};
+function delPRRange(gid){
+  if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
+  const ids=_prMergedGroups[gid]; if(!ids) return;
+  const idSet=new Set(ids);
+  for(const date of Object.keys(state.preRequests)){
+    state.preRequests[date]=state.preRequests[date].filter(p=>!idSet.has(p.id));
+    if(!state.preRequests[date].length) delete state.preRequests[date];
+  }
+  autoSave(); renderPRList(); renderCalendar();
+}
+function prDateRangeLabel(start,end){
+  const[sy,sm,sd]=start.split('-').map(Number);
+  const[ey,em,ed]=end.split('-').map(Number);
+  if(start===end) return `${sm}/${sd}`;
+  if(sy===ey&&sm===em) return `${sm}/${sd}-${ed}`;
+  if(sy===ey) return `${sm}/${sd}-${em}/${ed}`;
+  return `${sy}/${sm}/${sd}-${ey}/${em}/${ed}`;
+}
 function renderPRList(){
   const label=document.getElementById('pr-list-month-label');
   if(label) label.textContent=`${_prListYear}年${_prListMonth+1}月`;
@@ -1298,17 +1317,44 @@ function renderPRList(){
     if(roster.some(d=>d.id===prevVal)) prSel.value=prevVal;
   }
   const prefix=`${_prListYear}-${String(_prListMonth+1).padStart(2,'0')}-`;
-  const rows=[];
+  // 依 護理師+類型+備註 分組，並將連續日期合併為單一區間
+  const groups={};
   for(const[date,prs] of Object.entries(state.preRequests)){
     if(!date.startsWith(prefix)) continue;
-    for(const pr of prs) rows.push({date,...pr});
+    for(const pr of prs){
+      const key=`${pr.docId}|${pr.type}|${pr.note||''}`;
+      if(!groups[key]) groups[key]={docId:pr.docId,type:pr.type,note:pr.note||'',entries:[]};
+      groups[key].entries.push({date,id:pr.id});
+    }
+  }
+  const mergedRows=[];
+  for(const g of Object.values(groups)){
+    g.entries.sort((a,b)=>a.date<b.date?-1:1);
+    let cur=null;
+    for(const e of g.entries){
+      if(cur&&addDays(cur.end,1)===e.date){ cur.end=e.date; cur.ids.push(e.id); }
+      else{ if(cur) mergedRows.push(cur); cur={docId:g.docId,type:g.type,note:g.note,start:e.date,end:e.date,ids:[e.id]}; }
+    }
+    if(cur) mergedRows.push(cur);
   }
   const _di={}; roster.forEach((d,i)=>_di[d.id]=i);
-  rows.sort((a,b)=>{const di=(_di[a.docId]??999)-(_di[b.docId]??999); return di!==0?di:(a.date<b.date?-1:1);});
-  document.getElementById('pr-tbody').innerHTML=rows.length?rows.map(r=>
-    `<tr><td>${getDocName(r.docId)}</td><td>${r.date.slice(5)}</td><td>${prLabel(r)}</td><td>${r.note||''}</td>
-      <td><button class="btn-sm btn-del" onclick="delPR('${r.date}','${r.id}')">刪除</button></td></tr>`
-  ).join(''):'<tr><td colspan="5" style="text-align:center;color:#999">本月無記錄</td></tr>';
+  mergedRows.sort((a,b)=>{const di=(_di[a.docId]??999)-(_di[b.docId]??999); return di!==0?di:(a.start<b.start?-1:1);});
+  _prMergedGroups={};
+  document.getElementById('pr-tbody').innerHTML=mergedRows.length?mergedRows.map((r,idx)=>{
+    const gid='g'+idx;
+    _prMergedGroups[gid]=r.ids;
+    const doc=state.doctors.find(d=>d.id===r.docId);
+    const shiftNow=doc&&doc.type==='full'?getNurseShiftType(doc.id,_prListYear,_prListMonth):'';
+    const rowBg=doc?doc.color+'16':'transparent';
+    const barColor=doc?doc.color:'#ccc';
+    return `<tr style="background:${rowBg}">
+      <td style="border-left:3px solid ${barColor}">${getDocName(r.docId)}${shiftNow?` <span style="font-size:10px;color:#888">(${shiftNow}班)</span>`:''}</td>
+      <td>${prDateRangeLabel(r.start,r.end)}</td>
+      <td>${prLabel(r)}</td>
+      <td>${r.note||''}</td>
+      <td><button class="btn-sm btn-del" onclick="delPRRange('${gid}')">刪除</button></td>
+    </tr>`;
+  }).join(''):'<tr><td colspan="5" style="text-align:center;color:#999">本月無記錄</td></tr>';
 }
 
 // ============================================================
@@ -1441,7 +1487,7 @@ function jumpMonth(){
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  const idx={schedule:0,master:1,nurses:2,prereq:3,stats:4}[name];
+  const idx={master:0,schedule:1,nurses:2,prereq:3,stats:4}[name];
   document.querySelectorAll('.tab')[idx].classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
   if(name==='master') renderMasterGrid();
