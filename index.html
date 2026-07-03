@@ -113,6 +113,26 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 /* ===== DOC LEGEND ===== */
 #doc-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px;}
 .legend-item{display:inline-flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;}
+/* ===== PREREQ CALENDAR PICKER ===== */
+.pr-cal-wrap{display:inline-block;background:#fff;border:1px solid #ddd;border-radius:6px;padding:8px;user-select:none;vertical-align:top;}
+.pr-cal-nav{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;gap:8px;}
+.pr-cal-nav span{font-size:13px;font-weight:700;flex:1;text-align:center;}
+.pr-cal-nav button{background:none;border:1px solid #ccc;border-radius:3px;cursor:pointer;padding:1px 8px;font-size:12px;}
+.pr-cal-nav button:hover{background:#e6f5f1;}
+.pr-cal-grid{display:grid;grid-template-columns:repeat(7,30px);gap:2px;}
+.pr-cal-hd{text-align:center;font-size:11px;font-weight:700;color:#555;line-height:22px;}
+.pr-cal-hd.wknd{color:#c62828;}
+.pr-cal-cell{text-align:center;font-size:12px;line-height:26px;border-radius:3px;cursor:pointer;width:30px;}
+.pr-cal-cell:hover{background:#e6f5f1;}
+.pr-cal-cell.wknd{color:#c62828;}
+.pr-cal-cell.today{outline:2px solid #0d5c4a;outline-offset:-2px;}
+.pr-cal-cell.in-range{background:#b2dfdb;border-radius:0;}
+.pr-cal-cell.range-start{background:#0d5c4a;color:#fff;border-radius:4px 0 0 4px;}
+.pr-cal-cell.range-end{background:#0d5c4a;color:#fff;border-radius:0 4px 4px 0;}
+.pr-cal-cell.range-single{background:#0d5c4a;color:#fff;border-radius:4px;}
+.pr-cal-cell.range-start.range-end{border-radius:4px;}
+.pr-cal-hint{font-size:11px;color:#555;margin-top:5px;min-height:16px;}
+.pr-cal-selected{font-size:12px;color:#0d5c4a;font-weight:600;margin-top:3px;min-height:16px;}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:6px;font-size:13px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
 #toast.show{opacity:0.95;}
 #toast.warn{background:#c0392b;}
@@ -182,13 +202,20 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
   <!-- ======= 護理師設定 ======= -->
   <div id="tab-nurses" class="tab-pane">
-    <div style="margin-bottom:8px;display:flex;justify-content:flex-end;">
+    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <strong style="font-size:12px">當月班別設定月份：</strong>
+        <button onclick="changeNurseMonth(-1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9664;</button>
+        <span id="nurse-month-label" style="font-weight:700;min-width:80px;text-align:center"></span>
+        <button onclick="changeNurseMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
+        <span style="font-size:11px;color:#888">（每位護理師的固定班別可逐月調整，未設定時沿用最近一次的設定）</span>
+      </div>
       <button class="action-btn btn-green" onclick="openNurseModal()">+ 新增護理師</button>
     </div>
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>可排班別</th><th>階級</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>當月班別</th><th>階級</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -210,11 +237,27 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 預假/預班 ======= -->
   <div id="tab-prereq" class="tab-pane">
     <div id="pre-req-panel">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;background:#f5f9f8;padding:8px 12px;border-radius:6px">
+        <label style="font-size:12px;font-weight:700;color:#555">每人每月最多預假/預班天數：</label>
+        <input type="number" id="max-prereq-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxPreReqDays=this.value?parseInt(this.value):null;autoSave();">
+        <span style="font-size:11px;color:#888">（留空＝不限制，由護理長設定；護理師新增超過此天數時將無法新增並顯示提示）</span>
+      </div>
       <h3 style="margin-bottom:8px">新增預假/預班</h3>
       <div class="pr-form">
         <div><div>護理師</div><select id="pr-doc"></select></div>
-        <div><div>開始日期</div><input type="date" id="pr-date-start"></div>
-        <div><div>結束日期</div><input type="date" id="pr-date-end"></div>
+        <div>
+          <div style="margin-bottom:4px">選取日期（點選單日或拖曳選範圍）</div>
+          <div class="pr-cal-wrap">
+            <div class="pr-cal-nav">
+              <button onclick="prCalPrev()">&#9664;</button>
+              <span id="pr-cal-title"></span>
+              <button onclick="prCalNext()">&#9654;</button>
+            </div>
+            <div id="pr-cal-grid" class="pr-cal-grid"></div>
+            <div class="pr-cal-hint">點選單日；或按住拖曳選多日</div>
+            <div class="pr-cal-selected" id="pr-cal-selected">尚未選取日期</div>
+          </div>
+        </div>
         <div><div>類型</div>
           <select id="pr-type">
             <option value="OFF">當天OFF</option>
@@ -291,7 +334,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="form-row"><label>顏色</label><input type="color" id="doc-color" style="width:55px;height:28px;padding:2px;"></div>
-    <h3>固定班別 (指派，僅能擇一)</h3>
+    <h3 id="doc-modal-shift-title">當月班別 (指派，僅能擇一)</h3>
     <div class="check-row"><input type="radio" name="shift-type" id="shift-D" value="D"><label for="shift-D">D班 (08-16)</label></div>
     <div class="check-row"><input type="radio" name="shift-type" id="shift-E" value="E"><label for="shift-E">E班 (16-24)</label></div>
     <div class="check-row"><input type="radio" name="shift-type" id="shift-N" value="N"><label for="shift-N">N班 (00-08次日)</label></div>
@@ -338,7 +381,45 @@ function roleAllowed(level,role){
   return (LEVEL_CAP[level]||[]).includes(role);
 }
 function defPrefs(shiftType){
-  return {shiftType:shiftType||'D', level:'L'};
+  return {defaultShiftType:shiftType||'D', level:'L'};
+}
+const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
+// ============================================================
+// 當月班別 (D/E/N 指派逐月調整，未設定時沿用最近一次設定)
+// ============================================================
+function monthKey(y,m){ return `${y}-${m}`; }
+function ymFromDate(dateStr){ const[y,mo]=dateStr.split('-').map(Number); return {y,m:mo-1}; }
+function getNurseShiftType(nurseId,y,m){
+  for(let i=0;i<36;i++){
+    let mm=m-i, yy=y;
+    while(mm<0){mm+=12;yy--;}
+    const k=monthKey(yy,mm);
+    if(state.monthlyShiftType[k]&&state.monthlyShiftType[k][nurseId]) return state.monthlyShiftType[k][nurseId];
+  }
+  const doc=state.doctors.find(d=>d.id===nurseId);
+  return (doc&&doc.prefs&&doc.prefs.defaultShiftType)||'D';
+}
+function getNurseShiftTypeAtDate(nurseId,dateStr){
+  const{y,m}=ymFromDate(dateStr);
+  return getNurseShiftType(nurseId,y,m);
+}
+function setNurseShiftType(nurseId,y,m,val){
+  const k=monthKey(y,m);
+  if(!state.monthlyShiftType[k]) state.monthlyShiftType[k]={};
+  state.monthlyShiftType[k][nurseId]=val;
+}
+// 排序：許嘉君等管理職在最上方，其下依當月班別 D→E→N 分組，組內再依階級 L→T→A2→B 排列
+function sortedRoster(y,m){
+  const head=state.doctors.filter(d=>d.type==='head');
+  const full=state.doctors.filter(d=>d.type==='full');
+  const groups={D:[],E:[],N:[],other:[]};
+  for(const d of full){
+    const st=getNurseShiftType(d.id,y,m);
+    (groups[st]||groups.other).push(d);
+  }
+  const byLevel=(a,b)=>(LEVEL_ORDER[a.prefs.level]??9)-(LEVEL_ORDER[b.prefs.level]??9);
+  groups.D.sort(byLevel); groups.E.sort(byLevel); groups.N.sort(byLevel); groups.other.sort(byLevel);
+  return [...head,...groups.D,...groups.E,...groups.N,...groups.other];
 }
 let state = {
   year: new Date().getFullYear(),
@@ -347,6 +428,8 @@ let state = {
   minRestHours: 16,
   schedule: {},
   preRequests: {},
+  monthlyShiftType: {},
+  maxPreReqDays: null,
   avoidPairs: [],
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
@@ -578,7 +661,7 @@ function offBlocked(nurseId,date){
 function canWork(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
-  if(doc.prefs.shiftType!==shift) return false;
+  if(getNurseShiftTypeAtDate(nurseId,date)!==shift) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
   if(offBlocked(nurseId,date)) return false;
@@ -592,7 +675,7 @@ function canWork(nurseId, date, shift, role, sched){
 function canWorkForce(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
-  if(doc.prefs.shiftType!==shift) return false;
+  if(getNurseShiftTypeAtDate(nurseId,date)!==shift) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
   if(offBlocked(nurseId,date)) return false;
@@ -890,7 +973,7 @@ function _renderDayDraft(){
         state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>{
           let warn='';
           if(n.type==='full'){
-            if(n.prefs.shiftType!==c.shift) warn+=' ⚠非固定班別';
+            if(getNurseShiftTypeAtDate(n.id,_dayDraftDate)!==c.shift) warn+=' ⚠非當月班別';
             if(!roleAllowed(n.prefs.level,role)) warn+=' ⚠不符階級';
           }
           return `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}${warn}</option>`;
@@ -931,9 +1014,19 @@ function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-m
 // ============================================================
 // NURSE TABLE / MODAL
 // ============================================================
+let _nurseYear=new Date().getFullYear();
+let _nurseMonth=new Date().getMonth();
+function changeNurseMonth(delta){
+  _nurseMonth+=delta;
+  if(_nurseMonth<0){_nurseMonth=11;_nurseYear--;}
+  if(_nurseMonth>11){_nurseMonth=0;_nurseYear++;}
+  renderNurseTable();
+}
 function renderNurseTable(){
-  document.getElementById('nurse-tbody').innerHTML=state.doctors.map(d=>{
-    const shiftStr=d.prefs.shiftType||'-';
+  const lbl=document.getElementById('nurse-month-label');
+  if(lbl) lbl.textContent=`${_nurseYear}年${_nurseMonth+1}月`;
+  document.getElementById('nurse-tbody').innerHTML=sortedRoster(_nurseYear,_nurseMonth).map(d=>{
+    const shiftStr=d.type==='full'?getNurseShiftType(d.id,_nurseYear,_nurseMonth):'-';
     const lvl=d.prefs.level||'L';
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
@@ -949,8 +1042,6 @@ function renderNurseTable(){
   const opts=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
   sel1.innerHTML=opts; sel2.innerHTML=opts;
   renderAvoidPairs();
-  const prSel=document.getElementById('pr-doc');
-  if(prSel) prSel.innerHTML=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
 function renderAvoidPairs(){
   const list=state.avoidPairs||[];
@@ -973,12 +1064,14 @@ function removeAvoidPair(i){ state.avoidPairs.splice(i,1); autoSave(); renderAvo
 function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
+  const titleEl=document.getElementById('doc-modal-shift-title');
+  if(titleEl) titleEl.textContent=`${_nurseYear}年${_nurseMonth+1}月 班別 (指派，僅能擇一)`;
   const d=isEdit?state.doctors.find(x=>x.id===id):{id:'',name:'',type:'full',color:'#1565c0',prefs:defPrefs('D')};
   document.getElementById('doc-id').value=d.id;
   document.getElementById('doc-name').value=d.name;
   document.getElementById('doc-type').value=d.type;
   document.getElementById('doc-color').value=d.color;
-  const st=d.prefs.shiftType||'D';
+  const st=isEdit?getNurseShiftType(d.id,_nurseYear,_nurseMonth):'D';
   document.getElementById('shift-D').checked=(st==='D');
   document.getElementById('shift-E').checked=(st==='E');
   document.getElementById('shift-N').checked=(st==='N');
@@ -990,18 +1083,19 @@ function saveDoc(){
   const name=document.getElementById('doc-name').value.trim();
   if(!name){showToast('請輸入姓名','warn');return;}
   const shiftRadio=document.querySelector('input[name="shift-type"]:checked');
-  if(!shiftRadio){showToast('請選擇固定班別','warn');return;}
-  const prefs={
-    shiftType:shiftRadio.value,
-    level:document.getElementById('doc-level').value,
-  };
+  if(!shiftRadio){showToast('請選擇班別','warn');return;}
+  const level=document.getElementById('doc-level').value;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
   if(id){
     const d=state.doctors.find(x=>x.id===id);
-    d.name=name; d.type=type; d.color=color; d.prefs=prefs;
+    d.name=name; d.type=type; d.color=color; d.prefs.level=level;
+    setNurseShiftType(id,_nurseYear,_nurseMonth,shiftRadio.value);
   } else {
-    state.doctors.push({id:'n_'+(_idCnt++),name,type,color,prefs});
+    const newId='n_'+(_idCnt++);
+    const prefs={defaultShiftType:shiftRadio.value, level};
+    state.doctors.push({id:newId,name,type,color,prefs});
+    setNurseShiftType(newId,_nurseYear,_nurseMonth,shiftRadio.value);
   }
   autoSave();
   closeModal('nurse-modal');
@@ -1026,22 +1120,114 @@ function prShortLabel(pr){
   const map={OFF:'OFF',WORK_D:'D',WORK_E:'E',WORK_N:'N'};
   return map[pr.type]||pr.type;
 }
+
+// ---- 拖曳選取日期的迷你月曆 ----
+let _prCalYear=new Date().getFullYear();
+let _prCalMonth=new Date().getMonth();
+let _prRangeStart=null, _prRangeEnd=null;
+let _prDragging=false;
+function prCalPrev(){ _prCalMonth--; if(_prCalMonth<0){_prCalMonth=11;_prCalYear--;} renderPRCalGrid(); }
+function prCalNext(){ _prCalMonth++; if(_prCalMonth>11){_prCalMonth=0;_prCalYear++;} renderPRCalGrid(); }
+function prRangeLoHi(){
+  if(!_prRangeStart) return null;
+  const lo=_prRangeStart<_prRangeEnd?_prRangeStart:_prRangeEnd;
+  const hi=_prRangeStart<_prRangeEnd?_prRangeEnd:_prRangeStart;
+  return {lo,hi};
+}
+function renderPRCalGrid(){
+  const title=document.getElementById('pr-cal-title');
+  if(title) title.textContent=`${_prCalYear}年${_prCalMonth+1}月`;
+  const grid=document.getElementById('pr-cal-grid');
+  if(!grid) return;
+  grid.innerHTML='';
+  const hdLabels=['一','二','三','四','五','六','日'];
+  hdLabels.forEach((h,i)=>{
+    const el=document.createElement('div');
+    el.className='pr-cal-hd'+(i>=5?' wknd':'');
+    el.textContent=h;
+    grid.appendChild(el);
+  });
+  const firstDOW=getDOW(fmtDate(_prCalYear,_prCalMonth,1));
+  for(let i=0;i<firstDOW;i++) grid.appendChild(document.createElement('div'));
+  const numDays=daysInMonth(_prCalYear,_prCalMonth);
+  const now=new Date();
+  const todayStr=fmtDate(now.getFullYear(),now.getMonth(),now.getDate());
+  const range=prRangeLoHi();
+  for(let d=1; d<=numDays; d++){
+    const dateStr=fmtDate(_prCalYear,_prCalMonth,d);
+    const dow=getDOW(dateStr);
+    const cell=document.createElement('div');
+    let cls='pr-cal-cell'+(dow>=5?' wknd':'')+(dateStr===todayStr?' today':'');
+    if(range){
+      if(dateStr===range.lo&&dateStr===range.hi) cls+=' range-single';
+      else if(dateStr===range.lo) cls+=' range-start';
+      else if(dateStr===range.hi) cls+=' range-end';
+      else if(dateStr>range.lo&&dateStr<range.hi) cls+=' in-range';
+    }
+    cell.className=cls;
+    cell.textContent=d;
+    cell.addEventListener('mousedown',e=>{ e.preventDefault(); _prDragging=true; _prRangeStart=dateStr; _prRangeEnd=dateStr; renderPRCalGrid(); });
+    cell.addEventListener('mouseenter',()=>{ if(_prDragging){ _prRangeEnd=dateStr; renderPRCalGrid(); } });
+    grid.appendChild(cell);
+  }
+  updatePRCalSelected();
+}
+window.addEventListener('mouseup',()=>{ _prDragging=false; });
+function updatePRCalSelected(){
+  const el=document.getElementById('pr-cal-selected');
+  if(!el) return;
+  const range=prRangeLoHi();
+  if(!range){ el.textContent='尚未選取日期'; return; }
+  if(range.lo===range.hi){ el.textContent=`已選取：${range.lo}（1天）`; return; }
+  const days=Math.round((new Date(range.hi)-new Date(range.lo))/86400000)+1;
+  el.textContent=`已選取：${range.lo} ～ ${range.hi}（共${days}天）`;
+}
+
+function countExistingPRDates(nurseId,y,m){
+  const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;
+  const dates=new Set();
+  for(const[date,prs] of Object.entries(state.preRequests)){
+    if(!date.startsWith(prefix)) continue;
+    if(prs.some(p=>p.docId===nurseId)) dates.add(date);
+  }
+  return dates;
+}
 function addPR(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
   const docId=document.getElementById('pr-doc').value;
-  const start=document.getElementById('pr-date-start').value;
-  const end=document.getElementById('pr-date-end').value||start;
+  const range=prRangeLoHi();
   const type=document.getElementById('pr-type').value;
   const note=document.getElementById('pr-note').value.trim();
-  if(!docId||!start){showToast('請選擇護理師與日期','warn');return;}
-  if(end<start){showToast('結束日期不可早於開始日期','warn');return;}
+  if(!docId||!range){showToast('請選擇護理師與日期','warn');return;}
+  const start=range.lo, end=range.hi;
+  // 每人每月最多預假/預班天數檢核
+  if(state.maxPreReqDays){
+    const byMonth={};
+    let cur=start;
+    while(cur<=end){
+      const{y,m}=ymFromDate(cur);
+      const mk=monthKey(y,m);
+      if(!byMonth[mk]) byMonth[mk]={y,m,dates:new Set()};
+      byMonth[mk].dates.add(cur);
+      cur=addDays(cur,1);
+    }
+    for(const{y,m,dates} of Object.values(byMonth)){
+      const existing=countExistingPRDates(docId,y,m);
+      const merged=new Set([...existing,...dates]);
+      if(merged.size>state.maxPreReqDays){
+        showToast(`❌ ${getDocName(docId)} 於${y}年${m+1}月預假/預班將達${merged.size}天，超過上限${state.maxPreReqDays}天，無法新增`,'warn');
+        return;
+      }
+    }
+  }
   let cur=start, cnt=0;
   while(cur<=end&&cnt<366){
     if(!state.preRequests[cur]) state.preRequests[cur]=[];
     state.preRequests[cur].push({id:'pr_'+Date.now()+'_'+cnt,docId,type,note});
     cur=addDays(cur,1); cnt++;
   }
-  autoSave(); renderPRList(); renderCalendar();
+  _prRangeStart=null; _prRangeEnd=null;
+  autoSave(); renderPRList(); renderCalendar(); renderPRCalGrid();
   showToast('✅ 已新增');
 }
 function delPR(date,prId){
@@ -1054,13 +1240,22 @@ function delPR(date,prId){
 function renderPRList(){
   const label=document.getElementById('pr-list-month-label');
   if(label) label.textContent=`${_prListYear}年${_prListMonth+1}月`;
+  const maxInput=document.getElementById('max-prereq-days');
+  if(maxInput) maxInput.value=state.maxPreReqDays||'';
+  const roster=sortedRoster(_prListYear,_prListMonth);
+  const prSel=document.getElementById('pr-doc');
+  if(prSel){
+    const prevVal=prSel.value;
+    prSel.innerHTML=roster.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    if(roster.some(d=>d.id===prevVal)) prSel.value=prevVal;
+  }
   const prefix=`${_prListYear}-${String(_prListMonth+1).padStart(2,'0')}-`;
   const rows=[];
   for(const[date,prs] of Object.entries(state.preRequests)){
     if(!date.startsWith(prefix)) continue;
     for(const pr of prs) rows.push({date,...pr});
   }
-  const _di={}; state.doctors.forEach((d,i)=>_di[d.id]=i);
+  const _di={}; roster.forEach((d,i)=>_di[d.id]=i);
   rows.sort((a,b)=>{const di=(_di[a.docId]??999)-(_di[b.docId]??999); return di!==0?di:(a.date<b.date?-1:1);});
   document.getElementById('pr-tbody').innerHTML=rows.length?rows.map(r=>
     `<tr><td>${getDocName(r.docId)}</td><td>${r.date.slice(5)}</td><td>${prLabel(r)}</td><td>${r.note||''}</td>
@@ -1142,15 +1337,6 @@ function shiftOfNurseOnDate(nurseId,dateStr){
   for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
-// 月班總表排序：許嘉君(管理職)在最上方，其下依固定班別 D → E → N 分組排列
-function sortedForMaster(){
-  const head=state.doctors.filter(d=>d.type==='head');
-  const dGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='D');
-  const eGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='E');
-  const nGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='N');
-  const other=state.doctors.filter(d=>d.type==='full'&&!['D','E','N'].includes(d.prefs.shiftType));
-  return [...head,...dGroup,...eGroup,...nGroup,...other];
-}
 function renderMasterGrid(){
   const y=state.year, m=state.month;
   const dates=monthDates(y,m);
@@ -1161,7 +1347,7 @@ function renderMasterGrid(){
   }).join('')+`<th>總班數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
-  const rows=sortedForMaster().map(doc=>{
+  const rows=sortedRoster(y,m).map(doc=>{
     let total=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
@@ -1212,7 +1398,7 @@ function switchTab(name){
   document.getElementById('tab-'+name).classList.add('active');
   if(name==='master') renderMasterGrid();
   if(name==='nurses') renderNurseTable();
-  if(name==='prereq') renderPRList();
+  if(name==='prereq'){ renderPRList(); renderPRCalGrid(); }
   if(name==='stats') renderStats();
 }
 function clearSchedule(){
@@ -1240,21 +1426,25 @@ function serializeState(){
   return {
     doctors:state.doctors,schedule:state.schedule,preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
-    minRestHours:state.minRestHours,
+    minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
+    maxPreReqDays:state.maxPreReqDays??null,
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
-// 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType 單選
+// 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType(單選,已停用) → defaultShiftType(當月未設定時的預設)
 function migrateDoctorPrefs(doctors){
   for(const doc of doctors||[]){
     if(!doc.prefs) continue;
-    if(!doc.prefs.shiftType && doc.prefs.shiftTypes){
+    if(!doc.prefs.defaultShiftType&&doc.prefs.shiftTypes){
       const st=doc.prefs.shiftTypes;
-      doc.prefs.shiftType=st.D?'D':st.E?'E':st.N?'N':'D';
+      doc.prefs.defaultShiftType=st.D?'D':st.E?'E':st.N?'N':'D';
       delete doc.prefs.shiftTypes;
-    } else if(!doc.prefs.shiftType){
-      doc.prefs.shiftType='D';
+    } else if(!doc.prefs.defaultShiftType&&doc.prefs.shiftType){
+      doc.prefs.defaultShiftType=doc.prefs.shiftType;
+    } else if(!doc.prefs.defaultShiftType){
+      doc.prefs.defaultShiftType='D';
     }
+    delete doc.prefs.shiftType;
   }
   return doctors;
 }
@@ -1266,6 +1456,8 @@ function applyData(d){
   if(d.year!=null) state.year=d.year;
   if(d.month!=null) state.month=d.month;
   state.minRestHours=d.minRestHours||16;
+  state.monthlyShiftType=d.monthlyShiftType||{};
+  state.maxPreReqDays=d.maxPreReqDays??null;
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
@@ -1389,7 +1581,7 @@ function generatePDF(){
 
   // --- 月班總表 ---
   let mgHead=`<tr><th>護理師</th>`+dates.map(d=>`<th>${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`).join('')+`<th>總班數</th></tr>`;
-  const mgRows=sortedForMaster().map(doc=>{
+  const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0;
     const cells=dates.map(d=>{
       const sh=shiftOfNurseOnDate(doc.id,d);
@@ -1542,11 +1734,12 @@ function generatePDF(){
 // ============================================================
 window.onload=()=>{
   autoLoad();
-  document.getElementById('pr-date-start').value=fmtDate(state.year,state.month,1);
-  document.getElementById('pr-date-end').value=fmtDate(state.year,state.month,1);
+  _prCalYear=state.year; _prCalMonth=state.month;
+  _nurseYear=state.year; _nurseMonth=state.month;
   renderCalendar();
   renderNurseTable();
   renderPRList();
+  renderPRCalGrid();
   renderStats();
   const cu=getCloudUrl();
   if(cu) initCloud(cu);
