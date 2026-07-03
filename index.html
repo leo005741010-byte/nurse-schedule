@@ -24,11 +24,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #cal-header{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;font-size:12px;}
 .split-control{display:inline-flex;align-items:center;gap:6px;background:#fff;padding:4px 10px;border-radius:4px;border:1px solid #ddd;font-size:12px;}
 .split-control label{color:#555;font-weight:600;}
-.split-control input,.split-control select{padding:2px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;width:48px;}
+.split-control select{padding:2px 6px;border:1px solid #ccc;border-radius:3px;font-size:12px;}
 #calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
 .cal-weekday{background:#0d5c4a;color:#fff;text-align:center;padding:5px;font-size:12px;font-weight:700;border-radius:3px;}
 .cal-weekday.weekend{background:#c0392b;}
-.cal-day{background:#fff;border:1px solid #ddd;border-radius:4px;min-height:210px;padding:4px;cursor:pointer;transition:border-color .15s;position:relative;}
+.cal-day{background:#fff;border:1px solid #ddd;border-radius:4px;min-height:230px;padding:4px;cursor:pointer;transition:border-color .15s;position:relative;}
 .cal-day:hover{border-color:#0d5c4a;box-shadow:0 0 0 2px rgba(13,92,74,0.12);}
 .cal-day.holiday{background:#fde8e8;}
 .cal-day.empty{background:transparent;border:none;cursor:default;}
@@ -39,7 +39,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .badge-hol{font-size:9px;background:#c0392b;color:#fff;padding:1px 4px;border-radius:2px;cursor:pointer;}
 .badge-sethol{font-size:9px;background:#eee;color:#666;padding:1px 4px;border-radius:2px;cursor:pointer;display:none;}
 .cal-day:hover .badge-sethol{display:inline;}
-.badge-short{font-size:9px;background:#c0392b;color:#fff;padding:1px 4px;border-radius:2px;}
 .shift-block{margin-bottom:3px;}
 .shift-block-hd{display:flex;align-items:center;gap:3px;margin-bottom:1px;}
 .slot-tag{min-width:16px;height:16px;padding:0 3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border-radius:2px;flex-shrink:0;}
@@ -48,9 +47,10 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .tag-N{background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;}
 .shift-cnt{font-size:9px;color:#888;}
 .shift-cnt.short{color:#c0392b;font-weight:700;}
-.chip-wrap{display:flex;flex-wrap:wrap;gap:2px;}
-.n-chip{font-size:9px;padding:1px 4px;border-radius:3px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:56px;}
-.n-chip.empty-chip{color:#bbb;font-style:italic;background:#f9f9f9;border:1px dashed #ddd;font-weight:400;}
+.role-row{display:flex;align-items:center;gap:3px;font-size:9px;line-height:14px;}
+.role-abbr{width:12px;height:12px;flex-shrink:0;border-radius:2px;background:#eee;color:#666;font-weight:700;text-align:center;font-size:8px;line-height:12px;}
+.role-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;border-radius:2px;font-weight:700;}
+.role-name.empty-role{color:#bbb;font-style:italic;background:#f9f9f9;border:1px dashed #ddd;font-weight:400;}
 .pr-badge-row{margin-top:2px;display:flex;flex-wrap:wrap;gap:1px;}
 .pr-badge{font-size:8px;background:#9b59b6;color:#fff;padding:1px 3px;border-radius:2px;}
 /* ===== NURSE TABLE ===== */
@@ -61,6 +61,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .color-dot{width:14px;height:14px;border-radius:50%;display:inline-block;vertical-align:middle;}
 .btn-sm{padding:3px 7px;border:none;border-radius:3px;cursor:pointer;font-size:10px;margin:1px;}
 .btn-edit{background:#3498db;color:#fff;}.btn-del{background:#e74c3c;color:#fff;}
+.level-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#fff;}
+.lvl-L{background:#2e7d32;}.lvl-T{background:#1565c0;}.lvl-A2{background:#e67e22;}.lvl-B{background:#95a5a6;}
 /* ===== MODAL ===== */
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
@@ -70,9 +72,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .form-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;flex-wrap:wrap;}
 .form-row label{min-width:130px;font-size:11px;font-weight:700;color:#555;}
 .form-row input,.form-row select{padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px;}
-.pref-slider{display:flex;align-items:center;gap:5px;flex:1;}
-.pref-slider input[type=range]{flex:1;}
-.pref-value{min-width:36px;text-align:center;font-size:11px;background:#eee;padding:2px 5px;border-radius:3px;}
 .check-row{display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:5px;}
 .modal-actions{margin-top:12px;display:flex;justify-content:flex-end;gap:8px;}
 .btn-primary{background:#0d5c4a;color:#fff;border:none;padding:7px 14px;border-radius:4px;cursor:pointer;font-size:13px;}
@@ -85,24 +84,35 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #pre-req-list table{width:100%;border-collapse:collapse;}
 #pre-req-list th{background:#f5f5f5;padding:5px 7px;font-size:11px;text-align:left;border-bottom:2px solid #ddd;}
 #pre-req-list td{padding:4px 7px;font-size:11px;border-bottom:1px solid #eee;}
-/* ===== STATS ===== */
+/* ===== STATS / MASTER GRID ===== */
 .stats-wrap{overflow-x:auto;}
-#stats-table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);min-width:820px;font-size:11px;}
+#stats-table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);min-width:900px;font-size:11px;}
 #stats-table th{background:#0d5c4a;color:#fff;padding:6px 8px;text-align:center;white-space:nowrap;}
 #stats-table td{padding:5px 8px;border-bottom:1px solid #eee;text-align:center;}
 #stats-table tr:hover td{background:#f0faf7;}
+#master-table{border-collapse:collapse;background:#fff;font-size:10px;min-width:1200px;}
+#master-table th,#master-table td{border:1px solid #ddd;padding:3px 4px;text-align:center;white-space:nowrap;}
+#master-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;}
+#master-table td.nm{text-align:left;font-weight:700;position:sticky;left:0;background:#fff;z-index:1;}
+#master-table th.nm{position:sticky;left:0;top:0;z-index:2;}
+#master-table th.wknd{background:#c0392b;}
+#master-table td.wknd-col{background:#fdecea;}
+.mg-D{background:#fff8e1;color:#e65100;font-weight:700;}
+.mg-E{background:#e3f2fd;color:#1565c0;font-weight:700;}
+.mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
+.mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .alert{padding:7px 12px;border-radius:4px;margin-bottom:7px;font-size:12px;}
 .alert-warn{background:#fff3cd;border:1px solid #ffc107;color:#856404;}
 .alert-ok{background:#d4edda;border:1px solid #c3e6cb;color:#155724;}
-/* ===== DAY MODAL TABLE ===== */
+/* ===== DAY MODAL ===== */
 .day-shift-block{margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #eee;}
 .day-shift-hd{display:flex;align-items:center;gap:8px;margin-bottom:6px;}
 .day-slot-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;}
 .day-slot-row select{flex:1;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px;}
+.day-slot-role{width:52px;font-size:11px;font-weight:700;color:#555;flex-shrink:0;}
 /* ===== DOC LEGEND ===== */
 #doc-legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:3px;}
 .legend-item{display:inline-flex;align-items:center;gap:3px;font-size:11px;cursor:pointer;}
-/* toast */
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:6px;font-size:13px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
 #toast.show{opacity:0.95;}
 #toast.warn{background:#c0392b;}
@@ -131,6 +141,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
 <div id="tabs">
   <div class="tab active" onclick="switchTab('schedule')">📅 排班表</div>
+  <div class="tab" onclick="switchTab('master')">🗂 月班總表</div>
   <div class="tab" onclick="switchTab('nurses')">👩‍⚕️ 護理師設定</div>
   <div class="tab" onclick="switchTab('prereq')">📝 預假/預班</div>
   <div class="tab" onclick="switchTab('stats')">📈 統計報表</div>
@@ -143,28 +154,30 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <div id="cal-header">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:11px">
-          <span class="slot-tag tag-D" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">D</span>08:00-16:00
+          <span class="slot-tag tag-D" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">D</span>08:00-16:00 (組長/檢傷/重症/留觀×2/流動)
           &nbsp;
-          <span class="slot-tag tag-E" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">E</span>16:00-24:00
+          <span class="slot-tag tag-E" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">E</span>16:00-24:00 (組長/檢傷/重症/留觀×2/流動)
           &nbsp;
-          <span class="slot-tag tag-N" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">N</span>00:00-08:00（次日，班表標示於前一日）
+          <span class="slot-tag tag-N" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">N</span>00:00-08:00次日 (組長/檢傷/留觀×2)
         </span>
-        <div class="split-control">
-          <label>每班預設人力：</label>
-          D<input type="number" id="cnt-D" min="0" max="20" value="6" onchange="state.shiftCounts.D=parseInt(this.value)||0;autoSave();">
-          E<input type="number" id="cnt-E" min="0" max="20" value="6" onchange="state.shiftCounts.E=parseInt(this.value)||0;autoSave();">
-          N<input type="number" id="cnt-N" min="0" max="20" value="4" onchange="state.shiftCounts.N=parseInt(this.value)||0;autoSave();">
-        </div>
         <div class="split-control">
           <label>最少休息時數：</label>
           <select id="min-rest" onchange="state.minRestHours=parseInt(this.value);autoSave();">
             <option value="8">8小時</option><option value="11">11小時</option><option value="16" selected>16小時</option>
           </select>
         </div>
+        <span style="font-size:11px;color:#888">連班上限依勞基法固定為5天</span>
       </div>
       <div id="doc-legend"></div>
     </div>
     <div id="calendar-grid"></div>
+  </div>
+
+  <!-- ======= 月班總表 ======= -->
+  <div id="tab-master" class="tab-pane">
+    <div class="stats-wrap">
+      <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
+    </div>
   </div>
 
   <!-- ======= 護理師設定 ======= -->
@@ -175,8 +188,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>D偏好</th><th>E偏好</th><th>N偏好</th>
-          <th>假日偏好</th><th>連班上限</th><th>不上N</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>可排班別</th><th>階級</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -193,10 +205,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </div>
       <div id="avoid-pairs-list"></div>
     </div>
-    <div style="margin-top:12px;background:#fff;border-radius:6px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
-      <h3 style="font-size:13px;margin-bottom:6px;color:#0d5c4a">🌙 不上大夜(N)快速設定</h3>
-      <div id="nonight-list" style="display:flex;flex-wrap:wrap;gap:8px"></div>
-    </div>
   </div>
 
   <!-- ======= 預假/預班 ======= -->
@@ -208,7 +216,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <div><div>開始日期</div><input type="date" id="pr-date-start"></div>
         <div><div>結束日期</div><input type="date" id="pr-date-end"></div>
         <div><div>類型</div>
-          <select id="pr-type" onchange="document.getElementById('custom-div').style.display='none'">
+          <select id="pr-type">
             <option value="OFF">當天OFF</option>
             <option value="WORK_D">排D班 (08-16)</option>
             <option value="WORK_E">排E班 (16-24)</option>
@@ -247,7 +255,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <thead>
           <tr>
             <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th>
-            <th>假日班數</th><th>轉班次(D↔N)</th><th>最長連班</th>
+            <th>假日班數</th><th>擔任組長次數</th><th>轉班次(D↔N)</th><th>最長連班</th>
           </tr>
         </thead>
         <tbody id="stats-tbody"></tbody>
@@ -283,15 +291,20 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="form-row"><label>顏色</label><input type="color" id="doc-color" style="width:55px;height:28px;padding:2px;"></div>
-    <h3>班別偏好 (-2 少 → 0 普通 → +2 多)</h3>
-    <div class="form-row"><label>D班偏好 (08-16)</label><div class="pref-slider"><span style="font-size:10px">少</span><input type="range" id="pref-D" min="-2" max="2" step="1" value="0" oninput="updPV('D',this.value)"><span style="font-size:10px">多</span><span class="pref-value" id="pv-D">0</span></div></div>
-    <div class="form-row"><label>E班偏好 (16-24)</label><div class="pref-slider"><span style="font-size:10px">少</span><input type="range" id="pref-E" min="-2" max="2" step="1" value="0" oninput="updPV('E',this.value)"><span style="font-size:10px">多</span><span class="pref-value" id="pv-E">0</span></div></div>
-    <div class="form-row"><label>N班偏好 (00-08次日)</label><div class="pref-slider"><span style="font-size:10px">少</span><input type="range" id="pref-N" min="-2" max="2" step="1" value="0" oninput="updPV('N',this.value)"><span style="font-size:10px">多</span><span class="pref-value" id="pv-N">0</span></div></div>
-    <div class="form-row"><label>假日偏好</label><div class="pref-slider"><span style="font-size:10px">少</span><input type="range" id="pref-hol" min="-2" max="2" step="1" value="0" oninput="updPV('hol',this.value)"><span style="font-size:10px">多</span><span class="pref-value" id="pv-hol">0</span></div></div>
-    <h3>連班與特殊選項</h3>
-    <div class="form-row"><label>最多連班天數</label><input type="number" id="pref-consec" value="6" min="1" max="14" style="width:70px"></div>
-    <div class="check-row"><input type="checkbox" id="pref-noNight"><label for="pref-noNight">不排大夜 (N班)</label></div>
-    <div class="check-row"><input type="checkbox" id="pref-cluster"><label for="pref-cluster">上班集中 (排班盡量連上一段、連休一段)</label></div>
+    <h3>可排班別 (指派，非偏好)</h3>
+    <div class="check-row"><input type="checkbox" id="shift-D"><label for="shift-D">D班 (08-16)</label></div>
+    <div class="check-row"><input type="checkbox" id="shift-E"><label for="shift-E">E班 (16-24)</label></div>
+    <div class="check-row"><input type="checkbox" id="shift-N"><label for="shift-N">N班 (00-08次日)</label></div>
+    <h3>階級 (決定可擔任的職位)</h3>
+    <div class="form-row"><label>階級</label>
+      <select id="doc-level">
+        <option value="L">L — 全部位置都可以上 (組長/檢傷/重症/留觀/流動)</option>
+        <option value="T">T — 上檢傷或重症或留觀</option>
+        <option value="A2">A2 — 上重症或留觀</option>
+        <option value="B">B — 只能上留觀</option>
+      </select>
+    </div>
+    <p style="font-size:11px;color:#888;margin-top:4px">連班上限依勞基法固定為5天，無需設定。流動與支援位置任何階級皆可上。</p>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('nurse-modal')">取消</button>
       <button class="btn-primary" onclick="saveDoc()">儲存</button>
@@ -305,14 +318,32 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 // ============================================================
 // STATE
 // ============================================================
+const MAX_CONSEC = 5; // 勞基法：最多連續上班5天
+const ROLES = {
+  D:['組長','檢傷','重症','留觀','留觀','流動'],
+  E:['組長','檢傷','重症','留觀','留觀','流動'],
+  N:['組長','檢傷','留觀','留觀'],
+};
+const ROLE_ABBR = {組長:'組',檢傷:'檢',重症:'重',留觀:'留',流動:'流',支援:'援'};
+const LEVEL_CAP = {
+  L:['組長','檢傷','重症','留觀','流動','支援'],
+  T:['檢傷','重症','留觀','流動','支援'],
+  A2:['重症','留觀','流動','支援'],
+  B:['留觀','流動','支援'],
+};
+const LEVEL_LABEL = {L:'L',T:'T',A2:'A2',B:'B'};
+
+function roleAllowed(level,role){
+  if(role==='流動'||role==='支援') return true;
+  return (LEVEL_CAP[level]||[]).includes(role);
+}
 function defPrefs(){
-  return {D:0,E:0,N:0,hol:0,maxConsec:6,noNight:false,cluster:false};
+  return {shiftTypes:{D:true,E:true,N:true}, level:'L'};
 }
 let state = {
   year: new Date().getFullYear(),
   month: new Date().getMonth(),
   holidays: new Set(),
-  shiftCounts: {D:6,E:6,N:4},
   minRestHours: 16,
   schedule: {},
   preRequests: {},
@@ -451,7 +482,6 @@ function hoursBetween(d1,h1,d2,h2){
 // SHIFT HELPERS
 // ============================================================
 const SHIFTS=['D','E','N'];
-const SHIFT_LABEL={D:'D班',E:'E班',N:'N班'};
 const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）'};
 function shiftRange(shift){
   switch(shift){
@@ -463,15 +493,21 @@ function shiftRange(shift){
 function getShiftStart(shift,date){ const{s}=shiftRange(shift); return s<24?{date,hour:s}:{date:addDays(date,1),hour:s-24}; }
 function getShiftEndTime(shift,date){ const{e}=shiftRange(shift); return e<=24?{date,hour:e}:{date:addDays(date,1),hour:e-24}; }
 
-function getDayCounts(dateStr){
-  const ds=state.schedule[dateStr];
-  return (ds&&ds.counts)||state.shiftCounts;
-}
 function ensureDay(dateStr){
-  if(!state.schedule[dateStr]) state.schedule[dateStr]={D:[],E:[],N:[]};
+  if(!state.schedule[dateStr]) state.schedule[dateStr]={};
   const ds=state.schedule[dateStr];
-  if(!ds.D) ds.D=[]; if(!ds.E) ds.E=[]; if(!ds.N) ds.N=[];
+  if(!ds.roles) ds.roles={D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+  for(const sh of SHIFTS){
+    if(!ds[sh]||ds[sh].length!==ds.roles[sh].length){
+      const old=ds[sh]||[];
+      ds[sh]=ds.roles[sh].map((r,i)=>old[i]!==undefined?old[i]:null);
+    }
+  }
   return ds;
+}
+function getRoles(dateStr,shift){
+  const ds=state.schedule[dateStr];
+  return (ds&&ds.roles&&ds.roles[shift])||ROLES[shift];
 }
 
 // ============================================================
@@ -539,37 +575,15 @@ function offBlocked(nurseId,date){
   const prs=(state.preRequests[date]||[]).filter(r=>r.docId===nurseId);
   return prs.some(pr=>pr.type==='OFF');
 }
-function canWork(nurseId, date, shift, sched){
+function canWork(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
+  if(!doc.prefs.shiftTypes||!doc.prefs.shiftTypes[shift]) return false;
+  if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
   if(offBlocked(nurseId,date)) return false;
   if(!restOK(nurseId,date,shift,sched)) return false;
-  const consec=consecDaysBefore(nurseId,date,sched);
-  if(consec>=(doc.prefs.maxConsec||6)) return false;
-  if(doc.prefs.noNight&&shift==='N') return false;
-  if(avoidBlocked(nurseId,date,sched)) return false;
-  return true;
-}
-function canWorkRelaxed(nurseId, date, shift, sched){
-  const doc=state.doctors.find(d=>d.id===nurseId);
-  if(!doc||doc.type!=='full') return false;
-  if(isAssignedThatDay(nurseId,date,sched)) return false;
-  if(offBlocked(nurseId,date)) return false;
-  if(!restOK(nurseId,date,shift,sched)) return false;
-  const consec=consecDaysBefore(nurseId,date,sched);
-  if(consec>=(doc.prefs.maxConsec||6)+3) return false;
-  if(doc.prefs.noNight&&shift==='N') return false;
-  if(avoidBlocked(nurseId,date,sched)) return false;
-  return true;
-}
-function canWorkForce(nurseId, date, shift, sched){
-  const doc=state.doctors.find(d=>d.id===nurseId);
-  if(!doc||doc.type!=='full') return false;
-  if(isAssignedThatDay(nurseId,date,sched)) return false;
-  if(offBlocked(nurseId,date)) return false;
-  if(!restOK(nurseId,date,shift,sched)) return false;
-  if(doc.prefs.noNight&&shift==='N') return false;
+  if(consecDaysBefore(nurseId,date,sched)>=MAX_CONSEC) return false;
   if(avoidBlocked(nurseId,date,sched)) return false;
   return true;
 }
@@ -584,40 +598,49 @@ function calcNurseShiftCount(nurseId, sched){
   }
   return n;
 }
-function calcNurseHours(nurseId, sched){ return calcNurseShiftCount(nurseId,sched)*8; }
+function calcNurseHolCount(nurseId, sched){
+  let n=0;
+  for(const[d,ds] of Object.entries(sched)){
+    if(!isHoliday(d)) continue;
+    for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) n++;
+  }
+  return n;
+}
+function calcNurseLeadCount(nurseId, sched){
+  let n=0;
+  for(const[d,ds] of Object.entries(sched)){
+    for(const sh of SHIFTS){
+      const roles=getRoles(d,sh);
+      (ds[sh]||[]).forEach((nid,i)=>{ if(nid===nurseId&&roles[i]==='組長') n++; });
+    }
+  }
+  return n;
+}
 function avgShiftCount(sched){
   const full=state.doctors.filter(d=>d.type==='full');
   if(!full.length) return 0;
   return full.reduce((s,d)=>s+calcNurseShiftCount(d.id,sched),0)/full.length;
 }
-function countDocOffDays(nurseId){
-  const prefix=`${state.year}-${String(state.month+1).padStart(2,'0')}-`;
-  let cnt=0;
-  for(const[date,prs] of Object.entries(state.preRequests)){
-    if(!date.startsWith(prefix)) continue;
-    if(prs.some(pr=>pr.docId===nurseId&&pr.type==='OFF')) cnt++;
-  }
-  return cnt;
+function avgHolCount(sched){
+  const full=state.doctors.filter(d=>d.type==='full');
+  if(!full.length) return 0;
+  return full.reduce((s,d)=>s+calcNurseHolCount(d.id,sched),0)/full.length;
 }
-function scoreNurse(nurseId, date, shift, sched){
-  const doc=state.doctors.find(d=>d.id===nurseId);
+function scoreNurse(nurseId, date, shift, role, sched){
   let score=Math.random()*2;
   const myCnt=calcNurseShiftCount(nurseId,sched);
   const avg=avgShiftCount(sched);
-  const offDays=countDocOffDays(nurseId);
-  const availScale=Math.max(0.25,1-offDays/30);
-  score+=(avg-myCnt)*6*availScale;
-  score+=(doc.prefs[shift]||0)*30;
-  if(isHoliday(date)) score+=(doc.prefs.hol||0)*5;
+  score+=(avg-myCnt)*6;
+  if(isHoliday(date)){
+    const myHol=calcNurseHolCount(nurseId,sched);
+    const avgHol=avgHolCount(sched);
+    score+=(avgHol-myHol)*4;
+  }
   const last=getLastAssigned(nurseId,date,sched);
   if(last){
     if(last.shift===shift) score+=15;
     else if((last.shift==='D'&&shift==='N')||(last.shift==='N'&&shift==='D')) score-=60;
     else score-=8;
-  }
-  if(doc.prefs.cluster){
-    const yd=addDays(date,-1);
-    if(isAssignedThatDay(nurseId,yd,sched)) score+=40; else score-=15;
   }
   return score;
 }
@@ -650,9 +673,8 @@ function autoSchedule(){
   const newSched={};
   for(const d of dates){
     const existing=state.schedule[d]||{};
-    const counts=existing.counts||state.shiftCounts;
-    newSched[d]={counts:existing.counts?{...existing.counts}:undefined,
-      D:Array(counts.D).fill(null), E:Array(counts.E).fill(null), N:Array(counts.N).fill(null)};
+    const roles=existing.roles||{D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+    newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null)};
   }
   const fullSched = new Proxy(newSched, {
     get(target, key, receiver){
@@ -668,50 +690,38 @@ function autoSchedule(){
     }
   });
 
-  // Apply WORK pre-requests
+  // Apply WORK pre-requests (place into first eligible empty role slot for that shift)
   for(const d of dates){
     for(const pr of (state.preRequests[d]||[])){
       if(!pr.type.startsWith('WORK_')) continue;
       const sh=pr.type.replace('WORK_','');
       if(!SHIFTS.includes(sh)) continue;
-      const arr=newSched[d][sh];
-      const emptyIdx=arr.indexOf(null);
-      if(emptyIdx>=0) arr[emptyIdx]=pr.docId;
-      else arr.push(pr.docId);
+      const arr=newSched[d][sh]; const roles=newSched[d].roles[sh];
+      const doc=state.doctors.find(x=>x.id===pr.docId);
+      let idx=-1;
+      if(doc){
+        for(let i=0;i<arr.length;i++){ if(!arr[i]&&roleAllowed(doc.prefs.level,roles[i])){idx=i;break;} }
+      }
+      if(idx<0) idx=arr.indexOf(null);
+      if(idx>=0) arr[idx]=pr.docId;
     }
   }
 
-  // 3-pass greedy fill
-  for(let pass=0;pass<3;pass++){
+  // Multi-pass greedy fill, one role at a time
+  for(let pass=0;pass<5;pass++){
     const ordDates=pass===0?[...dates]:shuffle([...dates]);
     for(const d of ordDates){
       for(const shift of SHIFTS){
-        const arr=newSched[d][shift];
+        const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
         for(let i=0;i<arr.length;i++){
           if(arr[i]) continue;
-          let candidates=state.doctors.filter(doc=>canWork(doc.id,d,shift,fullSched)&&!isAssignedThatDay(doc.id,d,newSched));
-          if(!candidates.length) candidates=state.doctors.filter(doc=>canWorkRelaxed(doc.id,d,shift,fullSched)&&!isAssignedThatDay(doc.id,d,newSched));
+          const role=roles[i];
+          const candidates=state.doctors.filter(doc=>canWork(doc.id,d,shift,role,fullSched)&&!isAssignedThatDay(doc.id,d,newSched));
           if(candidates.length){
-            const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,newSched)}));
+            const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,role,newSched)}));
             scored.sort((a,b)=>b.sc-a.sc);
             arr[i]=scored[0].id;
           }
-        }
-      }
-    }
-  }
-
-  // Force-fill remaining empties
-  for(const d of [...dates,...shuffle([...dates]),...shuffle([...dates])]){
-    for(const shift of SHIFTS){
-      const arr=newSched[d][shift];
-      for(let i=0;i<arr.length;i++){
-        if(arr[i]) continue;
-        const candidates=state.doctors.filter(doc=>canWorkForce(doc.id,d,shift,fullSched)&&!isAssignedThatDay(doc.id,d,newSched));
-        if(candidates.length){
-          const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,newSched)}));
-          scored.sort((a,b)=>b.sc-a.sc);
-          arr[i]=scored[0].id;
         }
       }
     }
@@ -722,7 +732,7 @@ function autoSchedule(){
   renderCalendar();
   switchTab('schedule');
   const empty=countEmpty(newSched);
-  showToast(empty>0?`排班完成，但有 ${empty} 個空缺，請手動補填。`:'✅ 自動排班完成！',empty>0?'warn':'ok');
+  showToast(empty>0?`排班完成，但有 ${empty} 個職位因無符合階級人員而空缺，請手動調整。`:'✅ 自動排班完成！',empty>0?'warn':'ok');
 }
 
 // ============================================================
@@ -731,9 +741,6 @@ function autoSchedule(){
 function renderCalendar(){
   const y=state.year, m=state.month;
   const ml=document.getElementById('month-label'); if(ml) ml.textContent=`${y}年${m+1}月`;
-  document.getElementById('cnt-D').value=state.shiftCounts.D;
-  document.getElementById('cnt-E').value=state.shiftCounts.E;
-  document.getElementById('cnt-N').value=state.shiftCounts.N;
   document.getElementById('min-rest').value=state.minRestHours;
 
   document.getElementById('doc-legend').innerHTML=
@@ -774,22 +781,23 @@ function renderCalendar(){
     cell.innerHTML=`<div class="day-header"><span class="day-num${isWknd?' weekend-num':''}">${day}</span><div class="day-badges">${badges}</div></div>`;
 
     const ds=state.schedule[dateStr]||{};
-    const counts=getDayCounts(dateStr);
     for(const si of slotInfo){
       const arr=ds[si.shift]||[];
-      const target=counts[si.shift];
+      const roles=getRoles(dateStr,si.shift);
       const filled=arr.filter(Boolean).length;
-      const short=filled<target;
+      const short=filled<roles.length;
       const block=document.createElement('div');
       block.className='shift-block';
-      const chips=arr.map(nid=>{
-        if(!nid) return `<span class="n-chip empty-chip">空</span>`;
+      const rows=roles.map((role,i)=>{
+        const nid=arr[i];
+        const abbr=ROLE_ABBR[role]||role[0];
+        if(!nid) return `<div class="role-row"><span class="role-abbr">${abbr}</span><span class="role-name empty-role">空缺</span></div>`;
         const nu=state.doctors.find(x=>x.id===nid); if(!nu) return '';
         const dim=_filterDocId&&nid!==_filterDocId?'opacity:0.15;':'';
         const hl=_filterDocId&&nid===_filterDocId?`box-shadow:0 0 0 1px ${nu.color};`:'';
-        return `<span class="n-chip" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color};${dim}${hl}" title="${nu.name}">${nu.name}</span>`;
+        return `<div class="role-row"><span class="role-abbr" style="background:${nu.color}22;color:${nu.color}">${abbr}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color};${dim}${hl}" title="${role} ${nu.name}">${nu.name}</span></div>`;
       }).join('');
-      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag ${si.tagClass}">${si.shift}</span><span class="shift-cnt${short?' short':''}">${filled}/${target}</span></div><div class="chip-wrap">${chips||'<span class=\"n-chip empty-chip\">-</span>'}</div>`;
+      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag ${si.tagClass}">${si.shift}</span><span class="shift-cnt${short?' short':''}">${filled}/${roles.length}</span></div>${rows}`;
       cell.appendChild(block);
     }
 
@@ -820,12 +828,9 @@ let _dayDraft=null, _dayDraftDate=null;
 function openDayModal(dateStr){
   _dayDraftDate=dateStr;
   const ds=ensureDay(dateStr);
-  const counts=getDayCounts(dateStr);
   _dayDraft={
-    counts:{...counts},
-    D:[...(ds.D.length?ds.D:Array(counts.D).fill(null))],
-    E:[...(ds.E.length?ds.E:Array(counts.E).fill(null))],
-    N:[...(ds.N.length?ds.N:Array(counts.N).fill(null))],
+    roles:{D:[...ds.roles.D],E:[...ds.roles.E],N:[...ds.roles.N]},
+    D:[...ds.D], E:[...ds.E], N:[...ds.N],
   };
   const[y,mo,d]=dateStr.split('-').map(Number);
   const dow=['一','二','三','四','五','六','日'][getDOW(dateStr)];
@@ -834,44 +839,46 @@ function openDayModal(dateStr){
   document.getElementById('day-modal').classList.add('show');
 }
 function _renderDayDraft(){
-  const dateStr=_dayDraftDate;
   const ds=_dayDraft; if(!ds) return;
   let html='';
   const cfg=[{shift:'D',cls:'tag-D'},{shift:'E',cls:'tag-E'},{shift:'N',cls:'tag-N'}];
   for(const c of cfg){
-    const arr=ds[c.shift];
+    const arr=ds[c.shift]; const roles=ds.roles[c.shift];
     html+=`<div class="day-shift-block">
       <div class="day-shift-hd">
         <span class="slot-tag ${c.cls}" style="padding:2px 8px">${c.shift}班</span>
         <span style="font-size:11px;color:#666">${SHIFT_TIME[c.shift]}</span>
-        <span style="margin-left:auto;font-size:11px;color:#888">人數</span>
-        <input type="number" min="0" max="20" value="${arr.length}" style="width:52px;padding:2px 5px;border:1px solid #ddd;border-radius:3px;font-size:12px" onchange="_draftResize('${c.shift}',parseInt(this.value)||0)">
+        <button class="btn-sm" style="background:#e8f5e9;color:#2e7d32;margin-left:auto" onclick="_draftAddExtra('${c.shift}')">＋支援</button>
       </div>`;
     arr.forEach((nid,i)=>{
+      const role=roles[i];
       const opts=`<option value=""${!nid?' selected':''}>-- 空缺 --</option>`+
-        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>`<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}</option>`).join('');
-      html+=`<div class="day-slot-row"><span style="font-size:11px;color:#999;width:16px">${i+1}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select></div>`;
+        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>`<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}${n.type==='full'&&!roleAllowed(n.prefs.level,role)?' ⚠不符階級':''}</option>`).join('');
+      html+=`<div class="day-slot-row"><span class="day-slot-role">${role}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select>${role==='支援'?`<button class="btn-sm btn-del" onclick="_draftRemoveExtra('${c.shift}',${i})">✕</button>`:''}</div>`;
     });
     html+=`</div>`;
   }
-  const prs=state.preRequests[dateStr]||[];
+  const prs=state.preRequests[_dayDraftDate]||[];
   if(prs.length) html+=`<div style="margin-top:6px"><strong style="font-size:12px">📝 預假/預班：</strong><br>${prs.map(pr=>`<span class="pr-badge">${getDocName(pr.docId)}: ${prLabel(pr)}${pr.note?' ('+pr.note+')':''}</span> `).join('')}</div>`;
   document.getElementById('day-modal-body').innerHTML=html;
 }
-function _draftResize(shift,n){
-  const arr=_dayDraft[shift];
-  n=Math.max(0,Math.min(20,n));
-  if(n>arr.length) while(arr.length<n) arr.push(null);
-  else arr.length=n;
+function _draftSlot(shift,idx,val){ _dayDraft[shift][idx]=val||null; }
+function _draftAddExtra(shift){
+  _dayDraft.roles[shift].push('支援');
+  _dayDraft[shift].push(null);
   _renderDayDraft();
 }
-function _draftSlot(shift,idx,val){ _dayDraft[shift][idx]=val||null; }
+function _draftRemoveExtra(shift,idx){
+  _dayDraft.roles[shift].splice(idx,1);
+  _dayDraft[shift].splice(idx,1);
+  _renderDayDraft();
+}
 function confirmDayModal(){
   if(!_dayDraftDate||!_dayDraft) return;
   pushUndo();
   const ds=ensureDay(_dayDraftDate);
+  ds.roles={D:[..._dayDraft.roles.D],E:[..._dayDraft.roles.E],N:[..._dayDraft.roles.N]};
   ds.D=[..._dayDraft.D]; ds.E=[..._dayDraft.E]; ds.N=[..._dayDraft.N];
-  ds.counts={...(_dayDraft.counts)};
   const savedDate=_dayDraftDate;
   _dayDraft=null; _dayDraftDate=null;
   autoSave();
@@ -884,25 +891,24 @@ function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-m
 // NURSE TABLE / MODAL
 // ============================================================
 function renderNurseTable(){
-  document.getElementById('nurse-tbody').innerHTML=state.doctors.map(d=>`
-    <tr>
+  document.getElementById('nurse-tbody').innerHTML=state.doctors.map(d=>{
+    const st=d.prefs.shiftTypes||{D:false,E:false,N:false};
+    const shiftStr=['D','E','N'].filter(s=>st[s]).join('/')||'-';
+    const lvl=d.prefs.level||'L';
+    return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
       <td>${d.type==='head'?'管理職':'輪班'}</td>
-      <td>${d.prefs.D>0?'+':''}${d.prefs.D}</td>
-      <td>${d.prefs.E>0?'+':''}${d.prefs.E}</td>
-      <td>${d.prefs.N>0?'+':''}${d.prefs.N}</td>
-      <td>${d.prefs.hol>0?'+':''}${d.prefs.hol}</td>
-      <td>${d.prefs.maxConsec}天</td>
-      <td>${d.prefs.noNight?'✔':''}</td>
+      <td>${d.type==='full'?shiftStr:'-'}</td>
+      <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
       <td><button class="btn-sm btn-edit" onclick="openNurseModal('${d.id}')">編輯</button><button class="btn-sm btn-del" onclick="deleteDoc('${d.id}')">刪除</button></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   const sel1=document.getElementById('avoid-doc1'), sel2=document.getElementById('avoid-doc2');
   const opts=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
   sel1.innerHTML=opts; sel2.innerHTML=opts;
   renderAvoidPairs();
-  renderNoNightList();
   const prSel=document.getElementById('pr-doc');
   if(prSel) prSel.innerHTML=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
 }
@@ -924,20 +930,7 @@ function addAvoidPair(){
   showToast('已新增');
 }
 function removeAvoidPair(i){ state.avoidPairs.splice(i,1); autoSave(); renderAvoidPairs(); }
-function renderNoNightList(){
-  document.getElementById('nonight-list').innerHTML=state.doctors.filter(d=>d.type==='full').map(d=>
-    `<label style="display:flex;align-items:center;gap:4px;font-size:12px;background:#f5f5f5;padding:3px 8px;border-radius:4px">
-      <input type="checkbox" ${d.prefs.noNight?'checked':''} onchange="d.prefs.noNight=this.checked" onclick="toggleNoNight('${d.id}',this.checked)">
-      <span class="color-dot" style="background:${d.color};width:10px;height:10px"></span>${d.name}
-    </label>`).join('');
-}
-function toggleNoNight(id,val){
-  const d=state.doctors.find(x=>x.id===id); if(!d) return;
-  d.prefs.noNight=val; autoSave(); renderNurseTable();
-}
-function updPV(key,val){ document.getElementById('pv-'+key).textContent=(val>0?'+':'')+val; }
 function openNurseModal(id){
-  document.getElementById('day-modal'); // noop guard
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
   const d=isEdit?state.doctors.find(x=>x.id===id):{id:'',name:'',type:'full',color:'#1565c0',prefs:defPrefs()};
@@ -945,10 +938,11 @@ function openNurseModal(id){
   document.getElementById('doc-name').value=d.name;
   document.getElementById('doc-type').value=d.type;
   document.getElementById('doc-color').value=d.color;
-  for(const k of ['D','E','N','hol']){ document.getElementById('pref-'+k).value=d.prefs[k]||0; updPV(k,d.prefs[k]||0); }
-  document.getElementById('pref-consec').value=d.prefs.maxConsec||6;
-  document.getElementById('pref-noNight').checked=!!d.prefs.noNight;
-  document.getElementById('pref-cluster').checked=!!d.prefs.cluster;
+  const st=d.prefs.shiftTypes||{D:true,E:true,N:true};
+  document.getElementById('shift-D').checked=!!st.D;
+  document.getElementById('shift-E').checked=!!st.E;
+  document.getElementById('shift-N').checked=!!st.N;
+  document.getElementById('doc-level').value=d.prefs.level||'L';
   document.getElementById('nurse-modal').classList.add('show');
 }
 function saveDoc(){
@@ -956,13 +950,12 @@ function saveDoc(){
   const name=document.getElementById('doc-name').value.trim();
   if(!name){showToast('請輸入姓名','warn');return;}
   const prefs={
-    D:parseInt(document.getElementById('pref-D').value),
-    E:parseInt(document.getElementById('pref-E').value),
-    N:parseInt(document.getElementById('pref-N').value),
-    hol:parseInt(document.getElementById('pref-hol').value),
-    maxConsec:parseInt(document.getElementById('pref-consec').value)||6,
-    noNight:document.getElementById('pref-noNight').checked,
-    cluster:document.getElementById('pref-cluster').checked,
+    shiftTypes:{
+      D:document.getElementById('shift-D').checked,
+      E:document.getElementById('shift-E').checked,
+      N:document.getElementById('shift-N').checked,
+    },
+    level:document.getElementById('doc-level').value,
   };
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
@@ -1044,19 +1037,21 @@ function renderStats(){
   document.getElementById('stats-month').textContent=`${_statsYear}年${_statsMonth+1}月`;
   const dates=monthDates(_statsYear,_statsMonth);
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,lead:0,transitions:0,lastShift:null,consecMax:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
     for(const shift of SHIFTS){
-      for(const nid of (ds[shift]||[])){
-        if(!nid||!st[nid]) continue;
+      const roles=getRoles(dateStr,shift);
+      (ds[shift]||[]).forEach((nid,i)=>{
+        if(!nid||!st[nid]) return;
         const s=st[nid];
         s[shift]++;
         if(hol) s.hol++;
+        if(roles[i]==='組長') s.lead++;
         if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
         s.lastShift=shift;
-      }
+      });
     }
   }
   for(const doc of state.doctors){
@@ -1074,7 +1069,7 @@ function renderStats(){
       <td style="text-align:left"><span class="color-dot" style="background:${doc.color};vertical-align:middle;margin-right:4px"></span>${doc.name}</td>
       <td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
       <td><strong>${total}</strong></td><td>${total*8}h</td>
-      <td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
+      <td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
     </tr>`;
   }).join('');
 
@@ -1082,24 +1077,59 @@ function renderStats(){
   for(const doc of state.doctors){
     if(doc.type!=='full') continue;
     const s=st[doc.id];
-    if(s.consecMax>doc.prefs.maxConsec) viols.push(`⚠ ${doc.name} 連班超標(${s.consecMax}天 > ${doc.prefs.maxConsec}天)`);
+    if(s.consecMax>MAX_CONSEC) viols.push(`⚠ ${doc.name} 連班超過勞基法上限(${s.consecMax}天 > ${MAX_CONSEC}天)`);
     if(s.transitions>=3) viols.push(`⚠ ${doc.name} D↔N 轉班次數${s.transitions}次（建議 < 3次）`);
   }
   let empties=0, understaffed=0;
   for(const d of dates){
     const ds=state.schedule[d]||{};
-    const counts=getDayCounts(d);
     for(const shift of SHIFTS){
-      const arr=ds[shift]||[];
+      const arr=ds[shift]||[]; const roles=getRoles(d,shift);
       empties+=arr.filter(x=>!x).length;
-      if(arr.filter(Boolean).length<counts[shift]) understaffed++;
+      if(arr.filter(Boolean).length<roles.length) understaffed++;
     }
   }
-  if(empties>0) viols.push(`❌ 尚有 ${empties} 個空缺`);
-  if(understaffed>0) viols.push(`⚠ 有 ${understaffed} 個班次人力未達預設標準`);
+  if(empties>0) viols.push(`❌ 尚有 ${empties} 個職位空缺（可能因無符合階級人員可上）`);
+  if(understaffed>0) viols.push(`⚠ 有 ${understaffed} 個班次職位未全部補齊`);
   document.getElementById('stats-violations').innerHTML=viols.length
     ?`<div class="alert alert-warn"><strong>提醒事項：</strong><br>${viols.map(v=>`• ${v}`).join('<br>')}</div>`
     :`<div class="alert alert-ok">✅ 所有限制條件均符合</div>`;
+}
+
+// ============================================================
+// MASTER GRID (Excel 式月班總表)
+// ============================================================
+function shiftOfNurseOnDate(nurseId,dateStr){
+  const ds=state.schedule[dateStr]; if(!ds) return null;
+  for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
+  return null;
+}
+function renderMasterGrid(){
+  const y=state.year, m=state.month;
+  const dates=monthDates(y,m);
+  const dowNames=['一','二','三','四','五','六','日'];
+  let thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
+    const dow=getDOW(d); const wknd=dow>=5||isHoliday(d);
+    return `<th class="${wknd?'wknd':''}">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
+  }).join('')+`<th>總班數</th></tr>`;
+  document.getElementById('master-thead').innerHTML=thead;
+
+  const rows=state.doctors.map(doc=>{
+    let total=0;
+    const cells=dates.map(d=>{
+      const wknd=isHoliday(d);
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(sh){
+        total++;
+        return `<td class="mg-${sh}${wknd?' wknd-col':''}">${sh}</td>`;
+      }
+      const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
+      if(offReq) return `<td class="mg-OFF${wknd?' wknd-col':''}">OFF</td>`;
+      return `<td class="${wknd?'wknd-col':''}"></td>`;
+    }).join('');
+    return `<tr><td class="nm"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td></tr>`;
+  }).join('');
+  document.getElementById('master-tbody').innerHTML=rows;
 }
 
 // ============================================================
@@ -1122,17 +1152,18 @@ function changeMonth(delta){
 function jumpMonth(){
   const input=prompt('輸入年月 (格式 YYYY-MM)：',`${state.year}-${String(state.month+1).padStart(2,'0')}`);
   if(!input) return;
-  const m=input.match(/^(\d{4})-(\d{1,2})$/);
-  if(!m){showToast('格式錯誤','warn');return;}
-  state.year=parseInt(m[1]); state.month=parseInt(m[2])-1;
+  const mt=input.match(/^(\d{4})-(\d{1,2})$/);
+  if(!mt){showToast('格式錯誤','warn');return;}
+  state.year=parseInt(mt[1]); state.month=parseInt(mt[2])-1;
   renderCalendar();
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  const idx={schedule:0,nurses:1,prereq:2,stats:3}[name];
+  const idx={schedule:0,master:1,nurses:2,prereq:3,stats:4}[name];
   document.querySelectorAll('.tab')[idx].classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
+  if(name==='master') renderMasterGrid();
   if(name==='nurses') renderNurseTable();
   if(name==='prereq') renderPRList();
   if(name==='stats') renderStats();
@@ -1143,8 +1174,8 @@ function clearSchedule(){
   pushUndo();
   const dates=monthDates(state.year,state.month);
   for(const d of dates){
-    const counts=getDayCounts(d);
-    state.schedule[d]={D:Array(counts.D).fill(null),E:Array(counts.E).fill(null),N:Array(counts.N).fill(null)};
+    const roles=(state.schedule[d]&&state.schedule[d].roles)||{D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+    state.schedule[d]={roles,D:Array(roles.D.length).fill(null),E:Array(roles.E.length).fill(null),N:Array(roles.N.length).fill(null)};
   }
   autoSave(); renderCalendar();
   showToast('已清空本月排班');
@@ -1153,7 +1184,7 @@ function clearSchedule(){
 // ============================================================
 // SAVE / LOAD / CLOUD / EXPORT
 // ============================================================
-const LS_KEY='tienSheng_nurseSched_v1';
+const LS_KEY='tienSheng_nurseSched_v2';
 const CLOUD_URL_KEY='tienSheng_nurseCloudUrl';
 let _fbApp=null,_fbRef=null,_fbIgnoreOwn=false,_fbIgnoreTimer=null;
 
@@ -1161,7 +1192,7 @@ function serializeState(){
   return {
     doctors:state.doctors,schedule:state.schedule,preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
-    shiftCounts:state.shiftCounts,minRestHours:state.minRestHours,
+    minRestHours:state.minRestHours,
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
@@ -1172,7 +1203,6 @@ function applyData(d){
   state.holidays=new Set(d.holidays||[]);
   if(d.year!=null) state.year=d.year;
   if(d.month!=null) state.month=d.month;
-  state.shiftCounts=d.shiftCounts||{D:6,E:6,N:4};
   state.minRestHours=d.minRestHours||16;
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
@@ -1265,11 +1295,18 @@ function openCloudSettings(){
 function exportCSV(){
   const dates=monthDates(state.year,state.month);
   const DOW=['一','二','三','四','五','六','日'];
-  const rows=[['日期','星期','假日','D班護理師','E班護理師','N班護理師(次日00-08)']];
+  const header=['日期','星期','假日'];
+  for(const sh of ['D','E']) for(const r of ROLES[sh]) header.push(sh+r);
+  for(const r of ROLES.N) header.push('N'+r);
+  const rows=[header];
   for(const d of dates){
     const ds=state.schedule[d]||{};
-    const nm=arr=>(arr||[]).filter(Boolean).map(getDocName).join('、');
-    rows.push([d,DOW[getDOW(d)],isHoliday(d)?'是':'',nm(ds.D),nm(ds.E),nm(ds.N)]);
+    const row=[d,DOW[getDOW(d)],isHoliday(d)?'是':''];
+    for(const sh of SHIFTS){
+      const arr=ds[sh]||Array(ROLES[sh].length).fill(null);
+      for(const nid of arr) row.push(nid?getDocName(nid):'');
+    }
+    rows.push(row);
   }
   const csv='﻿'+rows.map(r=>r.map(c=>`"${c}"`).join(',')).join('\n');
   const a=document.createElement('a');
@@ -1282,6 +1319,23 @@ function generatePDF(){
   const y=state.year, m=state.month;
   const dates=monthDates(y,m);
   const monthStr=`${y}年${m+1}月`;
+  const dowNames=['一','二','三','四','五','六','日'];
+
+  // --- 月班總表 ---
+  let mgHead=`<tr><th>護理師</th>`+dates.map(d=>`<th>${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`).join('')+`<th>總班數</th></tr>`;
+  const mgRows=state.doctors.map(doc=>{
+    let total=0;
+    const cells=dates.map(d=>{
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(sh){ total++; return `<td style="${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}</td>`; }
+      const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
+      if(offReq) return `<td style="background:#fdecea;color:#c0392b;font-weight:700">OFF</td>`;
+      return `<td></td>`;
+    }).join('');
+    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?total:'-'}</b></td></tr>`;
+  }).join('');
+
+  // --- 排班表 (角色格式) ---
   const cfg=[
     {shift:'D',label:'D',ts:'background:#fff8e1;color:#e65100;border:1px solid #ffcc02'},
     {shift:'E',label:'E',ts:'background:#e3f2fd;color:#1565c0;border:1px solid #90caf9'},
@@ -1299,13 +1353,15 @@ function generatePDF(){
     const bg=hol?'#fde8e8':dow>=5?'#fff0f0':'#fff';
     let rows='';
     for(const sc of cfg){
-      const names=(ds[sc.shift]||[]).filter(Boolean).map(getDocName).join('、')||'空';
+      const roles=getRoles(d,sc.shift);
+      const arr=ds[sc.shift]||Array(roles.length).fill(null);
+      const names=roles.map((r,i)=>`${ROLE_ABBR[r]||r}:${arr[i]?getDocName(arr[i]):'空'}`).join(' ');
       rows+=`<div style="display:flex;align-items:flex-start;gap:2px;margin-bottom:2px;">
         <span style="width:13px;height:13px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;border-radius:2px;flex-shrink:0;${sc.ts}">${sc.label}</span>
-        <span style="flex:1;font-size:8px;line-height:1.3;">${names}</span>
+        <span style="flex:1;font-size:7px;line-height:1.3;">${names}</span>
       </div>`;
     }
-    calCells+=`<div style="background:${bg};border:1px solid #ddd;border-radius:3px;padding:3px;min-height:96px;">
+    calCells+=`<div style="background:${bg};border:1px solid #ddd;border-radius:3px;padding:3px;min-height:110px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
         <span style="font-size:11px;font-weight:700;${dow>=5||hol?'color:#c0392b':'color:#333'}">${day}</span>
         ${hol?'<span style="font-size:8px;background:#c0392b;color:#fff;padding:1px 3px;border-radius:2px;">假</span>':''}
@@ -1314,18 +1370,21 @@ function generatePDF(){
   }
   const calHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:16px;">${wdHeaders}${calCells}</div>`;
 
+  // --- 統計報表 ---
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,lead:0,transitions:0,lastShift:null,consecMax:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
     for(const shift of SHIFTS){
-      for(const nid of (ds[shift]||[])){
-        if(!nid||!st[nid]) continue;
+      const roles=getRoles(dateStr,shift);
+      (ds[shift]||[]).forEach((nid,i)=>{
+        if(!nid||!st[nid]) return;
         const s=st[nid]; s[shift]++; if(hol) s.hol++;
+        if(roles[i]==='組長') s.lead++;
         if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
         s.lastShift=shift;
-      }
+      });
     }
   }
   for(const doc of state.doctors){
@@ -1339,7 +1398,7 @@ function generatePDF(){
   const statsRows=state.doctors.map(doc=>{
     const s=st[doc.id]; const total=s.D+s.E+s.N;
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
-      <td><b>${total}</b></td><td>${total*8}h</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
+      <td><b>${total}</b></td><td>${total*8}h</td><td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
   }).join('');
 
   const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
@@ -1382,20 +1441,24 @@ function generatePDF(){
     h1{font-size:15px;text-align:center;margin:0 0 12px;}
     h2{font-size:12px;margin:0 0 6px;padding:4px 8px;background:#0d5c4a;color:#fff;border-radius:3px;}
     table{border-collapse:collapse;width:100%;margin-bottom:16px;}
-    th,td{border:1px solid #bbb;padding:3px 5px;text-align:center;vertical-align:middle;font-size:10px;}
+    th,td{border:1px solid #bbb;padding:3px 4px;text-align:center;vertical-align:middle;font-size:9px;}
     th{background:#0d5c4a;color:#fff;}
     @media print{ @page{size:A4 landscape;margin:8mm;} .pb{page-break-before:always;margin-top:0;} }
   </style></head><body>
   <h1>天晟護理排班 ${monthStr}</h1>
-  <h2>一、排班表</h2>
-  ${calHTML}
+  <h2>一、月班總表</h2>
+  <table>${mgHead}${mgRows}</table>
   <div class="pb">
-  <h2>二、統計報表</h2>
-  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th></tr></thead>
+  <h2>二、排班表（職位）</h2>
+  ${calHTML}
+  </div>
+  <div class="pb">
+  <h2>三、統計報表</h2>
+  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>組長次數</th><th>轉班次</th><th>最長連班</th></tr></thead>
   <tbody>${statsRows}</tbody></table>
   </div>
   <div class="pb">
-  <h2>三、預假/預班清單</h2>
+  <h2>四、預假/預班清單</h2>
   <table><thead><tr><th>護理師</th><th>日期</th><th>類型</th><th>備註</th></tr></thead>
   <tbody>${prHTML}</tbody></table>
   </div>
