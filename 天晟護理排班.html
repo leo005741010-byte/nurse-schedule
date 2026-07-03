@@ -587,6 +587,19 @@ function canWork(nurseId, date, shift, role, sched){
   if(avoidBlocked(nurseId,date,sched)) return false;
   return true;
 }
+// 強制排班用：僅放寬「避免同時上班」這類軟性偏好，
+// 休息時數／連續上班天數上限／班別指派／階級資格為鐵則，不可放寬。
+function canWorkForce(nurseId, date, shift, role, sched){
+  const doc=state.doctors.find(d=>d.id===nurseId);
+  if(!doc||doc.type!=='full') return false;
+  if(!doc.prefs.shiftTypes||!doc.prefs.shiftTypes[shift]) return false;
+  if(!roleAllowed(doc.prefs.level,role)) return false;
+  if(isAssignedThatDay(nurseId,date,sched)) return false;
+  if(offBlocked(nurseId,date)) return false;
+  if(!restOK(nurseId,date,shift,sched)) return false;
+  if(consecDaysBefore(nurseId,date,sched)>=MAX_CONSEC) return false;
+  return true;
+}
 
 // ============================================================
 // SCORING
@@ -727,12 +740,33 @@ function autoSchedule(){
     }
   }
 
+  // 強制填補：鐵則是「盡量不留空班」，僅在此階段放寬「避免同時上班」等軟性偏好，
+  // 休息時數／連續上班天數上限／班別指派／階級資格絕不放寬。
+  for(let round=0;round<3;round++){
+    const ordDates=shuffle([...dates]);
+    for(const d of ordDates){
+      for(const shift of SHIFTS){
+        const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]) continue;
+          const role=roles[i];
+          const candidates=state.doctors.filter(doc=>canWorkForce(doc.id,d,shift,role,fullSched)&&!isAssignedThatDay(doc.id,d,newSched));
+          if(candidates.length){
+            const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,role,newSched)}));
+            scored.sort((a,b)=>b.sc-a.sc);
+            arr[i]=scored[0].id;
+          }
+        }
+      }
+    }
+  }
+
   Object.assign(state.schedule, newSched);
   autoSave();
   renderCalendar();
   switchTab('schedule');
   const empty=countEmpty(newSched);
-  showToast(empty>0?`排班完成，但有 ${empty} 個職位因無符合階級人員而空缺，請手動調整。`:'✅ 自動排班完成！',empty>0?'warn':'ok');
+  showToast(empty>0?`排班完成，${empty} 個職位因休息時數／連續上班天數／階級資格等鐵則限制無法排入，維持空班。`:'✅ 自動排班完成，已全數排滿！',empty>0?'warn':'ok');
 }
 
 // ============================================================
