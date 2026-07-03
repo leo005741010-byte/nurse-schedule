@@ -237,10 +237,19 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 預假/預班 ======= -->
   <div id="tab-prereq" class="tab-pane">
     <div id="pre-req-panel">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;background:#f5f9f8;padding:8px 12px;border-radius:6px">
-        <label style="font-size:12px;font-weight:700;color:#555">每人每月最多預假/預班天數：</label>
-        <input type="number" id="max-prereq-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxPreReqDays=this.value?parseInt(this.value):null;autoSave();">
-        <span style="font-size:11px;color:#888">（留空＝不限制，由護理長設定；護理師新增超過此天數時將無法新增並顯示提示）</span>
+      <div style="margin-bottom:12px;background:#f5f9f8;padding:8px 12px;border-radius:6px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+          <label style="font-size:12px;font-weight:700;color:#555">每人每月最多預假天數：</label>
+          <input type="number" id="max-off-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxOffDays=this.value?parseInt(this.value):null;autoSave();">
+          <label style="font-size:12px;font-weight:700;color:#555;margin-left:10px">其中假日最多：</label>
+          <input type="number" id="max-off-holiday-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxOffHolidayDays=this.value?parseInt(this.value):null;autoSave();">
+          <span style="font-size:11px;color:#888">天（僅限「當天OFF」類型；預上班(排D/E/N班)不受此限）</span>
+        </div>
+        <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
+          <label style="font-size:12px;font-weight:700;color:#555;padding-top:3px">當月長假可選擇的護理人員：</label>
+          <div id="long-leave-list" style="display:flex;flex-wrap:wrap;gap:6px;flex:1"></div>
+        </div>
+        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制</div>
       </div>
       <h3 style="margin-bottom:8px">新增預假/預班</h3>
       <div class="pr-form">
@@ -429,7 +438,9 @@ let state = {
   schedule: {},
   preRequests: {},
   monthlyShiftType: {},
-  maxPreReqDays: null,
+  maxOffDays: null,
+  maxOffHolidayDays: null,
+  longLeaveExempt: {},
   avoidPairs: [],
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
@@ -1183,14 +1194,40 @@ function updatePRCalSelected(){
   el.textContent=`已選取：${range.lo} ～ ${range.hi}（共${days}天）`;
 }
 
-function countExistingPRDates(nurseId,y,m){
+function countExistingOffDates(nurseId,y,m){
   const prefix=`${y}-${String(m+1).padStart(2,'0')}-`;
   const dates=new Set();
   for(const[date,prs] of Object.entries(state.preRequests)){
     if(!date.startsWith(prefix)) continue;
-    if(prs.some(p=>p.docId===nurseId)) dates.add(date);
+    if(prs.some(p=>p.docId===nurseId&&p.type==='OFF')) dates.add(date);
   }
   return dates;
+}
+function isLongLeaveExempt(nurseId,y,m){
+  const k=monthKey(y,m);
+  return (state.longLeaveExempt[k]||[]).includes(nurseId);
+}
+function toggleLongLeaveExempt(nurseId,val){
+  const k=monthKey(_prListYear,_prListMonth);
+  if(!state.longLeaveExempt[k]) state.longLeaveExempt[k]=[];
+  const arr=state.longLeaveExempt[k];
+  const idx=arr.indexOf(nurseId);
+  if(val&&idx<0) arr.push(nurseId);
+  if(!val&&idx>=0) arr.splice(idx,1);
+  autoSave();
+}
+function renderLongLeaveList(){
+  const wrap=document.getElementById('long-leave-list');
+  if(!wrap) return;
+  const exemptSet=new Set(state.longLeaveExempt[monthKey(_prListYear,_prListMonth)]||[]);
+  const roster=sortedRoster(_prListYear,_prListMonth).filter(d=>d.type==='full');
+  wrap.innerHTML=roster.map(d=>{
+    const checked=exemptSet.has(d.id);
+    return `<label style="display:flex;align-items:center;gap:4px;font-size:12px;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd;cursor:pointer">
+      <input type="checkbox" ${checked?'checked':''} onchange="toggleLongLeaveExempt('${d.id}',this.checked)">
+      <span class="color-dot" style="background:${d.color};width:10px;height:10px"></span>${d.name}
+    </label>`;
+  }).join('');
 }
 function addPR(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
@@ -1200,8 +1237,8 @@ function addPR(){
   const note=document.getElementById('pr-note').value.trim();
   if(!docId||!range){showToast('請選擇護理師與日期','warn');return;}
   const start=range.lo, end=range.hi;
-  // 每人每月最多預假/預班天數檢核
-  if(state.maxPreReqDays){
+  // 每人每月最多預假天數檢核（僅限OFF類型；預上班(排D/E/N班)不受此限）
+  if(type==='OFF'&&(state.maxOffDays!=null||state.maxOffHolidayDays!=null)){
     const byMonth={};
     let cur=start;
     while(cur<=end){
@@ -1212,11 +1249,19 @@ function addPR(){
       cur=addDays(cur,1);
     }
     for(const{y,m,dates} of Object.values(byMonth)){
-      const existing=countExistingPRDates(docId,y,m);
+      if(isLongLeaveExempt(docId,y,m)) continue;
+      const existing=countExistingOffDates(docId,y,m);
       const merged=new Set([...existing,...dates]);
-      if(merged.size>state.maxPreReqDays){
-        showToast(`❌ ${getDocName(docId)} 於${y}年${m+1}月預假/預班將達${merged.size}天，超過上限${state.maxPreReqDays}天，無法新增`,'warn');
+      if(state.maxOffDays!=null&&merged.size>state.maxOffDays){
+        showToast(`❌ ${getDocName(docId)} 於${y}年${m+1}月預假將達${merged.size}天，超過上限${state.maxOffDays}天，無法新增`,'warn');
         return;
+      }
+      if(state.maxOffHolidayDays!=null){
+        const holCount=[...merged].filter(isHoliday).length;
+        if(holCount>state.maxOffHolidayDays){
+          showToast(`❌ ${getDocName(docId)} 於${y}年${m+1}月預假中的假日將達${holCount}天，超過上限${state.maxOffHolidayDays}天，無法新增`,'warn');
+          return;
+        }
       }
     }
   }
@@ -1240,8 +1285,11 @@ function delPR(date,prId){
 function renderPRList(){
   const label=document.getElementById('pr-list-month-label');
   if(label) label.textContent=`${_prListYear}年${_prListMonth+1}月`;
-  const maxInput=document.getElementById('max-prereq-days');
-  if(maxInput) maxInput.value=state.maxPreReqDays||'';
+  const maxOffInput=document.getElementById('max-off-days');
+  if(maxOffInput) maxOffInput.value=state.maxOffDays||'';
+  const maxOffHolInput=document.getElementById('max-off-holiday-days');
+  if(maxOffHolInput) maxOffHolInput.value=state.maxOffHolidayDays||'';
+  renderLongLeaveList();
   const roster=sortedRoster(_prListYear,_prListMonth);
   const prSel=document.getElementById('pr-doc');
   if(prSel){
@@ -1427,7 +1475,8 @@ function serializeState(){
     doctors:state.doctors,schedule:state.schedule,preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
-    maxPreReqDays:state.maxPreReqDays??null,
+    maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
+    longLeaveExempt:state.longLeaveExempt||{},
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
@@ -1457,7 +1506,9 @@ function applyData(d){
   if(d.month!=null) state.month=d.month;
   state.minRestHours=d.minRestHours||16;
   state.monthlyShiftType=d.monthlyShiftType||{};
-  state.maxPreReqDays=d.maxPreReqDays??null;
+  state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
+  state.maxOffHolidayDays=d.maxOffHolidayDays??null;
+  state.longLeaveExempt=d.longLeaveExempt||{};
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
