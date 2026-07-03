@@ -441,6 +441,7 @@ let state = {
   maxOffDays: null,
   maxOffHolidayDays: null,
   longLeaveExempt: {},
+  longLeaveDays: {},
   avoidPairs: [],
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
@@ -733,14 +734,22 @@ function avgHolCount(sched){
   if(!full.length) return 0;
   return full.reduce((s,d)=>s+calcNurseHolCount(d.id,sched),0)/full.length;
 }
+// 長假天數會依比例調降該護理師本月的公平性目標，不建立實際OFF日期
+function leaveAvailRatio(nurseId,date){
+  const{y,m}=ymFromDate(date);
+  const leaveDays=getNurseLongLeaveDays(nurseId,y,m);
+  if(!leaveDays) return 1;
+  const dim=daysInMonth(y,m);
+  return Math.max(0,(dim-leaveDays)/dim);
+}
 function scoreNurse(nurseId, date, shift, role, sched){
   let score=Math.random()*2;
   const myCnt=calcNurseShiftCount(nurseId,sched);
-  const avg=avgShiftCount(sched);
+  const avg=avgShiftCount(sched)*leaveAvailRatio(nurseId,date);
   score+=(avg-myCnt)*6;
   if(isHoliday(date)){
     const myHol=calcNurseHolCount(nurseId,sched);
-    const avgHol=avgHolCount(sched);
+    const avgHol=avgHolCount(sched)*leaveAvailRatio(nurseId,date);
     score+=(avgHol-myHol)*4;
   }
   const last=getLastAssigned(nurseId,date,sched);
@@ -1214,18 +1223,36 @@ function toggleLongLeaveExempt(nurseId,val){
   const idx=arr.indexOf(nurseId);
   if(val&&idx<0) arr.push(nurseId);
   if(!val&&idx>=0) arr.splice(idx,1);
+  if(!val){
+    if(state.longLeaveDays[k]) delete state.longLeaveDays[k][nurseId];
+  }
+  autoSave();
+  renderLongLeaveList();
+}
+function getNurseLongLeaveDays(nurseId,y,m){
+  const k=monthKey(y,m);
+  return (state.longLeaveDays[k]&&state.longLeaveDays[k][nurseId])||0;
+}
+function setLongLeaveDays(nurseId,val){
+  const k=monthKey(_prListYear,_prListMonth);
+  if(!state.longLeaveDays[k]) state.longLeaveDays[k]={};
+  const n=Math.max(0,parseInt(val)||0);
+  state.longLeaveDays[k][nurseId]=n;
   autoSave();
 }
 function renderLongLeaveList(){
   const wrap=document.getElementById('long-leave-list');
   if(!wrap) return;
-  const exemptSet=new Set(state.longLeaveExempt[monthKey(_prListYear,_prListMonth)]||[]);
+  const mk=monthKey(_prListYear,_prListMonth);
+  const exemptSet=new Set(state.longLeaveExempt[mk]||[]);
   const roster=sortedRoster(_prListYear,_prListMonth).filter(d=>d.type==='full');
   wrap.innerHTML=roster.map(d=>{
     const checked=exemptSet.has(d.id);
+    const days=getNurseLongLeaveDays(d.id,_prListYear,_prListMonth);
     return `<label style="display:flex;align-items:center;gap:4px;font-size:12px;background:#fff;padding:3px 8px;border-radius:4px;border:1px solid #ddd;cursor:pointer">
       <input type="checkbox" ${checked?'checked':''} onchange="toggleLongLeaveExempt('${d.id}',this.checked)">
       <span class="color-dot" style="background:${d.color};width:10px;height:10px"></span>${d.name}
+      ${checked?`<input type="number" min="0" max="31" value="${days}" title="當月休假天數（影響自動排班公平性目標，不建立實際OFF日期）" style="width:44px;padding:1px 3px;border:1px solid #ccc;border-radius:3px;font-size:11px" onclick="event.stopPropagation()" onchange="setLongLeaveDays('${d.id}',this.value)">天`:''}
     </label>`;
   }).join('');
 }
@@ -1522,7 +1549,7 @@ function serializeState(){
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
-    longLeaveExempt:state.longLeaveExempt||{},
+    longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
@@ -1555,6 +1582,7 @@ function applyData(d){
   state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
   state.maxOffHolidayDays=d.maxOffHolidayDays??null;
   state.longLeaveExempt=d.longLeaveExempt||{};
+  state.longLeaveDays=d.longLeaveDays||{};
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
