@@ -291,10 +291,10 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="form-row"><label>顏色</label><input type="color" id="doc-color" style="width:55px;height:28px;padding:2px;"></div>
-    <h3>可排班別 (指派，非偏好)</h3>
-    <div class="check-row"><input type="checkbox" id="shift-D"><label for="shift-D">D班 (08-16)</label></div>
-    <div class="check-row"><input type="checkbox" id="shift-E"><label for="shift-E">E班 (16-24)</label></div>
-    <div class="check-row"><input type="checkbox" id="shift-N"><label for="shift-N">N班 (00-08次日)</label></div>
+    <h3>固定班別 (指派，僅能擇一)</h3>
+    <div class="check-row"><input type="radio" name="shift-type" id="shift-D" value="D"><label for="shift-D">D班 (08-16)</label></div>
+    <div class="check-row"><input type="radio" name="shift-type" id="shift-E" value="E"><label for="shift-E">E班 (16-24)</label></div>
+    <div class="check-row"><input type="radio" name="shift-type" id="shift-N" value="N"><label for="shift-N">N班 (00-08次日)</label></div>
     <h3>階級 (決定可擔任的職位)</h3>
     <div class="form-row"><label>階級</label>
       <select id="doc-level">
@@ -337,8 +337,8 @@ function roleAllowed(level,role){
   if(role==='流動'||role==='支援') return true;
   return (LEVEL_CAP[level]||[]).includes(role);
 }
-function defPrefs(){
-  return {shiftTypes:{D:true,E:true,N:true}, level:'L'};
+function defPrefs(shiftType){
+  return {shiftType:shiftType||'D', level:'L'};
 }
 let state = {
   year: new Date().getFullYear(),
@@ -349,31 +349,31 @@ let state = {
   preRequests: {},
   avoidPairs: [],
   doctors: [
-    {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs()},
-    {id:'n1',name:'宋品儒',type:'full',color:'#1565c0',prefs:defPrefs()},
-    {id:'n2',name:'林思廷',type:'full',color:'#2e7d32',prefs:defPrefs()},
-    {id:'n3',name:'陳如真',type:'full',color:'#e65100',prefs:defPrefs()},
-    {id:'n4',name:'鐘旻芝',type:'full',color:'#6a1b9a',prefs:defPrefs()},
-    {id:'n5',name:'徐唯翔',type:'full',color:'#00695c',prefs:defPrefs()},
-    {id:'n6',name:'黃心卉',type:'full',color:'#c62828',prefs:defPrefs()},
-    {id:'n7',name:'江友翔',type:'full',color:'#4e342e',prefs:defPrefs()},
-    {id:'n8',name:'羅云彤',type:'full',color:'#0097a7',prefs:defPrefs()},
-    {id:'n9',name:'黃思敏',type:'full',color:'#558b2f',prefs:defPrefs()},
-    {id:'n10',name:'劉玉慧',type:'full',color:'#ad1457',prefs:defPrefs()},
-    {id:'n11',name:'邱建彰',type:'full',color:'#5d4037',prefs:defPrefs()},
-    {id:'n12',name:'廖翊汶',type:'full',color:'#283593',prefs:defPrefs()},
-    {id:'n13',name:'余歡',type:'full',color:'#00838f',prefs:defPrefs()},
-    {id:'n14',name:'李咨諪',type:'full',color:'#ef6c00',prefs:defPrefs()},
-    {id:'n15',name:'黃佳瑜',type:'full',color:'#4527a0',prefs:defPrefs()},
-    {id:'n16',name:'李允禎',type:'full',color:'#33691e',prefs:defPrefs()},
-    {id:'n17',name:'黃榆鈞',type:'full',color:'#37474f',prefs:defPrefs()},
-    {id:'n18',name:'黃怡璇',type:'full',color:'#c2185b',prefs:defPrefs()},
-    {id:'n19',name:'劉薰銣',type:'full',color:'#00796b',prefs:defPrefs()},
-    {id:'n20',name:'彭士彥',type:'full',color:'#f9a825',prefs:defPrefs()},
-    {id:'n21',name:'黃詩云',type:'full',color:'#3949ab',prefs:defPrefs()},
-    {id:'n22',name:'鐘志鴻',type:'full',color:'#757575',prefs:defPrefs()},
-    {id:'n23',name:'陳潓宣',type:'full',color:'#7b1fa2',prefs:defPrefs()},
-    {id:'n24',name:'李佳寧',type:'full',color:'#d84315',prefs:defPrefs()},
+    {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
+    {id:'n1',name:'宋品儒',type:'full',color:'#1565c0',prefs:defPrefs('D')},
+    {id:'n2',name:'林思廷',type:'full',color:'#2e7d32',prefs:defPrefs('D')},
+    {id:'n3',name:'陳如真',type:'full',color:'#e65100',prefs:defPrefs('D')},
+    {id:'n4',name:'鐘旻芝',type:'full',color:'#6a1b9a',prefs:defPrefs('D')},
+    {id:'n5',name:'徐唯翔',type:'full',color:'#00695c',prefs:defPrefs('D')},
+    {id:'n6',name:'黃心卉',type:'full',color:'#c62828',prefs:defPrefs('D')},
+    {id:'n7',name:'江友翔',type:'full',color:'#4e342e',prefs:defPrefs('D')},
+    {id:'n8',name:'羅云彤',type:'full',color:'#0097a7',prefs:defPrefs('D')},
+    {id:'n9',name:'黃思敏',type:'full',color:'#558b2f',prefs:defPrefs('D')},
+    {id:'n10',name:'劉玉慧',type:'full',color:'#ad1457',prefs:defPrefs('E')},
+    {id:'n11',name:'邱建彰',type:'full',color:'#5d4037',prefs:defPrefs('E')},
+    {id:'n12',name:'廖翊汶',type:'full',color:'#283593',prefs:defPrefs('E')},
+    {id:'n13',name:'余歡',type:'full',color:'#00838f',prefs:defPrefs('E')},
+    {id:'n14',name:'李咨諪',type:'full',color:'#ef6c00',prefs:defPrefs('E')},
+    {id:'n15',name:'黃佳瑜',type:'full',color:'#4527a0',prefs:defPrefs('E')},
+    {id:'n16',name:'李允禎',type:'full',color:'#33691e',prefs:defPrefs('E')},
+    {id:'n17',name:'黃榆鈞',type:'full',color:'#37474f',prefs:defPrefs('E')},
+    {id:'n18',name:'黃怡璇',type:'full',color:'#c2185b',prefs:defPrefs('E')},
+    {id:'n19',name:'劉薰銣',type:'full',color:'#00796b',prefs:defPrefs('N')},
+    {id:'n20',name:'彭士彥',type:'full',color:'#f9a825',prefs:defPrefs('N')},
+    {id:'n21',name:'黃詩云',type:'full',color:'#3949ab',prefs:defPrefs('N')},
+    {id:'n22',name:'鐘志鴻',type:'full',color:'#757575',prefs:defPrefs('N')},
+    {id:'n23',name:'陳潓宣',type:'full',color:'#7b1fa2',prefs:defPrefs('N')},
+    {id:'n24',name:'李佳寧',type:'full',color:'#d84315',prefs:defPrefs('N')},
   ],
 };
 let _idCnt = 25;
@@ -578,7 +578,7 @@ function offBlocked(nurseId,date){
 function canWork(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
-  if(!doc.prefs.shiftTypes||!doc.prefs.shiftTypes[shift]) return false;
+  if(doc.prefs.shiftType!==shift) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
   if(offBlocked(nurseId,date)) return false;
@@ -592,7 +592,7 @@ function canWork(nurseId, date, shift, role, sched){
 function canWorkForce(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
-  if(!doc.prefs.shiftTypes||!doc.prefs.shiftTypes[shift]) return false;
+  if(doc.prefs.shiftType!==shift) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
   if(offBlocked(nurseId,date)) return false;
@@ -887,7 +887,14 @@ function _renderDayDraft(){
     arr.forEach((nid,i)=>{
       const role=roles[i];
       const opts=`<option value=""${!nid?' selected':''}>-- 空缺 --</option>`+
-        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>`<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}${n.type==='full'&&!roleAllowed(n.prefs.level,role)?' ⚠不符階級':''}</option>`).join('');
+        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>{
+          let warn='';
+          if(n.type==='full'){
+            if(n.prefs.shiftType!==c.shift) warn+=' ⚠非固定班別';
+            if(!roleAllowed(n.prefs.level,role)) warn+=' ⚠不符階級';
+          }
+          return `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}${warn}</option>`;
+        }).join('');
       html+=`<div class="day-slot-row"><span class="day-slot-role">${role}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select>${role==='支援'?`<button class="btn-sm btn-del" onclick="_draftRemoveExtra('${c.shift}',${i})">✕</button>`:''}</div>`;
     });
     html+=`</div>`;
@@ -926,14 +933,13 @@ function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-m
 // ============================================================
 function renderNurseTable(){
   document.getElementById('nurse-tbody').innerHTML=state.doctors.map(d=>{
-    const st=d.prefs.shiftTypes||{D:false,E:false,N:false};
-    const shiftStr=['D','E','N'].filter(s=>st[s]).join('/')||'-';
+    const shiftStr=d.prefs.shiftType||'-';
     const lvl=d.prefs.level||'L';
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
       <td>${d.type==='head'?'管理職':'輪班'}</td>
-      <td>${d.type==='full'?shiftStr:'-'}</td>
+      <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
       <td><button class="btn-sm btn-edit" onclick="openNurseModal('${d.id}')">編輯</button><button class="btn-sm btn-del" onclick="deleteDoc('${d.id}')">刪除</button></td>
     </tr>`;
@@ -967,15 +973,15 @@ function removeAvoidPair(i){ state.avoidPairs.splice(i,1); autoSave(); renderAvo
 function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
-  const d=isEdit?state.doctors.find(x=>x.id===id):{id:'',name:'',type:'full',color:'#1565c0',prefs:defPrefs()};
+  const d=isEdit?state.doctors.find(x=>x.id===id):{id:'',name:'',type:'full',color:'#1565c0',prefs:defPrefs('D')};
   document.getElementById('doc-id').value=d.id;
   document.getElementById('doc-name').value=d.name;
   document.getElementById('doc-type').value=d.type;
   document.getElementById('doc-color').value=d.color;
-  const st=d.prefs.shiftTypes||{D:true,E:true,N:true};
-  document.getElementById('shift-D').checked=!!st.D;
-  document.getElementById('shift-E').checked=!!st.E;
-  document.getElementById('shift-N').checked=!!st.N;
+  const st=d.prefs.shiftType||'D';
+  document.getElementById('shift-D').checked=(st==='D');
+  document.getElementById('shift-E').checked=(st==='E');
+  document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
   document.getElementById('nurse-modal').classList.add('show');
 }
@@ -983,12 +989,10 @@ function saveDoc(){
   const id=document.getElementById('doc-id').value;
   const name=document.getElementById('doc-name').value.trim();
   if(!name){showToast('請輸入姓名','warn');return;}
+  const shiftRadio=document.querySelector('input[name="shift-type"]:checked');
+  if(!shiftRadio){showToast('請選擇固定班別','warn');return;}
   const prefs={
-    shiftTypes:{
-      D:document.getElementById('shift-D').checked,
-      E:document.getElementById('shift-E').checked,
-      N:document.getElementById('shift-N').checked,
-    },
+    shiftType:shiftRadio.value,
     level:document.getElementById('doc-level').value,
   };
   const type=document.getElementById('doc-type').value;
@@ -1138,6 +1142,15 @@ function shiftOfNurseOnDate(nurseId,dateStr){
   for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
+// 月班總表排序：許嘉君(管理職)在最上方，其下依固定班別 D → E → N 分組排列
+function sortedForMaster(){
+  const head=state.doctors.filter(d=>d.type==='head');
+  const dGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='D');
+  const eGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='E');
+  const nGroup=state.doctors.filter(d=>d.type==='full'&&d.prefs.shiftType==='N');
+  const other=state.doctors.filter(d=>d.type==='full'&&!['D','E','N'].includes(d.prefs.shiftType));
+  return [...head,...dGroup,...eGroup,...nGroup,...other];
+}
 function renderMasterGrid(){
   const y=state.year, m=state.month;
   const dates=monthDates(y,m);
@@ -1148,7 +1161,7 @@ function renderMasterGrid(){
   }).join('')+`<th>總班數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
-  const rows=state.doctors.map(doc=>{
+  const rows=sortedForMaster().map(doc=>{
     let total=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
@@ -1231,8 +1244,22 @@ function serializeState(){
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
+// 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType 單選
+function migrateDoctorPrefs(doctors){
+  for(const doc of doctors||[]){
+    if(!doc.prefs) continue;
+    if(!doc.prefs.shiftType && doc.prefs.shiftTypes){
+      const st=doc.prefs.shiftTypes;
+      doc.prefs.shiftType=st.D?'D':st.E?'E':st.N?'N':'D';
+      delete doc.prefs.shiftTypes;
+    } else if(!doc.prefs.shiftType){
+      doc.prefs.shiftType='D';
+    }
+  }
+  return doctors;
+}
 function applyData(d){
-  if(d.doctors) state.doctors=d.doctors;
+  if(d.doctors) state.doctors=migrateDoctorPrefs(d.doctors);
   if(d.schedule) state.schedule=d.schedule;
   state.preRequests=d.preRequests||{};
   state.holidays=new Set(d.holidays||[]);
@@ -1362,7 +1389,7 @@ function generatePDF(){
 
   // --- 月班總表 ---
   let mgHead=`<tr><th>護理師</th>`+dates.map(d=>`<th>${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`).join('')+`<th>總班數</th></tr>`;
-  const mgRows=state.doctors.map(doc=>{
+  const mgRows=sortedForMaster().map(doc=>{
     let total=0;
     const cells=dates.map(d=>{
       const sh=shiftOfNurseOnDate(doc.id,d);
