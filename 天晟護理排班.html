@@ -1220,6 +1220,7 @@ function clearSchedule(){
 // ============================================================
 const LS_KEY='tienSheng_nurseSched_v2';
 const CLOUD_URL_KEY='tienSheng_nurseCloudUrl';
+const DEFAULT_CLOUD_URL='https://tenchener-488d2-default-rtdb.firebaseio.com/';
 let _fbApp=null,_fbRef=null,_fbIgnoreOwn=false,_fbIgnoreTimer=null;
 
 function serializeState(){
@@ -1258,7 +1259,11 @@ function autoLoad(){
     return true;
   }catch(e){return false;}
 }
-function getCloudUrl(){ return localStorage.getItem(CLOUD_URL_KEY)||''; }
+function getCloudUrl(){
+  const v=localStorage.getItem(CLOUD_URL_KEY);
+  if(v==='off') return '';
+  return v||DEFAULT_CLOUD_URL;
+}
 async function initCloud(url){
   if(!url){ updateCloudStatus(false); return; }
   if(!window.firebase){ updateCloudStatus(false,'SDK未載入'); return; }
@@ -1317,7 +1322,7 @@ function openCloudSettings(){
   );
   if(url===null) return;
   if(!url.trim()){
-    localStorage.removeItem(CLOUD_URL_KEY);
+    localStorage.setItem(CLOUD_URL_KEY,'off');
     if(_fbRef){ _fbRef.off(); _fbRef=null; }
     updateCloudStatus(false);
     showToast('已斷開雲端同步');
