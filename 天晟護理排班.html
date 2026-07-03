@@ -695,6 +695,19 @@ function canWorkForce(nurseId, date, shift, role, sched){
   if(consecDaysBefore(nurseId,date,sched)>=MAX_CONSEC) return false;
   return true;
 }
+// 跨班別支援用：休假天數平衡機制專用，允許護理師支援非當月本班別的班次，
+// 但角色階級資格／休息時數／連續上班天數上限／預假OFF／避免同時上班仍為鐵則。
+function canWorkSupport(nurseId, date, shift, role, sched){
+  const doc=state.doctors.find(d=>d.id===nurseId);
+  if(!doc||doc.type!=='full') return false;
+  if(!roleAllowed(doc.prefs.level,role)) return false;
+  if(isAssignedThatDay(nurseId,date,sched)) return false;
+  if(offBlocked(nurseId,date)) return false;
+  if(!restOK(nurseId,date,shift,sched)) return false;
+  if(consecDaysBefore(nurseId,date,sched)>=MAX_CONSEC) return false;
+  if(avoidBlocked(nurseId,date,sched)) return false;
+  return true;
+}
 
 // ============================================================
 // SCORING
@@ -772,6 +785,67 @@ function countEmpty(sched){
   let n=0;
   for(const ds of Object.values(sched)){ for(const sh of SHIFTS) n+=(ds[sh]||[]).filter(x=>!x).length; }
   return n;
+}
+// ============================================================
+// 休假天數平衡：讓非長假護理師的本月班數盡量只落在相鄰兩個數字(lo/hi)，
+// 無法在同班別內達成時，允許跨班別互相支援 (canWorkSupport)。
+// ============================================================
+function balanceOffDays(newSched, fullSched, dates){
+  const nonExempt=state.doctors.filter(d=>d.type==='full'&&!isLongLeaveExempt(d.id,state.year,state.month));
+  if(nonExempt.length<2) return;
+  const counts={};
+  for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+  const avg=nonExempt.reduce((s,d)=>s+counts[d.id],0)/nonExempt.length;
+  const lo=Math.floor(avg), hi=Math.ceil(avg);
+
+  for(let round=0;round<15;round++){
+    let progressed=false;
+    // Phase A：優先填補當月仍空缺的職位
+    let under=nonExempt.filter(d=>counts[d.id]<lo).sort((a,b)=>counts[a.id]-counts[b.id]);
+    for(const u of under){
+      for(const d of shuffle([...dates])){
+        if(counts[u.id]>=lo) break;
+        for(const shift of SHIFTS){
+          const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
+          for(let i=0;i<arr.length;i++){
+            if(arr[i]) continue;
+            if(canWorkSupport(u.id,d,shift,roles[i],fullSched)){
+              arr[i]=u.id; counts[u.id]++; progressed=true;
+              break;
+            }
+          }
+          if(counts[u.id]>=lo) break;
+        }
+      }
+    }
+    // Phase B：向跨班別的「超額」護理師轉調班次
+    under=nonExempt.filter(d=>counts[d.id]<lo).sort((a,b)=>counts[a.id]-counts[b.id]);
+    for(const u of under){
+      let done=false;
+      for(const d of shuffle([...dates])){
+        if(done) break;
+        for(const shift of SHIFTS){
+          if(getNurseShiftTypeAtDate(u.id,d)===shift) continue; // 僅跨班別支援
+          const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
+          for(let i=0;i<arr.length;i++){
+            const occupant=arr[i];
+            if(!occupant||counts[occupant]===undefined||counts[occupant]<=hi) continue;
+            if(getNurseShiftTypeAtDate(occupant,d)!==shift) continue; // 只從本班別正常班次調出
+            const role=roles[i];
+            arr[i]=null;
+            if(canWorkSupport(u.id,d,shift,role,fullSched)){
+              arr[i]=u.id; counts[u.id]++; counts[occupant]--; progressed=true;
+              if(counts[u.id]>=lo){ done=true; break; }
+            } else {
+              arr[i]=occupant;
+            }
+          }
+          if(done) break;
+        }
+      }
+    }
+    if(!progressed) break;
+  }
 }
 function autoSchedule(){
   if(isCurrentMonthLocked()){
@@ -863,6 +937,8 @@ function autoSchedule(){
       }
     }
   }
+
+  balanceOffDays(newSched, fullSched, dates);
 
   Object.assign(state.schedule, newSched);
   autoSave();
