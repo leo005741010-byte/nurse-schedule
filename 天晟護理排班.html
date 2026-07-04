@@ -191,7 +191,14 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           <input type="number" id="night-extra-off" min="0" max="15" style="width:48px" onchange="state.nightExtraOffDays=parseInt(this.value)||0;autoSave();">
           <span>天</span>
         </div>
-        <span style="font-size:11px;color:#888">連班上限依勞基法固定為5天；N-OFF-D不可出現；同班次不可全為男性</span>
+        <div class="split-control">
+          <label>最多連上：</label>
+          D<input type="number" id="max-consec-D" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.D=Math.min(5,parseInt(this.value)||5);autoSave();">
+          E<input type="number" id="max-consec-E" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.E=Math.min(5,parseInt(this.value)||5);autoSave();">
+          N<input type="number" id="max-consec-N" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.N=Math.min(5,parseInt(this.value)||5);autoSave();">
+          <span>天</span>
+        </div>
+        <span style="font-size:11px;color:#888">連班上限最高不超過勞基法5天；N-OFF-D不可出現；同班次不可全為男性</span>
       </div>
       <div id="doc-legend"></div>
     </div>
@@ -221,7 +228,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>當月工作日期</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -368,12 +375,13 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <option value="B">B — 只能上留觀</option>
       </select>
     </div>
+    <div class="check-row"><input type="checkbox" id="doc-allow-support"><label for="doc-allow-support">可跳班支援其他班別 (勾選才能在休假天數平衡時跨班別支援)</label></div>
     <h3 id="doc-modal-workrange-title">當月工作日期</h3>
     <div class="form-row">
       <label>日期區間</label>
       <input type="text" id="doc-workrange" placeholder="留空＝全月，例：1-18(18號離職)、12-31(12號到職)" style="width:280px">
     </div>
-    <p style="font-size:11px;color:#888;margin-top:4px">連班上限依勞基法固定為5天，無需設定。流動與支援位置任何階級皆可上。</p>
+    <p style="font-size:11px;color:#888;margin-top:4px">各班別最多連上天數請至「排班表」頁籤設定(D/E/N分別設定，最高不超過勞基法5天)。流動與支援位置任何階級皆可上。</p>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('nurse-modal')">取消</button>
       <button class="btn-primary" onclick="saveDoc()">儲存</button>
@@ -407,7 +415,7 @@ function roleAllowed(level,role){
   return (LEVEL_CAP[level]||[]).includes(role);
 }
 function defPrefs(shiftType,gender){
-  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F'};
+  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true};
 }
 const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
 // ============================================================
@@ -487,6 +495,7 @@ let state = {
   monthlyShiftType: {},
   workDateRange: {},
   nightExtraOffDays: 2,
+  maxConsecByShift: {D:5,E:5,N:4},
   maxOffDays: null,
   maxOffHolidayDays: null,
   longLeaveExempt: {},
@@ -709,7 +718,11 @@ function consecDaysBefore(nurseId,date,sched){
 }
 // 鐵則檢核用：只看「往前」的連續天數不夠嚴謹——若稍後的排班回頭補上更早的空缺日，
 // 可能把兩段原本各自合法的連班串成超過上限的長連班卻沒被擋下。
-// 這裡同時檢查往前、往後的連續天數，確保指派後整段連班仍不超過 MAX_CONSEC。
+// 這裡同時檢查往前、往後的連續天數，確保指派後整段連班仍不超過該護理師當月班別的連班上限。
+function consecCapFor(nurseId,date){
+  const homeShift=getNurseShiftTypeAtDate(nurseId,date);
+  return Math.min(MAX_CONSEC, state.maxConsecByShift[homeShift]||MAX_CONSEC);
+}
 function wouldExceedConsec(nurseId,date,sched){
   let back=0, cur=addDays(date,-1);
   for(let i=0;i<25;i++){
@@ -721,7 +734,7 @@ function wouldExceedConsec(nurseId,date,sched){
     if(isAssignedThatDay(nurseId,cur,sched)){fwd++;cur=addDays(cur,1);}
     else break;
   }
-  return (back+fwd+1)>MAX_CONSEC;
+  return (back+fwd+1)>consecCapFor(nurseId,date);
 }
 function avoidBlocked(nurseId,date,sched){
   for(const pair of (state.avoidPairs||[])){
@@ -777,6 +790,7 @@ function canWorkForce(nurseId, date, shift, role, sched){
 function canWorkSupport(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
+  if(doc.prefs.allowSupport===false) return false;
   if(!isEmployedOnDate(nurseId,date)) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
@@ -961,6 +975,65 @@ function balanceOffDays(newSched, fullSched, dates){
   }
 }
 // ============================================================
+// 假日班數平衡：讓每位護理師的假日班數盡量一致。作法是在同班別內，
+// 把「假日班數過多者的假日班」與「假日班數不足者的平日班」互換，
+// 因為是1對1對調，每個人的總班數(含休假天數平衡結果)完全不受影響。
+// ============================================================
+function balanceHolidayShifts(newSched, fullSched, dates){
+  const nonExempt=state.doctors.filter(d=>d.type==='full'&&!isLongLeaveExempt(d.id,state.year,state.month));
+  if(nonExempt.length<2) return;
+  const holDates=dates.filter(isHoliday);
+  const weekDates=dates.filter(d=>!isHoliday(d));
+  if(!holDates.length||!weekDates.length) return;
+
+  for(let round=0;round<15;round++){
+    const holCounts={};
+    for(const d of nonExempt) holCounts[d.id]=calcNurseHolCount(d.id,newSched);
+    const avg=nonExempt.reduce((s,d)=>s+holCounts[d.id],0)/nonExempt.length;
+    const lo=Math.floor(avg), hi=Math.ceil(avg);
+    const under=nonExempt.filter(d=>holCounts[d.id]<lo).sort((a,b)=>holCounts[a.id]-holCounts[b.id]);
+    if(!under.length) break;
+    let progressed=false;
+    for(const u of under){
+      if(holCounts[u.id]>=lo) continue;
+      let fixedThisNurse=false;
+      for(const hd of shuffle([...holDates])){
+        if(fixedThisNurse) break;
+        const homeShift=getNurseShiftTypeAtDate(u.id,hd);
+        const arr=newSched[hd][homeShift]; const roles=newSched[hd].roles[homeShift];
+        for(let i=0;i<arr.length&&!fixedThisNurse;i++){
+          const occ=arr[i];
+          if(!occ||holCounts[occ]===undefined||holCounts[occ]<=hi) continue;
+          if(getNurseShiftTypeAtDate(occ,hd)!==homeShift) continue;
+          const role=roles[i];
+          if(!roleAllowed(u.prefs.level,role)) continue;
+          if(isAssignedThatDay(u.id,hd,newSched)) continue;
+          for(const wd of weekDates){
+            const arr2=newSched[wd][homeShift]; const roles2=newSched[wd].roles[homeShift];
+            const idx2=arr2.indexOf(u.id);
+            if(idx2<0) continue;
+            const role2=roles2[idx2];
+            const occDoc=state.doctors.find(x=>x.id===occ);
+            if(!roleAllowed(occDoc.prefs.level,role2)) continue;
+            arr[i]=null; arr2[idx2]=null;
+            const uOk=canWork(u.id,hd,homeShift,role,fullSched);
+            const occOk=canWork(occ,wd,homeShift,role2,fullSched);
+            if(uOk&&occOk){
+              arr[i]=u.id; arr2[idx2]=occ;
+              holCounts[u.id]++; holCounts[occ]--;
+              progressed=true; fixedThisNurse=true;
+              break;
+            } else {
+              arr[i]=occ; arr2[idx2]=u.id;
+            }
+          }
+        }
+      }
+    }
+    if(!progressed) break;
+  }
+}
+// ============================================================
 // N-OFF-D 鐵則後製清理：掃過整月，移除任何仍殘留的 N-休一天-D 違規指派。
 // ============================================================
 function cleanupNOffD(newSched, fullSched, dates){
@@ -1111,6 +1184,7 @@ function autoSchedule(){
   }
 
   balanceOffDays(newSched, fullSched, dates);
+  balanceHolidayShifts(newSched, fullSched, dates);
 
   // N-OFF-D 鐵則後製清理：移除任何殘留違規指派，再嘗試補回空缺
   cleanupNOffD(newSched, fullSched, dates);
@@ -1152,6 +1226,9 @@ function renderCalendar(){
   const ml=document.getElementById('month-label'); if(ml) ml.textContent=`${y}年${m+1}月`;
   document.getElementById('min-rest').value=state.minRestHours;
   document.getElementById('night-extra-off').value=state.nightExtraOffDays??2;
+  document.getElementById('max-consec-D').value=state.maxConsecByShift.D??5;
+  document.getElementById('max-consec-E').value=state.maxConsecByShift.E??5;
+  document.getElementById('max-consec-N').value=state.maxConsecByShift.N??4;
 
   document.getElementById('doc-legend').innerHTML=
     `<span class="legend-item" onclick="toggleDocFilter(null)" style="padding:2px 7px;border-radius:10px;border:1px solid ${!_filterDocId?'#0d5c4a':'#ccc'};background:${!_filterDocId?'#e6f5f1':'transparent'};color:${!_filterDocId?'#0d5c4a':'#999'};font-weight:${!_filterDocId?'700':'400'}">全部</span>`+
@@ -1354,6 +1431,7 @@ function renderNurseTable(){
     const wr=getWorkRange(d.id,_nurseYear,_nurseMonth);
     const dim=daysInMonth(_nurseYear,_nurseMonth);
     const wrStr=(wr.start===1&&wr.end===dim)?'全月':`${wr.start}-${wr.end}`;
+    const supportStr=d.prefs.allowSupport!==false?'✔':'✕';
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
@@ -1362,6 +1440,7 @@ function renderNurseTable(){
       <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
       <td>${d.type==='full'?wrStr:'-'}</td>
+      <td>${d.type==='full'?supportStr:'-'}</td>
       <td><button class="btn-sm btn-edit" onclick="openNurseModal('${d.id}')">編輯</button><button class="btn-sm btn-del" onclick="deleteDoc('${d.id}')">刪除</button></td>
     </tr>`;
   }).join('');
@@ -1405,6 +1484,7 @@ function openNurseModal(id){
   document.getElementById('shift-E').checked=(st==='E');
   document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
+  document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
   const wrTitle=document.getElementById('doc-modal-workrange-title');
   if(wrTitle) wrTitle.textContent=`${_nurseYear}年${_nurseMonth+1}月 工作日期`;
   const dim=daysInMonth(_nurseYear,_nurseMonth);
@@ -1420,6 +1500,7 @@ function saveDoc(){
   if(!shiftRadio){showToast('請選擇班別','warn');return;}
   const level=document.getElementById('doc-level').value;
   const gender=document.getElementById('doc-gender').value;
+  const allowSupport=document.getElementById('doc-allow-support').checked;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
   const dim=daysInMonth(_nurseYear,_nurseMonth);
@@ -1428,12 +1509,12 @@ function saveDoc(){
   if(wrInput.trim()&&!wr){showToast('工作日期格式錯誤，請用「開始-結束」例如 1-18','warn');return;}
   if(id){
     const d=state.doctors.find(x=>x.id===id);
-    d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender;
+    d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.allowSupport=allowSupport;
     setNurseShiftType(id,_nurseYear,_nurseMonth,shiftRadio.value);
     setWorkRange(id,_nurseYear,_nurseMonth,wr);
   } else {
     const newId='n_'+(_idCnt++);
-    const prefs={defaultShiftType:shiftRadio.value, level, gender};
+    const prefs={defaultShiftType:shiftRadio.value, level, gender, allowSupport};
     state.doctors.push({id:newId,name,type,color,prefs});
     setNurseShiftType(newId,_nurseYear,_nurseMonth,shiftRadio.value);
     setWorkRange(newId,_nurseYear,_nurseMonth,wr);
@@ -1752,7 +1833,8 @@ function renderStats(){
   for(const doc of state.doctors){
     if(doc.type!=='full') continue;
     const s=st[doc.id];
-    if(s.consecMax>MAX_CONSEC) viols.push(`⚠ ${doc.name} 連班超過勞基法上限(${s.consecMax}天 > ${MAX_CONSEC}天)`);
+    const capForDoc=Math.min(MAX_CONSEC,state.maxConsecByShift[getNurseShiftType(doc.id,_statsYear,_statsMonth)]||MAX_CONSEC);
+    if(s.consecMax>capForDoc) viols.push(`⚠ ${doc.name} 連班超過上限(${s.consecMax}天 > ${capForDoc}天)`);
     if(s.transitions>=3) viols.push(`⚠ ${doc.name} D↔N 轉班次數${s.transitions}次（建議 < 3次）`);
   }
   let empties=0, understaffed=0;
@@ -1827,6 +1909,7 @@ function changeMonth(delta){
   if(state.month<0){state.month=11;state.year--;}
   if(state.month>11){state.month=0;state.year++;}
   renderCalendar();
+  renderMasterGrid();
 }
 function jumpMonth(){
   const input=prompt('輸入年月 (格式 YYYY-MM)：',`${state.year}-${String(state.month+1).padStart(2,'0')}`);
@@ -1835,6 +1918,7 @@ function jumpMonth(){
   if(!mt){showToast('格式錯誤','warn');return;}
   state.year=parseInt(mt[1]); state.month=parseInt(mt[2])-1;
   renderCalendar();
+  renderMasterGrid();
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -1874,6 +1958,7 @@ function serializeState(){
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
     workDateRange:state.workDateRange||{},nightExtraOffDays:state.nightExtraOffDays??2,
+    maxConsecByShift:state.maxConsecByShift||{D:5,E:5,N:4},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
@@ -1894,6 +1979,7 @@ function migrateDoctorPrefs(doctors){
     }
     delete doc.prefs.shiftType;
     if(!doc.prefs.gender) doc.prefs.gender='F';
+    if(doc.prefs.allowSupport===undefined) doc.prefs.allowSupport=true;
   }
   return doctors;
 }
@@ -1908,6 +1994,7 @@ function applyData(d){
   state.monthlyShiftType=d.monthlyShiftType||{};
   state.workDateRange=d.workDateRange||{};
   state.nightExtraOffDays=d.nightExtraOffDays??2;
+  state.maxConsecByShift=d.maxConsecByShift||{D:5,E:5,N:4};
   state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
   state.maxOffHolidayDays=d.maxOffHolidayDays??null;
   state.longLeaveExempt=d.longLeaveExempt||{};
@@ -2205,4 +2292,3 @@ window.onload=()=>{
 </script>
 </body>
 </html>
-
