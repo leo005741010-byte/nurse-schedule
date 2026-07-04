@@ -912,7 +912,7 @@ function countEmpty(sched){
 // state.nightExtraOffDays 天。同班別內無法達成時，允許跨班別互相支援(canWorkSupport)。
 // ============================================================
 function balanceOffDays(newSched, fullSched, dates){
-  const nonExempt=state.doctors.filter(d=>d.type==='full'&&!isLongLeaveExempt(d.id,state.year,state.month));
+  const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
   if(nonExempt.length<2) return;
   const counts={};
   for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
@@ -929,7 +929,7 @@ function balanceOffDays(newSched, fullSched, dates){
   const boundsN={lo:Math.floor(nTarget),hi:Math.ceil(nTarget)};
   const boundsFor=d=>homeOf(d)==='N'?boundsN:boundsDE;
 
-  for(let round=0;round<15;round++){
+  for(let round=0;round<60;round++){
     let progressed=false;
     // Phase A：優先填補當月仍空缺的職位
     let under=nonExempt.filter(d=>counts[d.id]<boundsFor(d).lo).sort((a,b)=>counts[a.id]-counts[b.id]);
@@ -988,13 +988,13 @@ function balanceOffDays(newSched, fullSched, dates){
 // 因為是1對1對調，每個人的總班數(含休假天數平衡結果)完全不受影響。
 // ============================================================
 function balanceHolidayShifts(newSched, fullSched, dates){
-  const nonExempt=state.doctors.filter(d=>d.type==='full'&&!isLongLeaveExempt(d.id,state.year,state.month));
+  const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
   if(nonExempt.length<2) return;
   const holDates=dates.filter(isHoliday);
   const weekDates=dates.filter(d=>!isHoliday(d));
   if(!holDates.length||!weekDates.length) return;
 
-  for(let round=0;round<15;round++){
+  for(let round=0;round<60;round++){
     const holCounts={};
     for(const d of nonExempt) holCounts[d.id]=calcNurseHolCount(d.id,newSched);
     const avg=nonExempt.reduce((s,d)=>s+holCounts[d.id],0)/nonExempt.length;
@@ -1647,6 +1647,14 @@ function countExistingOffDates(nurseId,y,m){
 function isLongLeaveExempt(nurseId,y,m){
   const k=monthKey(y,m);
   return (state.longLeaveExempt[k]||[]).includes(nurseId);
+}
+// 「參與整個月排班的人」：本月未請長假、且工作日期涵蓋全月(非當月到職/離職)的護理師。
+// 放假數／假日班數的公平性目標只在這群人之間比較才有意義——
+// 只上18天班的離職人員本來就不該被要求跟整月上班的人放假天數一樣多。
+function isFullMonthParticipant(nurseId,y,m){
+  if(isLongLeaveExempt(nurseId,y,m)) return false;
+  const wr=getWorkRange(nurseId,y,m);
+  return wr.start===1&&wr.end===daysInMonth(y,m);
 }
 function toggleLongLeaveExempt(nurseId,val){
   const k=monthKey(_prListYear,_prListMonth);
