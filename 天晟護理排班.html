@@ -929,36 +929,66 @@ function balanceOffDays(newSched, fullSched, dates){
   const boundsN={lo:Math.floor(nTarget),hi:Math.ceil(nTarget)};
   const boundsFor=d=>homeOf(d)==='N'?boundsN:boundsDE;
 
-  for(let round=0;round<60;round++){
+  // 鐵則：參與整月排班的人，班數只能落在相鄰兩個數字(lo/hi)，不可以有第三種數字。
+  // 迴圈持續到「已無人低於lo、也無人高於hi」才停止(而非固定跑幾輪就停)，
+  // 只在完全無法再進展時才提早結束。
+  for(let round=0;round<200;round++){
     let progressed=false;
-    // Phase A：優先填補當月仍空缺的職位
     let under=nonExempt.filter(d=>counts[d.id]<boundsFor(d).lo).sort((a,b)=>counts[a.id]-counts[b.id]);
+    const hasOver=nonExempt.some(d=>counts[d.id]>boundsFor(d).hi);
+    if(!under.length&&!hasOver) break;
+
     for(const u of under){
       const{lo}=boundsFor(u);
+      if(counts[u.id]>=lo) continue;
+
+      // Phase A：優先填補當月仍空缺的職位(任何班別，支援皆可)
+      outerA:
       for(const d of shuffle([...dates])){
-        if(counts[u.id]>=lo) break;
         for(const shift of SHIFTS){
           const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
           for(let i=0;i<arr.length;i++){
             if(arr[i]) continue;
             if(canWorkSupport(u.id,d,shift,roles[i],fullSched)){
               arr[i]=u.id; counts[u.id]++; progressed=true;
-              break;
+              if(counts[u.id]>=lo) break outerA;
             }
           }
-          if(counts[u.id]>=lo) break;
         }
       }
-    }
-    // Phase B：向跨班別的「超額」護理師轉調班次
-    under=nonExempt.filter(d=>counts[d.id]<boundsFor(d).lo).sort((a,b)=>counts[a.id]-counts[b.id]);
-    for(const u of under){
-      const{lo}=boundsFor(u);
-      let done=false;
+      if(counts[u.id]>=lo) continue;
+
+      // Phase B：本班別內直接轉調——把「超額」同班別護理師既有的班次直接改派給u，
+      // 這是最單純、最容易成立的手段(不需要幫超額者另找去處)，優先於跨班別支援。
+      const homeShift=homeOf(u);
+      outerB:
       for(const d of shuffle([...dates])){
-        if(done) break;
+        if(isAssignedThatDay(u.id,d,newSched)) continue;
+        const arr=newSched[d][homeShift]; const roles=newSched[d].roles[homeShift];
+        for(let i=0;i<arr.length;i++){
+          const occ=arr[i];
+          if(!occ) continue;
+          const occDoc=state.doctors.find(x=>x.id===occ);
+          if(!occDoc||counts[occ]===undefined||counts[occ]<=boundsFor(occDoc).hi) continue;
+          if(homeOf(occ)!==homeShift) continue; // 只從本班別「本人」正常班次調出
+          const role=roles[i];
+          if(!roleAllowed(u.prefs.level,role)) continue;
+          arr[i]=null;
+          if(canWork(u.id,d,homeShift,role,fullSched)||canWorkForce(u.id,d,homeShift,role,fullSched)){
+            arr[i]=u.id; counts[u.id]++; counts[occ]--; progressed=true;
+            if(counts[u.id]>=lo) break outerB;
+          } else {
+            arr[i]=occ;
+          }
+        }
+      }
+      if(counts[u.id]>=lo) continue;
+
+      // Phase C：向跨班別的「超額」護理師轉調班次(需雙方都能成立的支援)
+      outerC:
+      for(const d of shuffle([...dates])){
         for(const shift of SHIFTS){
-          if(getNurseShiftTypeAtDate(u.id,d)===shift) continue; // 僅跨班別支援
+          if(homeOf(u)===shift) continue; // 僅跨班別支援(本班別已在Phase B處理過)
           const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
           for(let i=0;i<arr.length;i++){
             const occupant=arr[i];
@@ -970,15 +1000,49 @@ function balanceOffDays(newSched, fullSched, dates){
             arr[i]=null;
             if(canWorkSupport(u.id,d,shift,role,fullSched)){
               arr[i]=u.id; counts[u.id]++; counts[occupant]--; progressed=true;
-              if(counts[u.id]>=lo){ done=true; break; }
+              if(counts[u.id]>=lo) break outerC;
             } else {
               arr[i]=occupant;
             }
           }
-          if(done) break;
         }
       }
     }
+
+    // Phase D：即使目前沒有人低於lo(此時所有人剛好落在lo，屬於合法值)，
+    // 仍可能有人「高於hi」卻找不到低於lo的人來觸發轉調——因為lo本身就是合法值，不會被
+    // 上面的 under 判斷選中。這裡直接找出高於hi的人，把他們多出來的班次讓給任何「還沒
+    // 到hi」的人(包含剛好在lo的人，讓對方升到hi，兩邊都會落在合法區間內)，確保鐵則
+    // (只剩相鄰兩個數字)不會因為「沒有under觸發」而漏掉。
+    let over=nonExempt.filter(d=>counts[d.id]>boundsFor(d).hi).sort((a,b)=>counts[b.id]-counts[a.id]);
+    for(const o of over){
+      const{hi}=boundsFor(o);
+      if(counts[o.id]<=hi) continue;
+      const homeShiftO=homeOf(o);
+      outerD:
+      for(const d of shuffle([...dates])){
+        const arr=newSched[d][homeShiftO]; const roles=newSched[d].roles[homeShiftO];
+        const idx=arr.indexOf(o.id);
+        if(idx<0) continue;
+        const role=roles[idx];
+        let recipients=nonExempt.filter(r=>r.id!==o.id&&counts[r.id]<boundsFor(r).hi
+          &&roleAllowed(r.prefs.level,role)&&!isAssignedThatDay(r.id,d,newSched));
+        recipients.sort((a,b)=>(homeOf(a)===homeShiftO?0:1)-(homeOf(b)===homeShiftO?0:1));
+        for(const r of recipients){
+          arr[idx]=null;
+          const sameGroup=homeOf(r)===homeShiftO;
+          const ok=sameGroup?(canWork(r.id,d,homeShiftO,role,fullSched)||canWorkForce(r.id,d,homeShiftO,role,fullSched))
+                             :canWorkSupport(r.id,d,homeShiftO,role,fullSched);
+          if(ok){
+            arr[idx]=r.id; counts[o.id]--; counts[r.id]++; progressed=true;
+            break outerD;
+          } else {
+            arr[idx]=o.id;
+          }
+        }
+      }
+    }
+
     if(!progressed) break;
   }
 }
@@ -1231,6 +1295,32 @@ function autoSchedule(){
   emergencyFillEmpty(newSched, fullSched, dates);
 
   fixGenderDiversity(newSched, fullSched, dates);
+
+  // 最終補強收斂：cleanupNOffD／緊急補位／性別多元化這幾道後製步驟可能會讓休假天數
+  // 平衡的結果稍微跑掉幾個班次。改用「實際目前的班數平均」(而非排班前的預估值)固定
+  // 當作目標，反覆只跑休假天數/假日班數平衡本身(不夾雜會再度打亂結果的後製步驟)，
+  // 讓離群值確實收斂到只剩相鄰兩個數字(鐵則)，最後才重跑一次後製步驟收尾。
+  function recomputeEqTargetsFromActual(){
+    const nonExemptFinal=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
+    const deGroupFinal=nonExemptFinal.filter(d=>getNurseShiftType(d.id,y,m)!=='N');
+    const nGroupFinal=nonExemptFinal.filter(d=>getNurseShiftType(d.id,y,m)==='N');
+    const deAvgActual=deGroupFinal.length?deGroupFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/deGroupFinal.length:0;
+    const nAvgActual=nGroupFinal.length?nGroupFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/nGroupFinal.length:0;
+    _eqTargets={deAvg:deAvgActual, nAvg:nAvgActual};
+  }
+  recomputeEqTargetsFromActual();
+  for(let tighten=0; tighten<20; tighten++){
+    balanceOffDays(newSched, fullSched, dates);
+    balanceHolidayShifts(newSched, fullSched, dates);
+  }
+  cleanupNOffD(newSched, fullSched, dates);
+  emergencyFillEmpty(newSched, fullSched, dates);
+  fixGenderDiversity(newSched, fullSched, dates);
+  // 後製步驟可能又動了少數幾班，用固定目標再收斂一輪即可(此時目標已穩定，不會再飄移)。
+  for(let tighten=0; tighten<10; tighten++){
+    balanceOffDays(newSched, fullSched, dates);
+    balanceHolidayShifts(newSched, fullSched, dates);
+  }
 
   Object.assign(state.schedule, newSched);
   autoSave();
