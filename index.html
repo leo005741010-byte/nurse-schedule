@@ -349,6 +349,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <select id="doc-type">
         <option value="full">輪班 (參與自動排班)</option>
         <option value="head">管理職 (不參與自動排班，僅手動指派)</option>
+        <option value="support">支援外單位 (不參與排班)</option>
       </select>
     </div>
     <div class="form-row"><label>顏色</label><input type="color" id="doc-color" style="width:55px;height:28px;padding:2px;"></div>
@@ -1435,7 +1436,7 @@ function renderCalendar(){
     `<span class="legend-item" onclick="toggleDocFilter(null)" style="padding:2px 7px;border-radius:10px;border:1px solid ${!_filterDocId?'#0d5c4a':'#ccc'};background:${!_filterDocId?'#e6f5f1':'transparent'};color:${!_filterDocId?'#0d5c4a':'#999'};font-weight:${!_filterDocId?'700':'400'}">全部</span>`+
     state.doctors.map(d=>{
       const sel=(_filterDocId===d.id);
-      return `<span class="legend-item" onclick="toggleDocFilter('${d.id}')" style="padding:2px 7px;border-radius:10px;border:1px solid ${sel?d.color:'transparent'};background:${sel?d.color+'28':'transparent'};font-weight:${sel?'700':'400'}"><span class="color-dot" style="background:${d.color}"></span>${d.name}${d.type==='head'?'(管理)':''}</span>`;
+      return `<span class="legend-item" onclick="toggleDocFilter('${d.id}')" style="padding:2px 7px;border-radius:10px;border:1px solid ${sel?d.color:'transparent'};background:${sel?d.color+'28':'transparent'};font-weight:${sel?'700':'400'}"><span class="color-dot" style="background:${d.color}"></span>${d.name}${d.type==='head'?'(管理)':d.type==='support'?'(支援)':''}</span>`;
     }).join('');
 
   const grid=document.getElementById('calendar-grid');
@@ -1548,7 +1549,7 @@ function _renderDayDraft(){
             if(!roleAllowed(n.prefs.level,role)) warn+=' ⚠不符階級';
             if(!isEmployedOnDate(n.id,_dayDraftDate)) warn+=' ⚠不在職期間';
           }
-          return `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':''}${warn}</option>`;
+          return `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':n.type==='support'?'(支援)':''}${warn}</option>`;
         }).join('');
       html+=`<div class="day-slot-row"><span class="day-slot-role">${role}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select>${role==='支援'?`<button class="btn-sm btn-del" onclick="_draftRemoveExtra('${c.shift}',${i})">✕</button>`:''}</div>`;
     });
@@ -1644,7 +1645,7 @@ function renderNurseTable(){
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
-      <td>${d.type==='head'?'管理職':'輪班'}</td>
+      <td>${d.type==='head'?'管理職':d.type==='support'?'支援外單位':'輪班'}</td>
       <td>${d.type==='full'?genderLabel:'-'}</td>
       <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
