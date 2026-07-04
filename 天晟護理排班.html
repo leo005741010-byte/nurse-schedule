@@ -473,6 +473,7 @@ function setNurseShiftType(nurseId,y,m,val){
 function sortedRoster(y,m){
   const head=state.doctors.filter(d=>d.type==='head');
   const full=state.doctors.filter(d=>d.type==='full');
+  const support=state.doctors.filter(d=>d.type==='support');
   const groups={D:[],E:[],N:[],other:[]};
   for(const d of full){
     const st=getNurseShiftType(d.id,y,m);
@@ -480,7 +481,7 @@ function sortedRoster(y,m){
   }
   const byLevel=(a,b)=>(LEVEL_ORDER[a.prefs.level]??9)-(LEVEL_ORDER[b.prefs.level]??9);
   groups.D.sort(byLevel); groups.E.sort(byLevel); groups.N.sort(byLevel); groups.other.sort(byLevel);
-  return [...head,...groups.D,...groups.E,...groups.N,...groups.other];
+  return [...head,...groups.D,...groups.E,...groups.N,...groups.other,...support.sort(byLevel)];
 }
 let state = {
   year: new Date().getFullYear(),
