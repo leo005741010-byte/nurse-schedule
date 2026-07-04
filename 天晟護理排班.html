@@ -2232,6 +2232,7 @@ function migrateDoctorPrefs(doctors){
       doc.prefs.defaultShiftType='D';
     }
     delete doc.prefs.shiftType;
+    if(!doc.prefs.level) doc.prefs.level='L';
     if(!doc.prefs.gender) doc.prefs.gender='F';
     if(doc.prefs.allowSupport===undefined) doc.prefs.allowSupport=true;
   }
