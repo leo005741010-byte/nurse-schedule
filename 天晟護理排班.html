@@ -491,7 +491,7 @@ let state = {
   preRequests: {},
   monthlyShiftType: {},
   workDateRange: {},
-  maxConsecByShift: {D:5,E:5,N:4},
+  maxConsecByShift: {D:6,E:6,N:5},
   maxOffDays: null,
   maxOffHolidayDays: null,
   longLeaveExempt: {},
@@ -2212,7 +2212,7 @@ function serializeState(){
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
     workDateRange:state.workDateRange||{},
-    maxConsecByShift:state.maxConsecByShift||{D:5,E:5,N:4},
+    maxConsecByShift:state.maxConsecByShift||{D:6,E:6,N:5},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
     avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
@@ -2247,7 +2247,7 @@ function applyData(d){
   state.minRestHours=d.minRestHours||16;
   state.monthlyShiftType=d.monthlyShiftType||{};
   state.workDateRange=d.workDateRange||{};
-  state.maxConsecByShift=d.maxConsecByShift||{D:5,E:5,N:4};
+  state.maxConsecByShift=d.maxConsecByShift||{D:6,E:6,N:5};
   state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
   state.maxOffHolidayDays=d.maxOffHolidayDays??null;
   state.longLeaveExempt=d.longLeaveExempt||{};
