@@ -2003,9 +2003,13 @@ function applyData(d){
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
 }
+// _lastLocalTs 用來判斷雲端傳回的資料是否比本機目前的還新，避免「重新整理時，
+// 上一次尚未寫入雲端完成的存檔被雲端舊資料覆蓋，導致剛剛的修改消失」的競速問題。
+let _lastLocalTs=0;
 function autoSave(){
   try{
-    localStorage.setItem(LS_KEY,JSON.stringify(serializeState()));
+    _lastLocalTs=Date.now();
+    localStorage.setItem(LS_KEY,JSON.stringify({...serializeState(),_ts:_lastLocalTs}));
     const ind=document.getElementById('_autosave_ind');
     if(ind){ind.style.opacity='1';clearTimeout(ind._t);ind._t=setTimeout(()=>ind.style.opacity='0',1500);}
     cloudSave();
@@ -2015,7 +2019,9 @@ function autoLoad(){
   try{
     const raw=localStorage.getItem(LS_KEY);
     if(!raw) return false;
-    applyData(JSON.parse(raw));
+    const parsed=JSON.parse(raw);
+    applyData(parsed);
+    _lastLocalTs=parsed._ts||0;
     return true;
   }catch(e){return false;}
 }
@@ -2035,7 +2041,10 @@ async function initCloud(url){
     _fbRef.on('value', snap=>{
       if(_fbIgnoreOwn) return;
       const data=snap.val();
-      if(!data) return;
+      // 若雲端資料的時間戳記不比本機新(或雲端根本還是空的)，代表雲端還沒收到本機最新的存檔
+      // (例如上一次存檔的雲端寫入還沒完成就重新整理/離開頁面，導致寫入被中斷)。
+      // 這種情況不套用雲端資料，並主動把本機資料再推一次上去，確保雲端與其他裝置最終能同步到最新版本。
+      if(!data||(data._ts&&data._ts<=_lastLocalTs)){ cloudSave(); return; }
       applyCloudData(data);
     });
     updateCloudStatus(true);
@@ -2049,15 +2058,16 @@ async function initCloud(url){
 }
 function applyCloudData(data){
   applyData(data);
+  _lastLocalTs=data._ts||Date.now();
   renderCalendar(); renderNurseTable();
-  try{ localStorage.setItem(LS_KEY,JSON.stringify(serializeState())); }catch(e){}
+  try{ localStorage.setItem(LS_KEY,JSON.stringify({...serializeState(),_ts:_lastLocalTs})); }catch(e){}
 }
 function cloudSave(){
   if(!_fbRef) return;
   _fbIgnoreOwn=true;
   clearTimeout(_fbIgnoreTimer);
   _fbIgnoreTimer=setTimeout(()=>{ _fbIgnoreOwn=false; },4000);
-  const data={...serializeState(),_ts:Date.now()};
+  const data={...serializeState(),_ts:_lastLocalTs||Date.now()};
   _fbRef.set(data)
     .then(()=>{ _fbIgnoreOwn=false; clearTimeout(_fbIgnoreTimer); })
     .catch(e=>{ _fbIgnoreOwn=false; showToast('☁️ 雲端儲存失敗: '+e.message,'warn'); });
