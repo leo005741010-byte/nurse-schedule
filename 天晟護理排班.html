@@ -1179,6 +1179,119 @@ function fixGenderDiversity(newSched, fullSched, dates){
     }
   }
 }
+// ============================================================
+// 最終保底：鐵則是「絕對不能空班」，比休假天數平衡的公平性更優先。
+// 若某職位在所有正規步驟後仍空缺，代表候選人全被「連續上班天數上限」
+// 或「N-OFF-D」卡住——這裡不打破這些鐵則，而是嘗試「連鎖挪動」：
+// 把卡住候選人鄰近一天的既有班次改指派給別人，騰出空間後再讓他來補這個空缺；
+// 若挪動後仍不足以解圍就還原。休假天數是否平均在此可退讓(允許少數人班數不同)。
+// ============================================================
+function findSlotOccupant(nurseId, date, sched){
+  const ds=sched[date]; if(!ds) return null;
+  for(const sh of SHIFTS){
+    const idx=(ds[sh]||[]).indexOf(nurseId);
+    if(idx>=0) return {shift:sh, idx, role:ds.roles[sh][idx]};
+  }
+  return null;
+}
+function tryRelocateOccupant(nurseId, date, shift, role, newSched, fullSched){
+  const arr=newSched[date][shift];
+  const idx=arr.indexOf(nurseId);
+  if(idx<0) return false;
+  const candidates=state.doctors.filter(doc=>doc.id!==nurseId&&doc.type==='full'&&
+    !isAssignedThatDay(doc.id,date,newSched)&&
+    (canWork(doc.id,date,shift,role,fullSched)||canWorkForce(doc.id,date,shift,role,fullSched)||canWorkSupport(doc.id,date,shift,role,fullSched)));
+  if(!candidates.length) return false;
+  const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,date,shift,role,newSched)}));
+  scored.sort((a,b)=>b.sc-a.sc);
+  arr[idx]=scored[0].id;
+  return true;
+}
+function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
+  const arr=newSched[date][shift]; const role=newSched[date].roles[shift][roleIdx];
+  if(arr[roleIdx]) return true;
+
+  const direct=state.doctors.filter(doc=>doc.type==='full'&&!isAssignedThatDay(doc.id,date,newSched)&&
+    (canWork(doc.id,date,shift,role,fullSched)||canWorkForce(doc.id,date,shift,role,fullSched)||canWorkSupport(doc.id,date,shift,role,fullSched)));
+  if(direct.length){
+    const scored=direct.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,date,shift,role,newSched)}));
+    scored.sort((a,b)=>b.sc-a.sc);
+    arr[roleIdx]=scored[0].id;
+    return true;
+  }
+
+  const baseEligible=doc=>{
+    if(doc.type!=='full') return false;
+    if(isAssignedThatDay(doc.id,date,newSched)) return false;
+    if(!isEmployedOnDate(doc.id,date)) return false;
+    if(!roleAllowed(doc.prefs.level,role)) return false;
+    if(offBlocked(doc.id,date)) return false;
+    if(!restOK(doc.id,date,shift,fullSched)) return false;
+    const homeMatch=getNurseShiftTypeAtDate(doc.id,date)===shift;
+    if(!homeMatch && doc.prefs.allowSupport===false) return false;
+    return true;
+  };
+
+  // 情況一：唯一卡關原因是連續上班天數上限——挪開鄰近一天的既有班次幫他騰位。
+  const consecBlocked=state.doctors.filter(doc=>baseEligible(doc)&&!violatesNOffD(doc.id,date,shift,fullSched)&&wouldExceedConsec(doc.id,date,fullSched));
+  for(const doc of consecBlocked){
+    const prevDay=addDays(date,-1), nextDay=addDays(date,1);
+    const prevSlot=findSlotOccupant(doc.id,prevDay,newSched);
+    const nextSlot=findSlotOccupant(doc.id,nextDay,newSched);
+    const boundaries=[prevSlot?{...prevSlot,date:prevDay}:null, nextSlot?{...nextSlot,date:nextDay}:null].filter(Boolean);
+    const relocated=[];
+    let success=false;
+    for(const b of boundaries){
+      if(tryRelocateOccupant(doc.id,b.date,b.shift,b.role,newSched,fullSched)){
+        relocated.push(b);
+        if(!wouldExceedConsec(doc.id,date,fullSched)){ success=true; break; }
+      }
+    }
+    if(success){ arr[roleIdx]=doc.id; return true; }
+    for(const b of relocated){ newSched[b.date][b.shift][b.idx]=doc.id; }
+  }
+
+  // 情況二：唯一卡關原因是N-OFF-D——若前一天(N後的休息日)有空缺職位可讓他頂上，
+  // 他就不再是「N後OFF」，鐵則自然不再擋他，事後再讓他來補今天的空缺。
+  const nOffDBlocked=state.doctors.filter(doc=>baseEligible(doc)&&!wouldExceedConsec(doc.id,date,fullSched)&&violatesNOffD(doc.id,date,shift,fullSched));
+  for(const doc of nOffDBlocked){
+    const d1=addDays(date,-1);
+    const ds1=newSched[d1]; if(!ds1) continue;
+    let filledSlot=null;
+    outer:
+    for(const sh1 of SHIFTS){
+      const arr1=ds1[sh1]; const roles1=ds1.roles[sh1];
+      for(let j=0;j<arr1.length;j++){
+        if(arr1[j]) continue;
+        const role1=roles1[j];
+        if(!roleAllowed(doc.prefs.level,role1)) continue;
+        if(!restOK(doc.id,d1,sh1,fullSched)) continue;
+        arr1[j]=doc.id;
+        if(!violatesNOffD(doc.id,date,shift,fullSched)){ filledSlot={sh1,j}; break outer; }
+        arr1[j]=null;
+      }
+    }
+    if(filledSlot){ arr[roleIdx]=doc.id; return true; }
+  }
+
+  return false;
+}
+function finalGuaranteeNoEmpty(newSched, fullSched, dates){
+  for(let pass=0; pass<3; pass++){
+    let anyEmpty=false;
+    for(const d of dates){
+      for(const shift of SHIFTS){
+        const arr=newSched[d][shift];
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]) continue;
+          const ok=repairAndFillSlot(newSched, fullSched, dates, d, shift, i);
+          if(!ok) anyEmpty=true;
+        }
+      }
+    }
+    if(!anyEmpty) break;
+  }
+}
 function autoSchedule(){
   if(isCurrentMonthLocked()){
     const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
@@ -1322,12 +1435,16 @@ function autoSchedule(){
     balanceHolidayShifts(newSched, fullSched, dates);
   }
 
+  // 鐵則：絕對不能空班，優先權高於休假天數平衡。此步驟之後刻意不再重跑
+  // balanceOffDays/balanceHolidayShifts，避免把剛連鎖挪動補滿的職位又拉走。
+  finalGuaranteeNoEmpty(newSched, fullSched, dates);
+
   Object.assign(state.schedule, newSched);
   autoSave();
   renderCalendar();
   switchTab('master');
   const empty=countEmpty(newSched);
-  showToast(empty>0?`排班完成，${empty} 個職位因休息時數／連續上班天數／階級資格等鐵則限制無法排入，維持空班。`:'✅ 自動排班完成，已全數排滿！',empty>0?'warn':'ok');
+  showToast(empty>0?`排班完成，${empty} 個職位即使連鎖調整仍無法排入(人力總量不足)，維持空班。`:'✅ 自動排班完成，已全數排滿！',empty>0?'warn':'ok');
 }
 
 // ============================================================
