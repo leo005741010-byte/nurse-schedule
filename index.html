@@ -213,7 +213,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <button onclick="changeNurseMonth(-1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9664;</button>
         <span id="nurse-month-label" style="font-weight:700;min-width:80px;text-align:center"></span>
         <button onclick="changeNurseMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
-        <span style="font-size:11px;color:#888">（每位護理師的固定班別可逐月調整，未設定時沿用最近一次的設定）</span>
+        <span style="font-size:11px;color:#888">（開啟某月時會自動將班別設定存成當月獨立紀錄，之後修改互不影響）</span>
+        <button class="action-btn btn-orange" onclick="resetMonthToLastMonth()" style="font-size:11px">↺ 重設為沿用上月</button>
       </div>
       <button class="action-btn btn-green" onclick="openNurseModal()">+ 新增護理師</button>
     </div>
@@ -1016,6 +1017,7 @@ function autoSchedule(){
   if(!window.__skipConfirm && !confirm('確定要自動排班？這將覆蓋本月班表。')) return;
   pushUndo();
   const y=state.year, m=state.month;
+  materializeMonthShiftTypes(y,m);
   const dates=monthDates(y,m);
   const newSched={};
   for(const d of dates){
@@ -1314,7 +1316,35 @@ function changeNurseMonth(delta){
   if(_nurseMonth>11){_nurseMonth=0;_nurseYear++;}
   renderNurseTable();
 }
+// 將某月的班別設定「實體化」為明確紀錄：只要該月尚未有任何一筆設定，
+// 就把每位護理師當下會沿用(最近一次設定)的班別，直接寫成這個月自己的設定。
+// 這樣一開始檢視/編輯某個月時，資料就是完整、獨立的一份快照——
+// 之後修改任何一人都不會影響到「沿用鏈」，也不會被日後修改更早月份的紀錄意外牽動。
+function materializeMonthShiftTypes(y,m){
+  const mk=monthKey(y,m);
+  if(state.monthlyShiftType[mk]&&Object.keys(state.monthlyShiftType[mk]).length) return false;
+  let changed=false;
+  for(const d of state.doctors){
+    if(d.type!=='full') continue;
+    setNurseShiftType(d.id,y,m,getNurseShiftType(d.id,y,m));
+    changed=true;
+  }
+  if(changed) autoSave();
+  return changed;
+}
+function resetMonthToLastMonth(){
+  if(!confirm(`確定要將 ${_nurseYear}年${_nurseMonth+1}月 的班別設定重設為沿用上個月的結果？此動作會覆蓋本月目前的班別設定（工作日期不受影響）。`)) return;
+  let mm=_nurseMonth-1, yy=_nurseYear;
+  if(mm<0){mm=11;yy--;}
+  const mk=monthKey(_nurseYear,_nurseMonth);
+  delete state.monthlyShiftType[mk];
+  materializeMonthShiftTypes(_nurseYear,_nurseMonth);
+  autoSave();
+  renderNurseTable();
+  showToast('✅ 已重設為沿用上個月設定');
+}
 function renderNurseTable(){
+  materializeMonthShiftTypes(_nurseYear,_nurseMonth);
   const lbl=document.getElementById('nurse-month-label');
   if(lbl) lbl.textContent=`${_nurseYear}年${_nurseMonth+1}月`;
   document.getElementById('nurse-tbody').innerHTML=sortedRoster(_nurseYear,_nurseMonth).map(d=>{
