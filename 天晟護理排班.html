@@ -187,11 +187,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           </select>
         </div>
         <div class="split-control">
-          <label>大夜(N)比D/E多休：</label>
-          <input type="number" id="night-extra-off" min="0" max="15" style="width:48px" onchange="state.nightExtraOffDays=parseInt(this.value)||0;autoSave();">
-          <span>天</span>
-        </div>
-        <div class="split-control">
           <label>最多連上：</label>
           D<input type="number" id="max-consec-D" min="1" style="width:40px" onchange="state.maxConsecByShift.D=parseInt(this.value)||5;autoSave();">
           E<input type="number" id="max-consec-E" min="1" style="width:40px" onchange="state.maxConsecByShift.E=parseInt(this.value)||5;autoSave();">
@@ -494,7 +489,6 @@ let state = {
   preRequests: {},
   monthlyShiftType: {},
   workDateRange: {},
-  nightExtraOffDays: 2,
   maxConsecByShift: {D:5,E:5,N:4},
   maxOffDays: null,
   maxOffHolidayDays: null,
@@ -843,12 +837,6 @@ function avgShiftCount(sched){
   if(!full.length) return 0;
   return full.reduce((s,d)=>s+calcNurseShiftCount(d.id,sched),0)/full.length;
 }
-// D/E班(非大夜)護理師的平均班數，作為大夜(N)目標班數的基準
-function avgShiftCountDE(sched){
-  const de=state.doctors.filter(d=>d.type==='full'&&getNurseShiftType(d.id,state.year,state.month)!=='N');
-  if(!de.length) return avgShiftCount(sched);
-  return de.reduce((s,d)=>s+calcNurseShiftCount(d.id,sched),0)/de.length;
-}
 function avgHolCount(sched){
   const full=state.doctors.filter(d=>d.type==='full');
   if(!full.length) return 0;
@@ -862,14 +850,12 @@ function leaveAvailRatio(nurseId,date){
   const dim=daysInMonth(y,m);
   return Math.max(0,(dim-leaveDays)/dim);
 }
-// 上大夜(N)的護理師休假天數要最多：目標班數比D/E平均低 nightExtraOffDays 天。
+// 所有全月參與排班的護理師(不分D/E/N)目標班數一致。
 // 自動排班進行中會使用預先算好的均衡目標(_eqTargets)，避免動態平均造成回饋震盪；
 // 其他情境(如僅呼叫單一函式除錯)則退回即時平均計算。
 let _eqTargets=null;
 function personalTargetShiftCount(nurseId,date,sched){
-  const isN=getNurseShiftTypeAtDate(nurseId,date)==='N';
-  const base=_eqTargets?(isN?_eqTargets.nAvg:_eqTargets.deAvg)
-    :(isN?Math.max(0,avgShiftCountDE(sched)-(state.nightExtraOffDays||0)):avgShiftCountDE(sched));
+  const base=_eqTargets?_eqTargets.deAvg:avgShiftCount(sched);
   return base*leaveAvailRatio(nurseId,date);
 }
 function scoreNurse(nurseId, date, shift, role, sched){
@@ -907,9 +893,7 @@ function countEmpty(sched){
   return n;
 }
 // ============================================================
-// 休假天數平衡：讓非長假護理師的本月班數盡量只落在相鄰兩個數字(lo/hi)。
-// 上大夜(N)的護理師休假天數要最多，其目標班數會比白班/小夜(D/E)平均低
-// state.nightExtraOffDays 天。同班別內無法達成時，允許跨班別互相支援(canWorkSupport)。
+// 休假天數平衡：讓非長假護理師(不分D/E/N)的本月班數盡量只落在相鄰兩個數字(lo/hi)。
 // ============================================================
 function balanceOffDays(newSched, fullSched, dates){
   const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
@@ -917,17 +901,11 @@ function balanceOffDays(newSched, fullSched, dates){
   const counts={};
   for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
   const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
-  // 使用排班前預先算好的均衡目標(_eqTargets)，而非即時平均：
-  // 因為D/E組人力若剛好與班次需求成比例，即時平均會讓D/E與N一開始就落在同一水準，
-  // 導致沒有任何人「低於目標」可觸發跨班別支援，N的休假天數也就無法真正拉開。
-  const deAvg=_eqTargets?_eqTargets.deAvg:(()=>{
-    const deGroup=nonExempt.filter(d=>homeOf(d)!=='N');
-    return deGroup.length?deGroup.reduce((s,d)=>s+counts[d.id],0)/deGroup.length:0;
-  })();
-  const nTarget=_eqTargets?_eqTargets.nAvg:Math.max(0,deAvg-(state.nightExtraOffDays||0));
-  const boundsDE={lo:Math.floor(deAvg),hi:Math.ceil(deAvg)};
-  const boundsN={lo:Math.floor(nTarget),hi:Math.ceil(nTarget)};
-  const boundsFor=d=>homeOf(d)==='N'?boundsN:boundsDE;
+  // 使用排班前預先算好的均衡目標(_eqTargets)，而非即時平均，避免動態平均造成回饋震盪。
+  const avg=_eqTargets?_eqTargets.deAvg:
+    (nonExempt.length?nonExempt.reduce((s,d)=>s+counts[d.id],0)/nonExempt.length:0);
+  const bounds={lo:Math.floor(avg),hi:Math.ceil(avg)};
+  const boundsFor=d=>bounds;
 
   // 鐵則：參與整月排班的人，班數只能落在相鄰兩個數字(lo/hi)，不可以有第三種數字。
   // 迴圈持續到「已無人低於lo、也無人高於hi」才停止(而非固定跑幾輪就停)，
@@ -1326,17 +1304,14 @@ function autoSchedule(){
     }
   });
 
-  // 預先計算D/E與N兩組的均衡目標班數：使 N 組目標 = D/E組目標 - nightExtraOffDays，
-  // 且兩組總班數與實際總職位數守恆（供評分與候選人篩選使用，避免動態平均造成的回饋震盪）。
+  // 預先計算全體(不分D/E/N)的均衡目標班數，與實際總職位數守恆
+  // （供評分與候選人篩選使用，避免動態平均造成的回饋震盪）。
   {
     let totalSlots=0;
     for(const d of dates) totalSlots+=newSched[d].roles.D.length+newSched[d].roles.E.length+newSched[d].roles.N.length;
-    const deCnt=state.doctors.filter(d=>d.type==='full'&&getNurseShiftType(d.id,y,m)!=='N').length;
-    const nCnt=state.doctors.filter(d=>d.type==='full'&&getNurseShiftType(d.id,y,m)==='N').length;
-    const X=state.nightExtraOffDays||0;
-    const totalFull=deCnt+nCnt;
-    const deAvgEq=totalFull>0?(totalSlots+X*nCnt)/totalFull:0;
-    _eqTargets={deAvg:deAvgEq, nAvg:Math.max(0,deAvgEq-X)};
+    const totalFull=state.doctors.filter(d=>d.type==='full').length;
+    const avgEq=totalFull>0?totalSlots/totalFull:0;
+    _eqTargets={deAvg:avgEq, nAvg:avgEq};
   }
 
   // Apply WORK pre-requests (place into first eligible empty role slot for that shift)
@@ -1415,11 +1390,8 @@ function autoSchedule(){
   // 讓離群值確實收斂到只剩相鄰兩個數字(鐵則)，最後才重跑一次後製步驟收尾。
   function recomputeEqTargetsFromActual(){
     const nonExemptFinal=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
-    const deGroupFinal=nonExemptFinal.filter(d=>getNurseShiftType(d.id,y,m)!=='N');
-    const nGroupFinal=nonExemptFinal.filter(d=>getNurseShiftType(d.id,y,m)==='N');
-    const deAvgActual=deGroupFinal.length?deGroupFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/deGroupFinal.length:0;
-    const nAvgActual=nGroupFinal.length?nGroupFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/nGroupFinal.length:0;
-    _eqTargets={deAvg:deAvgActual, nAvg:nAvgActual};
+    const avgActual=nonExemptFinal.length?nonExemptFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/nonExemptFinal.length:0;
+    _eqTargets={deAvg:avgActual, nAvg:avgActual};
   }
   recomputeEqTargetsFromActual();
   for(let tighten=0; tighten<20; tighten++){
@@ -1454,7 +1426,6 @@ function renderCalendar(){
   const y=state.year, m=state.month;
   const ml=document.getElementById('month-label'); if(ml) ml.textContent=`${y}年${m+1}月`;
   document.getElementById('min-rest').value=state.minRestHours;
-  document.getElementById('night-extra-off').value=state.nightExtraOffDays??2;
   document.getElementById('max-consec-D').value=state.maxConsecByShift.D??5;
   document.getElementById('max-consec-E').value=state.maxConsecByShift.E??5;
   document.getElementById('max-consec-N').value=state.maxConsecByShift.N??4;
@@ -2238,7 +2209,7 @@ function serializeState(){
     doctors:state.doctors,schedule:state.schedule,preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
-    workDateRange:state.workDateRange||{},nightExtraOffDays:state.nightExtraOffDays??2,
+    workDateRange:state.workDateRange||{},
     maxConsecByShift:state.maxConsecByShift||{D:5,E:5,N:4},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
@@ -2274,7 +2245,6 @@ function applyData(d){
   state.minRestHours=d.minRestHours||16;
   state.monthlyShiftType=d.monthlyShiftType||{};
   state.workDateRange=d.workDateRange||{};
-  state.nightExtraOffDays=d.nightExtraOffDays??2;
   state.maxConsecByShift=d.maxConsecByShift||{D:5,E:5,N:4};
   state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
   state.maxOffHolidayDays=d.maxOffHolidayDays??null;
