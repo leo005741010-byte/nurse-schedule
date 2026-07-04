@@ -193,12 +193,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         </div>
         <div class="split-control">
           <label>最多連上：</label>
-          D<input type="number" id="max-consec-D" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.D=Math.min(5,parseInt(this.value)||5);autoSave();">
-          E<input type="number" id="max-consec-E" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.E=Math.min(5,parseInt(this.value)||5);autoSave();">
-          N<input type="number" id="max-consec-N" min="1" max="5" style="width:40px" onchange="state.maxConsecByShift.N=Math.min(5,parseInt(this.value)||5);autoSave();">
-          <span>天</span>
+          D<input type="number" id="max-consec-D" min="1" style="width:40px" onchange="state.maxConsecByShift.D=parseInt(this.value)||5;autoSave();">
+          E<input type="number" id="max-consec-E" min="1" style="width:40px" onchange="state.maxConsecByShift.E=parseInt(this.value)||5;autoSave();">
+          N<input type="number" id="max-consec-N" min="1" style="width:40px" onchange="state.maxConsecByShift.N=parseInt(this.value)||4;autoSave();">
+          <span>天（可自行填選，無上限）</span>
         </div>
-        <span style="font-size:11px;color:#888">連班上限最高不超過勞基法5天；N-OFF-D不可出現；同班次不可全為男性</span>
+        <span style="font-size:11px;color:#888">N-OFF-D不可出現；同班次不可全為男性；空班會盡量拉其他班別支援</span>
       </div>
       <div id="doc-legend"></div>
     </div>
@@ -381,7 +381,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <label>日期區間</label>
       <input type="text" id="doc-workrange" placeholder="留空＝全月，例：1-18(18號離職)、12-31(12號到職)" style="width:280px">
     </div>
-    <p style="font-size:11px;color:#888;margin-top:4px">各班別最多連上天數請至「排班表」頁籤設定(D/E/N分別設定，最高不超過勞基法5天)。流動與支援位置任何階級皆可上。</p>
+    <p style="font-size:11px;color:#888;margin-top:4px">各班別最多連上天數請至「排班表」頁籤設定(D/E/N分別設定，可自行填選)。流動與支援位置任何階級皆可上。</p>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('nurse-modal')">取消</button>
       <button class="btn-primary" onclick="saveDoc()">儲存</button>
@@ -395,7 +395,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 // ============================================================
 // STATE
 // ============================================================
-const MAX_CONSEC = 5; // 勞基法：最多連續上班5天
+const MAX_CONSEC = 5; // 連班上限的備援預設值(當 state.maxConsecByShift 未設定時使用)；實際上限由排班表頁籤依D/E/N分別設定，可自行填選
 const ROLES = {
   D:['組長','檢傷','重症','留觀','留觀','流動'],
   E:['組長','檢傷','重症','留觀','留觀','流動'],
@@ -729,7 +729,7 @@ function consecDaysBefore(nurseId,date,sched){
 // 這裡同時檢查往前、往後的連續天數，確保指派後整段連班仍不超過該護理師當月班別的連班上限。
 function consecCapFor(nurseId,date){
   const homeShift=getNurseShiftTypeAtDate(nurseId,date);
-  return Math.min(MAX_CONSEC, state.maxConsecByShift[homeShift]||MAX_CONSEC);
+  return state.maxConsecByShift[homeShift]||MAX_CONSEC;
 }
 function wouldExceedConsec(nurseId,date,sched){
   let back=0, cur=addDays(date,-1);
@@ -1056,6 +1056,35 @@ function cleanupNOffD(newSched, fullSched, dates){
   return removed;
 }
 // ============================================================
+// 緊急補位：鐵則是「不留空班」。掃過整月所有班別的所有空缺職位，
+// 不限本班別，只要角色階級資格／休息時數／連續上班天數上限／預假OFF／
+// 在職日期／N-OFF-D等鐵則都通過，就指派任何可支援的護理師填入，
+// 不再侷限於「休假天數平衡」中「須低於目標班數」的前提。
+// ============================================================
+function emergencyFillEmpty(newSched, fullSched, dates){
+  for(let round=0;round<4;round++){
+    let progressed=false;
+    for(const d of shuffle([...dates])){
+      for(const shift of SHIFTS){
+        const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]) continue;
+          const role=roles[i];
+          const candidates=state.doctors.filter(doc=>
+            (canWork(doc.id,d,shift,role,fullSched)||canWorkForce(doc.id,d,shift,role,fullSched)||canWorkSupport(doc.id,d,shift,role,fullSched))
+            &&!isAssignedThatDay(doc.id,d,newSched));
+          if(candidates.length){
+            const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,role,newSched)}));
+            scored.sort((a,b)=>b.sc-a.sc);
+            arr[i]=scored[0].id; progressed=true;
+          }
+        }
+      }
+    }
+    if(!progressed) break;
+  }
+}
+// ============================================================
 // 性別多元化：同一班次不可全為男性，事後修正嘗試換入至少一位女性。
 // ============================================================
 function fixGenderDiversity(newSched, fullSched, dates){
@@ -1194,27 +1223,12 @@ function autoSchedule(){
   balanceOffDays(newSched, fullSched, dates);
   balanceHolidayShifts(newSched, fullSched, dates);
 
-  // N-OFF-D 鐵則後製清理：移除任何殘留違規指派，再嘗試補回空缺
+  // N-OFF-D 鐵則後製清理：移除任何殘留違規指派
   cleanupNOffD(newSched, fullSched, dates);
-  for(let round=0;round<3;round++){
-    let progressed=false;
-    for(const d of shuffle([...dates])){
-      const arr=newSched[d]['D']; const roles=newSched[d].roles['D'];
-      for(let i=0;i<arr.length;i++){
-        if(arr[i]) continue;
-        const role=roles[i];
-        const candidates=state.doctors.filter(doc=>
-          (canWork(doc.id,d,'D',role,fullSched)||canWorkForce(doc.id,d,'D',role,fullSched)||canWorkSupport(doc.id,d,'D',role,fullSched))
-          &&!isAssignedThatDay(doc.id,d,newSched));
-        if(candidates.length){
-          const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,'D',role,newSched)}));
-          scored.sort((a,b)=>b.sc-a.sc);
-          arr[i]=scored[0].id; progressed=true;
-        }
-      }
-    }
-    if(!progressed) break;
-  }
+
+  // 緊急補位：鐵則是「盡量不留空班」，任何班別出現空缺時，允許拉其他班別的護理師跨班支援
+  // (仍受角色階級資格／休息時數／連續上班天數上限／預假OFF／避免同時上班／在職日期／N-OFF-D等鐵則約束)。
+  emergencyFillEmpty(newSched, fullSched, dates);
 
   fixGenderDiversity(newSched, fullSched, dates);
 
@@ -1849,7 +1863,7 @@ function renderStats(){
   for(const doc of state.doctors){
     if(doc.type!=='full') continue;
     const s=st[doc.id];
-    const capForDoc=Math.min(MAX_CONSEC,state.maxConsecByShift[getNurseShiftType(doc.id,_statsYear,_statsMonth)]||MAX_CONSEC);
+    const capForDoc=state.maxConsecByShift[getNurseShiftType(doc.id,_statsYear,_statsMonth)]||MAX_CONSEC;
     if(s.consecMax>capForDoc) viols.push(`⚠ ${doc.name} 連班超過上限(${s.consecMax}天 > ${capForDoc}天)`);
     if(s.transitions>=3) viols.push(`⚠ ${doc.name} D↔N 轉班次數${s.transitions}次（建議 < 3次）`);
   }
