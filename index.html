@@ -90,10 +90,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #stats-table th{background:#0d5c4a;color:#fff;padding:6px 8px;text-align:center;white-space:nowrap;}
 #stats-table td{padding:5px 8px;border-bottom:1px solid #eee;text-align:center;}
 #stats-table tr:hover td{background:#f0faf7;}
-#master-table{border-collapse:collapse;background:#fff;font-size:10px;min-width:1200px;}
+#master-table{border-collapse:collapse;background:#fff;font-size:10px;}
 #master-table th,#master-table td{border:1px solid #ddd;padding:3px 4px;text-align:center;white-space:nowrap;}
+#master-table th.dt,#master-table td.dt{width:20px;max-width:20px;padding:2px 1px;}
 #master-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;}
-#master-table td.nm{text-align:left;font-weight:700;position:sticky;left:0;background:#fff;z-index:1;}
+#master-table td.nm{text-align:left;font-weight:700;font-size:13px;position:sticky;left:0;background:#fff;z-index:1;}
 #master-table th.nm{position:sticky;left:0;top:0;z-index:2;}
 #master-table th.wknd{background:#c0392b;}
 #master-table td.wknd-col{background:#fdecea;}
@@ -2083,7 +2084,7 @@ function renderMasterGrid(){
   const dowNames=['一','二','三','四','五','六','日'];
   let thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
     const dow=getDOW(d); const wknd=dow>=5||isHoliday(d);
-    return `<th class="${wknd?'wknd':''}">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
+    return `<th class="dt ${wknd?'wknd':''}">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
@@ -2091,16 +2092,16 @@ function renderMasterGrid(){
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
-      if(doc.type!=='full') return `<td class="${wknd?'wknd-col':''}"></td>`;
-      if(!isEmployedOnDate(doc.id,d)) return `<td style="background:#e0e0e0;color:#aaa">－</td>`;
+      if(doc.type!=='full') return `<td class="dt ${wknd?'wknd-col':''}"></td>`;
+      if(!isEmployedOnDate(doc.id,d)) return `<td class="dt" style="background:#e0e0e0;color:#aaa">－</td>`;
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
       if(sh){ total++; if(wknd) holCount++; }
       const offReq=!sh&&(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       const cellClass=sh?`mg-${sh}`:(offReq?'mg-OFF':'');
-      return `<td class="${cellClass}${wknd?' wknd-col':''}" style="padding:0">
+      return `<td class="dt ${cellClass}${wknd?' wknd-col':''}" style="padding:0">
         <input type="text" maxlength="1" value="${sh||''}" placeholder="${offReq?'OFF':''}"
-          style="width:100%;min-width:22px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:3px 0"
+          style="width:100%;min-width:16px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
           onchange="updateMasterCell('${doc.id}','${d}',this.value)" title="輸入 D/E/N，留空代表OFF">
       </td>`;
     }).join('');
