@@ -1964,10 +1964,10 @@ function switchTab(name){
   const idx={master:0,schedule:1,nurses:2,prereq:3,stats:4}[name];
   document.querySelectorAll('.tab')[idx].classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
-  // 各分頁的年月導覽與「排班表」的當前年月同步，避免各處月份各自為政造成混淆
-  if(name==='nurses'){ _nurseYear=state.year; _nurseMonth=state.month; }
-  if(name==='prereq'){ _prListYear=state.year; _prListMonth=state.month; _prCalYear=state.year; _prCalMonth=state.month; }
-  if(name==='stats'){ _statsYear=state.year; _statsMonth=state.month; }
+  // 注意：各分頁的年月導覽只在網頁「一開啟」時與排班表同步一次(見 window.onload)，
+  // 之後切換分頁不會再強制重設，避免使用者在分頁內瀏覽/編輯到其他月份後，
+  // 一切回排班表分頁再切回來，畫面又被強制跳回排班表當時的月份，
+  // 造成「明明設定好了，一切換分頁又跑掉」的錯覺(其實資料沒壞，只是畫面被切走)。
   if(name==='master') renderMasterGrid();
   if(name==='nurses') renderNurseTable();
   if(name==='prereq'){ renderPRList(); renderPRCalGrid(); }
