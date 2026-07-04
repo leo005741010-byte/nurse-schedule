@@ -92,7 +92,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #stats-table tr:hover td{background:#f0faf7;}
 #master-table{border-collapse:collapse;background:#fff;font-size:10px;}
 #master-table th,#master-table td{border:1px solid #ddd;padding:3px 4px;text-align:center;white-space:nowrap;}
-#master-table th.dt,#master-table td.dt{width:28px;max-width:28px;padding:2px 1px;}
+#master-table th.dt,#master-table td.dt{width:40px;max-width:40px;padding:2px 1px;}
 #master-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;}
 #master-table td.nm{text-align:left;font-weight:700;font-size:13px;position:sticky;left:0;background:#fff;z-index:1;}
 #master-table th.nm{position:sticky;left:0;top:0;z-index:2;}
@@ -2101,7 +2101,7 @@ function renderMasterGrid(){
       const cellClass=sh?`mg-${sh}`:(offReq?'mg-OFF':'');
       return `<td class="dt ${cellClass}${wknd?' wknd-col':''}" style="padding:0">
         <input type="text" maxlength="1" value="${sh||''}" placeholder="${offReq?'OFF':''}"
-          style="width:100%;min-width:24px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
+          style="width:100%;min-width:32px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
           onchange="updateMasterCell('${doc.id}','${d}',this.value)" title="輸入 D/E/N，留空代表OFF">
       </td>`;
     }).join('');
