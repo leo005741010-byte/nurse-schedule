@@ -532,7 +532,7 @@ function isCurrentMonthLocked(){ return _lockedMonths.has(`${state.year}-${state
 let _undoStack = [];
 let _redoStack = [];
 function pushUndo(){
-  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests}));
+  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
   if(_undoStack.length>10) _undoStack.shift();
   _redoStack=[];
   updateUndoBtn(); updateRedoBtn();
@@ -541,22 +541,22 @@ function undoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法還原','warn');return;}
   if(!_undoStack.length){showToast('沒有可還原的操作','warn');return;}
   if(!confirm('確定還原到上一個狀態？')) return;
-  _redoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests}));
+  _redoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
   if(_redoStack.length>10) _redoStack.shift();
   const snap=JSON.parse(_undoStack.pop());
-  state.schedule=snap.schedule; state.preRequests=snap.preRequests;
-  autoSave(); renderCalendar(); renderPRList();
+  state.schedule=snap.schedule; state.preRequests=snap.preRequests; state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
+  autoSave(); renderCalendar(); renderPRList(); renderNurseTable();
   showToast('✅ 已還原'); updateUndoBtn(); updateRedoBtn();
 }
 function redoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法重做','warn');return;}
   if(!_redoStack.length){showToast('沒有可重做的操作','warn');return;}
   if(!confirm('確定重做？')) return;
-  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests}));
+  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
   if(_undoStack.length>10) _undoStack.shift();
   const snap=JSON.parse(_redoStack.pop());
-  state.schedule=snap.schedule; state.preRequests=snap.preRequests;
-  autoSave(); renderCalendar(); renderPRList();
+  state.schedule=snap.schedule; state.preRequests=snap.preRequests; state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
+  autoSave(); renderCalendar(); renderPRList(); renderNurseTable();
   showToast('✅ 已重做'); updateUndoBtn(); updateRedoBtn();
 }
 function toggleLock(){
