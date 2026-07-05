@@ -1422,6 +1422,57 @@ function assignExtraOffToNight(newSched, fullSched, dates){
     if(!moved) break;
   }
 }
+// 鐵則2硬收斂：離群值收斂。
+// balanceOffDays 依「每人各自的 lo/hi 目標」轉調，但那組目標為了實作「大夜多放假」而
+// 把部分人的目標鎖死在 lo，導致他們即使還沒到全域上限也被判定「不能再收班」——結果
+// 有人卡在超過全域上限(例如白班格子太多、8人扛不完而落在23班)卻沒人願意接手。
+// 本函式改用「全域上限 hi = ceil(總班數/人數)」為唯一標準：只要有人 > hi，就把他的班次
+// 讓給「任何」目前 < hi 的人(收班後不會超過 hi)，無視個人 lo/hi 目標，藉此把 23 這種
+// 離群值壓回 hi。收班人優先給「班數最少、且非大夜」者，維持大夜多放假的精神。
+// 只會把 >hi 的人往下壓、把 <hi 的人往上補，單向收斂，不會製造新的離群值或空班
+// (純轉調既有職位，且尊重 _workLocks / 休息時數 / 連班上限 / 角色階級等所有鐵則)。
+// 註：某些班別因「格子數 ÷ 該班人數」結構性偏低(如大夜)，其人員可能低於 hi 一級且
+// 無法跨班補足(大夜隔天不能接日班/小夜)，此為人力結構限制，會形成第三個相鄰數字，
+// 屬合理且已是數學上的最佳解。
+function collapseShiftCountOutliers(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(parts.length<2) return;
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  const counts={}; for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+  const T=parts.reduce((s,d)=>s+counts[d.id],0);
+  const hi=Math.ceil(T/parts.length);
+  for(let round=0;round<300;round++){
+    const over=parts.filter(d=>counts[d.id]>hi).sort((a,b)=>counts[b.id]-counts[a.id]);
+    if(!over.length) break;
+    let progressed=false;
+    for(const o of over){
+      if(counts[o.id]<=hi) continue;
+      const homeShiftO=homeOf(o);
+      let done=false;
+      for(const dt of shuffle([...dates])){
+        if(done) break;
+        const arr=newSched[dt][homeShiftO], roles=newSched[dt].roles[homeShiftO];
+        let idx=-1;
+        for(let k=0;k<arr.length;k++){ if(arr[k]===o.id&&!isWorkLocked(dt,homeShiftO,k)){idx=k;break;} }
+        if(idx<0) continue; // 這天 o 沒有可移動的本班別班次
+        const role=roles[idx];
+        // 收班人：目前 < hi、角色階級允許、當天未排班。優先「班數最少、非大夜」者。
+        const recips=parts.filter(r=>r.id!==o.id&&counts[r.id]<hi
+          &&roleAllowed(r.prefs.level,role)&&!isAssignedThatDay(r.id,dt,newSched));
+        recips.sort((a,b)=>(counts[a.id]-counts[b.id])||((homeOf(a)==='N'?1:0)-(homeOf(b)==='N'?1:0)));
+        for(const r of recips){
+          arr[idx]=null;
+          const same=homeOf(r)===homeShiftO;
+          const ok=same?(canWork(r.id,dt,homeShiftO,role,fullSched)||canWorkForce(r.id,dt,homeShiftO,role,fullSched))
+                       :canWorkSupport(r.id,dt,homeShiftO,role,fullSched);
+          if(ok){ arr[idx]=r.id; counts[o.id]--; counts[r.id]++; progressed=true; done=true; break; }
+          else arr[idx]=o.id;
+        }
+      }
+    }
+    if(!progressed) break;
+  }
+}
 // 鐵則保底：預上班一定要給。所有步驟跑完後，逐一確認每筆預上班都在班；
 // 若因極端狀況(如排入時該班已滿)遺漏，於此補回空缺職位(僅填空、不驅離他人)。
 function enforceWorkPreRequests(newSched, dates){
@@ -1570,13 +1621,16 @@ function generateScheduleAttempt(y,m,dates){
     balanceHolidayShifts(newSched, fullSched, dates);
   }
 
-  // 需求2：休假天數已收斂到相鄰兩數；此時把「多放的那一天假」優先給大夜人員。
-  // 純班數守恆，不會使任何人跳出 lo/hi，也不會製造空班，故 balanceOffDays 不會回頭推翻它。
-  assignExtraOffToNight(newSched, fullSched, dates);
-
-  // 鐵則：絕對不能空班，優先權高於休假天數平衡。此步驟之後刻意不再重跑
-  // balanceOffDays/balanceHolidayShifts，避免把剛連鎖挪動補滿的職位又拉走。
+  // 鐵則：絕對不能空班，優先權高於休假天數平衡。先補滿空班(可能因連鎖挪動使某人多一班)。
   finalGuaranteeNoEmpty(newSched, fullSched, dates);
+
+  // 需求2硬收斂：把超過全域上限的離群值(例如白班人少格子多而卡在最高一級的人、或上一步
+  // 補空班時多扛一班而超標的人)壓回上限，收班人可跨班別、無視個人 lo/hi 目標(見函式說明)。
+  // 只做「純轉調既有職位」，不會vacate任何職位，故不會把剛補滿的空班又弄空。
+  collapseShiftCountOutliers(newSched, fullSched, dates);
+
+  // 需求2：若已收斂到相鄰兩數，把「多放的那一天假」優先給大夜人員(純轉調、不製造空班)。
+  assignExtraOffToNight(newSched, fullSched, dates);
 
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
