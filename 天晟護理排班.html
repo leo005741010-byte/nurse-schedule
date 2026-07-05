@@ -111,6 +111,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #master-table th.mg-col-active{background:#f9a825!important;color:#3e2723!important;}
 #master-table td.mg-col-active{border-left:2px solid #0d5c4a;border-right:2px solid #0d5c4a;}
 #master-table .mg-glow{box-shadow:inset 0 0 0 2px #f9a825;}
+.mg-note-input{width:100%;max-width:38px;box-sizing:border-box;border:1px dashed #7ec9b5;border-radius:2px;background:#0d5c4a;color:#fff;font-size:7px;font-weight:600;text-align:center;padding:1px 0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mg-note-input::placeholder{color:#a8d5c8;}
+.mg-note-input:focus{outline:none;border-style:solid;border-color:#f9a825;background:#fff;color:#333;}
 #master-table td.nm.mg-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
 .alert{padding:7px 12px;border-radius:4px;margin-bottom:7px;font-size:12px;}
 .alert-warn{background:#fff3cd;border:1px solid #ffc107;color:#856404;}
@@ -2136,6 +2139,7 @@ function updateDayNote(dateStr,rawVal){
   if(v) state.dayNotes[dateStr]=v; else delete state.dayNotes[dateStr];
   autoSave();
   renderCalendar();
+  renderMasterGrid();
 }
 
 // ============================================================
@@ -2754,7 +2758,8 @@ function renderMasterGrid(){
     const colSel=_mgSelDate===d;
     const selNurseWorked=_mgSelNurse&&shiftOfNurseOnDate(_mgSelNurse,d);
     const thClass=['dt',wknd?'wknd':'',colSel?'mg-col-active':'',selNurseWorked?'mg-glow':''].filter(Boolean).join(' ');
-    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
+    const note=(state.dayNotes&&state.dayNotes[d])||'';
+    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}<input type="text" class="mg-note-input" placeholder="備註" value="${escAttr(note)}" onclick="event.stopPropagation()" onchange="updateDayNote('${d}',this.value)" title="${note?escAttr(note):'自由備註，如ACLS、評鑑等'}"></th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
