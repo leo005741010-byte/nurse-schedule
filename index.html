@@ -102,6 +102,13 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-E{background:#e3f2fd;color:#1565c0;font-weight:700;}
 .mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
+#master-table tr.mg-row-active{background:#e0f2f1;}
+#master-table tr.mg-row-active td.nm{background:#0d5c4a!important;color:#fff!important;}
+#master-table tr.mg-row-active td.nm .color-dot{box-shadow:0 0 0 1px #fff;}
+#master-table th.mg-col-active{background:#f9a825!important;color:#3e2723!important;}
+#master-table td.mg-col-active{border-left:2px solid #0d5c4a;border-right:2px solid #0d5c4a;}
+#master-table .mg-glow{box-shadow:inset 0 0 0 2px #f9a825;}
+#master-table td.nm.mg-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
 .alert{padding:7px 12px;border-radius:4px;margin-bottom:7px;font-size:12px;}
 .alert-warn{background:#fff3cd;border:1px solid #ffc107;color:#856404;}
 .alert-ok{background:#d4edda;border:1px solid #c3e6cb;color:#155724;}
@@ -506,6 +513,7 @@ let state = {
   holidays: new Set(),
   minRestHours: 16,
   schedule: {},
+  hourAdjust: {},
   preRequests: {},
   monthlyShiftType: {},
   workDateRange: {},
@@ -556,7 +564,7 @@ let _redoStack = [];
 // 若能被還原/重做繞過就失去密碼保護的意義，因此鎖定狀態本身不列入還原範圍)。
 function snapshotUndoable(){
   return JSON.stringify({
-    schedule:state.schedule, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
+    schedule:state.schedule, hourAdjust:state.hourAdjust, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
     doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
@@ -564,7 +572,7 @@ function snapshotUndoable(){
   });
 }
 function restoreUndoable(snap){
-  state.schedule=snap.schedule; state.preRequests=snap.preRequests;
+  state.schedule=snap.schedule; state.hourAdjust=snap.hourAdjust||{}; state.preRequests=snap.preRequests;
   state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
   state.holidays=new Set(snap.holidays||[]); state.minRestHours=snap.minRestHours??state.minRestHours;
   state.workDateRange=snap.workDateRange||{}; state.maxConsecByShift=snap.maxConsecByShift||state.maxConsecByShift;
@@ -2643,10 +2651,11 @@ function renderStats(){
   document.getElementById('stats-tbody').innerHTML=state.doctors.map(doc=>{
     const s=st[doc.id];
     const total=s.D+s.E+s.N;
+    const hrs=calcNurseTotalHours(doc.id,dates);
     return `<tr>
       <td style="text-align:left"><span class="color-dot" style="background:${doc.color};vertical-align:middle;margin-right:4px"></span>${doc.name}</td>
       <td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
-      <td><strong>${total}</strong></td><td>${total*8}h</td>
+      <td><strong>${total}</strong></td><td>${hrs}h</td>
       <td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
     </tr>`;
   }).join('');
@@ -2683,48 +2692,106 @@ function shiftOfNurseOnDate(nurseId,dateStr){
   for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
+// 每日實際時數手動調整(部分請假/整班請休等，與班別指派互相獨立)。
+// 未調整時回傳 null，由呼叫端自行決定預設時數(有班8小時、無班0小時)。
+function getHourAdjust(nurseId,dateStr){
+  const rec=state.hourAdjust&&state.hourAdjust[dateStr];
+  const v=rec&&rec[nurseId];
+  return (v===undefined||v===null)?null:v;
+}
+function setHourAdjust(nurseId,dateStr,hrs){
+  if(!state.hourAdjust) state.hourAdjust={};
+  if(hrs===null){
+    if(state.hourAdjust[dateStr]){ delete state.hourAdjust[dateStr][nurseId]; if(!Object.keys(state.hourAdjust[dateStr]).length) delete state.hourAdjust[dateStr]; }
+    return;
+  }
+  if(!state.hourAdjust[dateStr]) state.hourAdjust[dateStr]={};
+  state.hourAdjust[dateStr][nurseId]=hrs;
+}
+// 當天實際時數：有手動調整用調整值，否則有班8小時、無班0小時。
+function hoursOnDate(nurseId,dateStr){
+  const adj=getHourAdjust(nurseId,dateStr);
+  if(adj!==null) return adj;
+  return shiftOfNurseOnDate(nurseId,dateStr)?8:0;
+}
+function calcNurseTotalHours(nurseId,dates){
+  let h=0; for(const d of dates) h+=hoursOnDate(nurseId,d);
+  return h;
+}
+// 月班總表反白：點護理師姓名反白整橫列(及該人有上班的格子會亮)；
+// 點日期反白整縱列(及當天有上班的人姓名會亮)。兩者互斥、再點一次取消。
+let _mgSelNurse=null, _mgSelDate=null;
+function mgSelectNurse(nurseId){
+  _mgSelNurse=(_mgSelNurse===nurseId)?null:nurseId; _mgSelDate=null;
+  renderMasterGrid();
+}
+function mgSelectDate(dateStr){
+  _mgSelDate=(_mgSelDate===dateStr)?null:dateStr; _mgSelNurse=null;
+  renderMasterGrid();
+}
 function renderMasterGrid(){
   const y=state.year, m=state.month;
   const dates=monthDates(y,m);
   const dowNames=['一','二','三','四','五','六','日'];
   let thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
     const dow=getDOW(d); const wknd=dow>=5||isHoliday(d);
-    return `<th class="dt ${wknd?'wknd':''}">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
-  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th></tr>`;
+    const colSel=_mgSelDate===d;
+    return `<th class="dt ${wknd?'wknd':''}${colSel?' mg-col-active':''}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
+  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
   const rows=sortedRoster(y,m).map(doc=>{
-    let total=0, holCount=0, empDays=0;
+    const rowSel=_mgSelNurse===doc.id;
+    const nurseWorkedSelDate=_mgSelDate&&doc.type==='full'&&shiftOfNurseOnDate(doc.id,_mgSelDate);
+    let total=0, holCount=0, empDays=0, hourTotal=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
-      if(doc.type!=='full') return `<td class="dt ${wknd?'wknd-col':''}"></td>`;
-      if(!isEmployedOnDate(doc.id,d)) return `<td class="dt" style="background:#e0e0e0;color:#aaa">－</td>`;
+      const colSel=_mgSelDate===d;
+      if(doc.type!=='full') return `<td class="dt ${wknd?'wknd-col':''}${colSel?' mg-col-active':''}"></td>`;
+      if(!isEmployedOnDate(doc.id,d)) return `<td class="dt${colSel?' mg-col-active':''}" style="background:#e0e0e0;color:#aaa">－</td>`;
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
       if(sh){ total++; if(wknd) holCount++; }
+      hourTotal+=hoursOnDate(doc.id,d);
       const offReq=!sh&&(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
-      const cellClass=sh?`mg-${sh}`:(offReq?'mg-OFF':'');
-      return `<td class="dt ${cellClass}${wknd?' wknd-col':''}" style="padding:0">
-        <input type="text" maxlength="1" value="${sh||''}" placeholder="${offReq?'OFF':''}"
+      const adj=getHourAdjust(doc.id,d);
+      const glow=(rowSel&&sh)||(colSel&&sh);
+      const cellClass=['dt',sh?`mg-${sh}`:(offReq?'mg-OFF':''),wknd?'wknd-col':'',colSel?'mg-col-active':'',glow?'mg-glow':''].filter(Boolean).join(' ');
+      return `<td class="${cellClass}" style="padding:0;position:relative">
+        <input type="text" maxlength="5" value="${sh||''}" placeholder="${offReq?'OFF':''}"
           style="width:100%;min-width:32px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
-          onchange="updateMasterCell('${doc.id}','${d}',this.value)" title="輸入 D/E/N，留空代表OFF">
+          onchange="updateMasterCell('${doc.id}','${d}',this.value)" title="輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}
       </td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
-    return `<tr><td class="nm"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td></tr>`;
+    const nmClass=`nm${nurseWorkedSelDate?' mg-glow':''}`;
+    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="點擊反白此護理師"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=rows;
 }
-// 月班總表手動編輯：直接在格子輸入 D/E/N 或留空(代表OFF)。
+// 月班總表手動編輯：
+//   輸入 D/E/N → 指派班別(留空代表OFF)；輸入數字(如6.5、0) → 只調整當天實際時數
+//   (用於部分請假被批修/整班請休等情境)，不影響班別指派本身。
 // 屬於手動指派，不做資格檢核(角色階級/連班天數等)，與日期格子編輯(day-modal)的行為一致。
 function updateMasterCell(nurseId,dateStr,rawVal){
-  const val=(rawVal||'').trim().toUpperCase();
+  const raw=(rawVal||'').trim();
+  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); renderMasterGrid(); return; }
+
+  if(raw!==''&&/^\d+(\.\d+)?$/.test(raw)){
+    pushUndo();
+    setHourAdjust(nurseId,dateStr,parseFloat(raw));
+    autoSave();
+    renderMasterGrid();
+    showToast(`✅ ${dateStr} 實際時數已調整為 ${raw} 小時`);
+    return;
+  }
+
+  const val=raw.toUpperCase();
   if(val&&!SHIFTS.includes(val)){
-    showToast('請輸入 D、E、N 或留空(代表OFF)','warn');
+    showToast('請輸入 D、E、N、時數數字(如6.5)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
   }
-  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); renderMasterGrid(); return; }
   pushUndo();
   const ds=ensureDay(dateStr);
   for(const sh of SHIFTS){
@@ -2741,6 +2808,7 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     }
     arr[idx]=nurseId;
   }
+  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(有班8h/無班0h)
   autoSave();
   renderMasterGrid();
   renderCalendar();
@@ -2810,6 +2878,7 @@ function clearSchedule(){
   for(const d of dates){
     const roles=(state.schedule[d]&&state.schedule[d].roles)||{D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
     state.schedule[d]={roles,D:Array(roles.D.length).fill(null),E:Array(roles.E.length).fill(null),N:Array(roles.N.length).fill(null)};
+    delete state.hourAdjust[d];
   }
   autoSave(); renderCalendar();
   showToast('已清空本月排班');
@@ -2825,7 +2894,7 @@ let _fbApp=null,_fbRef=null,_fbIgnoreOwn=false,_fbIgnoreTimer=null;
 
 function serializeState(){
   return {
-    doctors:state.doctors,schedule:state.schedule,preRequests:state.preRequests,
+    doctors:state.doctors,schedule:state.schedule,hourAdjust:state.hourAdjust||{},preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
     workDateRange:state.workDateRange||{},
@@ -2858,6 +2927,7 @@ function migrateDoctorPrefs(doctors){
 function applyData(d){
   if(d.doctors) state.doctors=migrateDoctorPrefs(d.doctors);
   if(d.schedule) state.schedule=d.schedule;
+  state.hourAdjust=d.hourAdjust||{};
   state.preRequests=d.preRequests||{};
   state.holidays=new Set(d.holidays||[]);
   if(d.year!=null) state.year=d.year;
@@ -3203,8 +3273,9 @@ function generatePDF(){
   }
   const statsRows=state.doctors.map(doc=>{
     const s=st[doc.id]; const total=s.D+s.E+s.N;
+    const hrs=calcNurseTotalHours(doc.id,dates);
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
-      <td><b>${total}</b></td><td>${total*8}h</td><td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
+      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
   }).join('');
 
   const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
