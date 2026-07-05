@@ -2901,7 +2901,7 @@ async function exportExcel(){
     cell.font={bold:true};
     if(colNumber>1&&colNumber<=1+dates.length){
       const d=dates[colNumber-2];
-      if(isHoliday(d)) xlsxFillFont(cell,XLSX_FILL.HOL_HEAD);
+      if(isHoliday(d)) xlsxFillFont(cell,XLSX_FILL.HOL_HEAD); // 假日用粗框線，不填充
       else cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}};
     } else {
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}};
@@ -2989,18 +2989,23 @@ function generatePDF(){
   const dowNames=['一','二','三','四','五','六','日'];
 
   // --- 月班總表 ---
-  let mgHead=`<tr><th>護理師</th>`+dates.map(d=>`<th>${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th></tr>`;
+  let mgHead=`<tr><th>護理師</th>`+dates.map(d=>{
+    const isHol=isHoliday(d);
+    const bgCol=isHol?'background:#fde8e8;':'';
+    return `<th style="${bgCol}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
+  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th></tr>`;
   const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
-      if(doc.type==='full'&&!isEmployedOnDate(doc.id,d)) return `<td style="background:#e0e0e0;color:#aaa">－</td>`;
+      const holBg=wknd?'background:#fde8e8;':'';
+      if(doc.type==='full'&&!isEmployedOnDate(doc.id,d)) return `<td style="${holBg}background:#e0e0e0;color:#aaa">－</td>`;
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
-      if(sh){ total++; if(wknd) holCount++; return `<td style="${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}</td>`; }
+      if(sh){ total++; if(wknd) holCount++; return `<td style="${holBg}${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}</td>`; }
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
-      if(offReq) return `<td style="background:#fdecea;color:#c0392b;font-weight:700">OFF</td>`;
-      return `<td></td>`;
+      if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF</td>`;
+      return `<td style="${holBg}"></td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
     return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?total:'-'}</b></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td></tr>`;
