@@ -2736,7 +2736,9 @@ function renderMasterGrid(){
   let thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
     const dow=getDOW(d); const wknd=dow>=5||isHoliday(d);
     const colSel=_mgSelDate===d;
-    return `<th class="dt ${wknd?'wknd':''}${colSel?' mg-col-active':''}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
+    const selNurseWorked=_mgSelNurse&&shiftOfNurseOnDate(_mgSelNurse,d);
+    const thClass=['dt',wknd?'wknd':'',colSel?'mg-col-active':'',selNurseWorked?'mg-glow':''].filter(Boolean).join(' ');
+    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
@@ -3193,7 +3195,7 @@ function generatePDF(){
     const isHol=isHoliday(d);
     const bgCol=isHol?'background:#fde8e8;':'';
     return `<th style="${bgCol}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
-  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th></tr>`;
+  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
   const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
@@ -3202,13 +3204,16 @@ function generatePDF(){
       if(doc.type==='full'&&!isEmployedOnDate(doc.id,d)) return `<td style="${holBg}background:#e0e0e0;color:#aaa">－</td>`;
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
-      if(sh){ total++; if(wknd) holCount++; return `<td style="${holBg}${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}</td>`; }
+      const adj=getHourAdjust(doc.id,d);
+      const adjBadge=adj!==null?`<div style="font-size:7px;font-weight:700;color:#e65100">${adj}h</div>`:'';
+      if(sh){ total++; if(wknd) holCount++; return `<td style="${holBg}${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}${adjBadge}</td>`; }
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
-      if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF</td>`;
-      return `<td style="${holBg}"></td>`;
+      if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF${adjBadge}</td>`;
+      return `<td style="${holBg}">${adjBadge}</td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
-    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?total:'-'}</b></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td></tr>`;
+    const hrs=doc.type==='full'?calcNurseTotalHours(doc.id,dates):null;
+    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?total:'-'}</b></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${hrs!==null?hrs+'h':'-'}</td></tr>`;
   }).join('');
 
   // --- 排班表 (角色格式) ---
