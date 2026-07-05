@@ -361,6 +361,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <option value="M">男</option>
       </select>
     </div>
+    <div class="form-row"><label>年資</label>
+      <select id="doc-seniority">
+        <option value="senior">資深 (休假較多)</option>
+        <option value="junior">資淺 (休假較少)</option>
+      </select>
+    </div>
     <h3 id="doc-modal-shift-title">當月班別 (指派，僅能擇一)</h3>
     <div class="check-row"><input type="radio" name="shift-type" id="shift-D" value="D"><label for="shift-D">D班 (08-16)</label></div>
     <div class="check-row"><input type="radio" name="shift-type" id="shift-E" value="E"><label for="shift-E">E班 (16-24)</label></div>
@@ -414,9 +420,18 @@ function roleAllowed(level,role){
   return (LEVEL_CAP[level]||[]).includes(role);
 }
 function defPrefs(shiftType,gender){
-  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true};
+  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior'};
 }
 const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
+// 年資：資深(senior)休假較多、資淺(junior)休假較少。未明確設定 prefs.seniority 時，
+// 依階級自動判定——L 級視為資深，其餘(T/A2/B)視為資淺。
+function isSenior(nurseOrId){
+  const doc=(nurseOrId&&typeof nurseOrId==='object')?nurseOrId:state.doctors.find(d=>d.id===nurseOrId);
+  if(!doc||!doc.prefs) return false;
+  if(doc.prefs.seniority==='senior') return true;
+  if(doc.prefs.seniority==='junior') return false;
+  return doc.prefs.level==='L';
+}
 // ============================================================
 // 當月工作日期區間 (到職/離職日對應的可上班日期範圍，逐月設定)
 // ============================================================
@@ -790,6 +805,32 @@ function violatesNOffD(nurseId,date,shift,sched){
   if(!wasNOnD2) return false;
   return !isAssignedThatDay(nurseId,d1,sched);
 }
+// 鐵則：大夜(N)不得跨班去補白班(D)的洞——即使用者說的「N不能去貼D的洞」，
+// 完整情境是「N接OFF(不論幾天)接D接N」。因大夜本班別的人只會用 canWork(需本班別相符)
+// 排入 N，唯一會排到 D 的途徑是「跨班別支援」，故只要在支援類資格檢查中，禁止「當月本
+// 班別為 N 的人去上 D」即可涵蓋。(預上班 WORK_D 由管理者明確指定並以 _workLocks 鎖定，
+// 不經過這些資格判斷，屬人工override，不受此限。)
+function nCannotCoverD(nurseId,date,shift){
+  return shift==='D' && getNurseShiftTypeAtDate(nurseId,date)==='N';
+}
+// 孤立單班：某人在 date 上班，但前一天與後一天都休假(OFF-上班-OFF，只上1天)。
+// 使用者要求不可出現。以 fullSched 判斷相鄰日(跨月連續性也正確)。
+function isIsolatedWorkDay(nurseId,date,sched){
+  if(!isAssignedThatDay(nurseId,date,sched)) return false;
+  return !isAssignedThatDay(nurseId,addDays(date,-1),sched)
+       &&!isAssignedThatDay(nurseId,addDays(date,1),sched);
+}
+// 判斷「把 giver 於 date 的班次轉給 taker」這個1對1移轉是否會製造孤立單班。
+// 用移轉前的 sched 推理：giver 於 date 變成休假、taker 於 date 變成上班。
+function moveWouldIsolate(giverId,takerId,date,sched){
+  const prev=addDays(date,-1), next=addDays(date,1);
+  // taker 於 date 上班後，若前後兩天皆休 → taker 變孤立單班
+  if(!isAssignedThatDay(takerId,prev,sched)&&!isAssignedThatDay(takerId,next,sched)) return true;
+  // giver 於 date 休假後，其相鄰的上班日可能變孤立
+  if(isAssignedThatDay(giverId,prev,sched)&&!isAssignedThatDay(giverId,addDays(date,-2),sched)) return true;
+  if(isAssignedThatDay(giverId,next,sched)&&!isAssignedThatDay(giverId,addDays(date,2),sched)) return true;
+  return false;
+}
 function canWork(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
@@ -825,6 +866,7 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
   if(doc.prefs.allowSupport===false) return false;
+  if(nCannotCoverD(nurseId,date,shift)) return false; // 大夜不得貼白班的洞
   if(!isEmployedOnDate(nurseId,date)) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
   if(isAssignedThatDay(nurseId,date,sched)) return false;
@@ -1262,6 +1304,7 @@ function tryChainAssign(nurseId, date, shift, role, newSched, fullSched, homeMat
 
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
+  if(!homeMatch&&nCannotCoverD(nurseId,date,shift)) return false; // 大夜不得跨班貼白班的洞
   if(isAssignedThatDay(nurseId,date,newSched)) return false;
   if(!isEmployedOnDate(nurseId,date)) return false;
   if(!roleAllowed(doc.prefs.level,role)) return false;
@@ -1307,6 +1350,7 @@ function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
     if(!restOK(doc.id,date,shift,fullSched)) return false;
     const homeMatch=getNurseShiftTypeAtDate(doc.id,date)===shift;
     if(!homeMatch && doc.prefs.allowSupport===false) return false;
+    if(nCannotCoverD(doc.id,date,shift)) return false; // 大夜不得貼白班的洞(連鎖補位也不例外)
     return true;
   };
 
@@ -1378,44 +1422,183 @@ function finalGuaranteeNoEmpty(newSched, fullSched, dates){
 // 者承接；交換後 N 方降到 lo(多放1天)、接手方升到 hi。純班數守恆、不製造空班、不違反鐵則、
 // 不動預上班鎖定格。若大夜人數多到 lo 名額不夠，則盡可能讓最多大夜者拿到那一天假。
 // ============================================================
-function assignExtraOffToNight(newSched, fullSched, dates){
-  const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
-  if(nonExempt.length<2) return;
+// 休假天數的「排序偏好」：數字越小＝越應該多放假(＝班數越少)。
+// 資深為主(senior→多放假)、大夜為輔(同資深時 N 再多放假)。
+//   資深+大夜=0(最該多放假) < 資深+非大夜=1 < 資淺+大夜=2 < 資淺+非大夜=3(最該少放假)
+function offPriorityRank(nurseId){
+  const homeN=getNurseShiftType(nurseId,state.year,state.month)==='N';
+  return (isSenior(nurseId)?0:2) + (homeN?0:1);
+}
+// 依年資(主)＋大夜(輔)重新分配休假天數。
+// 在「不擴大班數全距」的前提下做1對1班次移轉：把「該多放假(rank小)卻班數偏多」者的一個
+// 班次，轉給「該少放假(rank大)卻班數偏少」者承接。移轉後給方多放1天、收方少放1天，
+// 使班數落點與 rank 更趨一致(資深假多、資淺假少；同資深時大夜假多)。
+// 純班數守恆、不製造空班、不動預上班鎖定格、不違反任何鐵則，且拒絕會製造孤立單班的移轉。
+function reallocateOffBySeniority(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(parts.length<2) return;
   const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
-  if(!nonExempt.some(d=>homeOf(d)==='N')) return; // 沒有大夜人員就無須處理
-  for(let round=0;round<200;round++){
+  for(let round=0;round<300;round++){
     const counts={};
-    for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
-    const vals=nonExempt.map(d=>counts[d.id]);
-    const lo=Math.min(...vals), hi=Math.max(...vals);
-    if(hi-lo!==1) break; // 已完全一致(hi===lo)，或落差>1(應先由 balanceOffDays 收斂)
-    const givers=nonExempt.filter(d=>homeOf(d)==='N'&&counts[d.id]===hi); // 大夜、假較少→想多放假
-    const takers=nonExempt.filter(d=>homeOf(d)!=='N'&&counts[d.id]===lo); // 非大夜、假較多→可多上一班
-    if(!givers.length||!takers.length) break;
+    for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const vals=parts.map(d=>counts[d.id]);
+    const mn=Math.min(...vals), mx=Math.max(...vals);
+    // givers：目前班數最多(mx)之中、最該多放假(rank 最小)者；takers：班數最少(mn)之中、最該少放假(rank 最大)者
+    const givers=parts.filter(d=>counts[d.id]===mx).sort((a,b)=>offPriorityRank(a.id)-offPriorityRank(b.id));
+    const takers=parts.filter(d=>counts[d.id]===mn).sort((a,b)=>offPriorityRank(b.id)-offPriorityRank(a.id));
+    if(mx===mn) break;
     let moved=false;
     for(const g of givers){
-      if(counts[g.id]!==hi) continue;
+      if(counts[g.id]!==mx) continue;
       let done=false;
       for(const t of takers){
         if(done) break;
-        if(counts[t.id]!==lo) continue;
+        if(counts[t.id]!==mn) continue;
+        if(offPriorityRank(g.id)>=offPriorityRank(t.id)) continue; // giver 必須比 taker 更該多放假
         for(const dt of shuffle([...dates])){
           const occ=findSlotOccupant(g.id,dt,newSched);
           if(!occ) continue;
-          if(isWorkLocked(dt,occ.shift,occ.idx)) continue; // 預上班鎖定，不移轉
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue;
           if(isAssignedThatDay(t.id,dt,newSched)) continue;
           if(!roleAllowed(t.prefs.level,occ.role)) continue;
+          if(moveWouldIsolate(g.id,t.id,dt,newSched)) continue; // 不製造孤立單班
           const arr=newSched[dt][occ.shift];
           arr[occ.idx]=null;
           const ok = homeOf(t)===occ.shift
             ? (canWork(t.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(t.id,dt,occ.shift,occ.role,fullSched))
             : canWorkSupport(t.id,dt,occ.shift,occ.role,fullSched);
-          if(ok){
-            arr[occ.idx]=t.id; counts[g.id]--; counts[t.id]++;
-            moved=true; done=true; break;
-          } else {
-            arr[occ.idx]=g.id; // 還原，維持不留空班
-          }
+          if(ok){ arr[occ.idx]=t.id; counts[g.id]--; counts[t.id]++; moved=true; done=true; break; }
+          else arr[occ.idx]=g.id;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
+// 鐵則：休假天數最多(班數最少)的人必須是資深。若最少班數(最多假)的人裡混入資淺者，
+// 而有資深者班數更多(假較少)，就把資深者的一個班次轉給該資淺者——資深因此少一班(多放假)、
+// 資淺多一班(少放假)，直到「班數最少者皆為資深」或已無可行移轉。純班數守恆、不製造空班、
+// 不違反鐵則、拒絕製造孤立單班。(資深若因此降到比原最少更低也可接受——資深本就該假最多。)
+function enforceMaxOffSenior(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(parts.length<2) return;
+  if(!parts.some(d=>isSenior(d.id))) return; // 沒有資深人員就無從滿足，略過
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  // 固定「合法班數帶」[mn0,mx0]，所有移轉都不得使任何人跳出此帶(避免擴大全距)。
+  const c0=parts.map(d=>calcNurseShiftCount(d.id,newSched));
+  const mn0=Math.min(...c0), mx0=Math.max(...c0);
+  if(mn0===mx0) return; // 全員相同，無所謂最少班數者是誰
+  for(let round=0;round<300;round++){
+    const counts={};
+    for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const mn=Math.min(...parts.map(d=>counts[d.id]));
+    const juniorsAtMin=parts.filter(d=>counts[d.id]===mn&&!isSenior(d.id));
+    if(!juniorsAtMin.length) break; // 最少班數者皆資深，達標
+    // 資深給方：班數需 >= mn0+1(讓出1班後仍不低於帶底 mn0)，越接近帶底越優先
+    const seniorGivers=parts.filter(d=>isSenior(d.id)&&counts[d.id]>=mn0+1).sort((a,b)=>counts[a.id]-counts[b.id]);
+    if(!seniorGivers.length) break;
+    let moved=false;
+    for(const s of seniorGivers){
+      if(counts[s.id]<mn0+1) continue;
+      let done=false;
+      for(const j of juniorsAtMin){
+        if(done) break;
+        if(counts[j.id]!==mn) continue;
+        if(counts[j.id]+1>mx0) continue; // 收方加1後不得超過帶頂
+        for(const dt of shuffle([...dates])){
+          const occ=findSlotOccupant(s.id,dt,newSched);
+          if(!occ) continue;
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue;
+          if(isAssignedThatDay(j.id,dt,newSched)) continue;
+          if(!roleAllowed(j.prefs.level,occ.role)) continue;
+          if(moveWouldIsolate(s.id,j.id,dt,newSched)) continue;
+          const arr=newSched[dt][occ.shift];
+          arr[occ.idx]=null;
+          const ok = homeOf(j)===occ.shift
+            ? (canWork(j.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(j.id,dt,occ.shift,occ.role,fullSched))
+            : canWorkSupport(j.id,dt,occ.shift,occ.role,fullSched);
+          if(ok){ arr[occ.idx]=j.id; counts[s.id]--; counts[j.id]++; moved=true; done=true; break; }
+          else arr[occ.idx]=s.id;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
+// 消除孤立單班(OFF-上班-OFF，只上1天)。作法：把孤立那天的班次，轉給「前一天或後一天有上班」
+// 的人承接——接手者因此把班接成連續(不孤立)，孤立者則少掉那個落單的班(該天改休)。
+// 純轉調既有職位、不製造空班、尊重所有鐵則，且移轉不得使任何人跳出合法班數帶[mn0,mx0]
+// (避免為了消孤立單班而擴大全距)。若某孤立班找不到合適承接者則暫時保留(盡力而為)。
+function fixIsolatedShifts(newSched, fullSched, dates){
+  const partsAll=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  const inBand=id=>partsAll.some(p=>p.id===id);
+  const c0=partsAll.map(d=>calcNurseShiftCount(d.id,newSched));
+  const mn0=c0.length?Math.min(...c0):0, mx0=c0.length?Math.max(...c0):0;
+  for(let round=0;round<4;round++){
+    let fixed=false;
+    for(const d of state.doctors){
+      if(d.type!=='full') continue;
+      for(const dt of dates){
+        if(!isIsolatedWorkDay(d.id,dt,fullSched)) continue;
+        const occ=findSlotOccupant(d.id,dt,newSched);
+        if(!occ) continue;
+        if(isWorkLocked(dt,occ.shift,occ.idx)) continue; // 預上班鎖定，不移轉
+        // 孤立者(給方)若在班數帶內，讓出1班後不得低於帶底
+        if(inBand(d.id)&&calcNurseShiftCount(d.id,newSched)-1<mn0) continue;
+        const prev=addDays(dt,-1), next=addDays(dt,1);
+        const cands=state.doctors.filter(m=>m.id!==d.id&&m.type==='full'
+          &&(isAssignedThatDay(m.id,prev,newSched)||isAssignedThatDay(m.id,next,newSched))
+          &&!isAssignedThatDay(m.id,dt,newSched)
+          &&(!inBand(m.id)||calcNurseShiftCount(m.id,newSched)+1<=mx0) // 接手者加1後不得超過帶頂
+          &&(canWork(m.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(m.id,dt,occ.shift,occ.role,fullSched)||canWorkSupport(m.id,dt,occ.shift,occ.role,fullSched)));
+        if(!cands.length) continue;
+        const arr=newSched[dt][occ.shift];
+        arr[occ.idx]=null;
+        const scored=cands.map(m=>({id:m.id,sc:scoreNurse(m.id,dt,occ.shift,occ.role,newSched)}));
+        scored.sort((a,b)=>b.sc-a.sc);
+        arr[occ.idx]=scored[0].id; fixed=true;
+      }
+    }
+    if(!fixed) break;
+  }
+}
+// 依使用者要求：嚴禁大夜(N)貼白班(D)，改由小夜(E)支援白班來拉平休假天數。
+// 結構上白班人少格子多(例如8人186格→人均約23班)、小夜人多格子相對少(9人186格→約20.67班)，
+// 大夜又被鎖在自己班別(不能跨去補D/E)。若不處理，白班的人會過勞(班多假少)、其餘偏低，
+// 休假天數就會拉開到5-6種。本函式把「白班過勞者(高於D+E兩組合併平均上限)」的班次，轉給
+// 「小夜偏低者」以支援方式承接，使白班與小夜兩組人均都趨近同一值，休假天數因此更平均。
+// 純轉調既有職位、不製造空班、不動大夜、拒絕製造孤立單班、尊重所有鐵則。
+function offloadDayToEveningSupport(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  const dGroup=parts.filter(d=>homeOf(d)==='D');
+  const eGroup=parts.filter(d=>homeOf(d)==='E');
+  if(!dGroup.length||!eGroup.length) return;
+  const de=[...dGroup,...eGroup];
+  for(let round=0;round<200;round++){
+    const counts={}; for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const avg=de.reduce((s,d)=>s+counts[d.id],0)/de.length;
+    const hi=Math.ceil(avg);
+    const overD=dGroup.filter(d=>counts[d.id]>hi).sort((a,b)=>counts[b.id]-counts[a.id]);
+    if(!overD.length) break;
+    let moved=false;
+    for(const o of overD){
+      if(counts[o.id]<=hi) continue;
+      let done=false;
+      for(const dt of shuffle([...dates])){
+        if(done) break;
+        const arr=newSched[dt]['D']; const roles=newSched[dt].roles['D'];
+        let idx=-1; for(let k=0;k<arr.length;k++){ if(arr[k]===o.id&&!isWorkLocked(dt,'D',k)){idx=k;break;} }
+        if(idx<0) continue;
+        const role=roles[idx];
+        // 收班小夜：班數低於 hi、階級可勝任、當天沒排班，班數少者優先
+        const recips=eGroup.filter(r=>counts[r.id]<hi&&roleAllowed(r.prefs.level,role)&&!isAssignedThatDay(r.id,dt,newSched))
+          .sort((a,b)=>counts[a.id]-counts[b.id]);
+        for(const r of recips){
+          if(moveWouldIsolate(o.id,r.id,dt,newSched)) continue;
+          arr[idx]=null;
+          if(canWorkSupport(r.id,dt,'D',role,fullSched)){ arr[idx]=r.id; counts[o.id]--; counts[r.id]++; moved=true; done=true; break; }
+          else arr[idx]=o.id;
         }
       }
     }
@@ -1624,31 +1807,56 @@ function generateScheduleAttempt(y,m,dates){
   // 鐵則：絕對不能空班，優先權高於休假天數平衡。先補滿空班(可能因連鎖挪動使某人多一班)。
   finalGuaranteeNoEmpty(newSched, fullSched, dates);
 
+  // 依使用者要求：嚴禁N貼D，改由E(小夜)支援D(白班)拉平休假天數。先把白班過勞者的班次
+  // 轉給小夜承接，讓白班/小夜兩組人均趨近，避免因「大夜不能貼D」而使休假天數拉大到5-6種。
+  offloadDayToEveningSupport(newSched, fullSched, dates);
+
   // 需求2硬收斂：把超過全域上限的離群值(例如白班人少格子多而卡在最高一級的人、或上一步
   // 補空班時多扛一班而超標的人)壓回上限，收班人可跨班別、無視個人 lo/hi 目標(見函式說明)。
   // 只做「純轉調既有職位」，不會vacate任何職位，故不會把剛補滿的空班又弄空。
   collapseShiftCountOutliers(newSched, fullSched, dates);
 
-  // 需求2：若已收斂到相鄰兩數，把「多放的那一天假」優先給大夜人員(純轉調、不製造空班)。
-  assignExtraOffToNight(newSched, fullSched, dates);
+  // 消除孤立單班(OFF-上班-OFF)。放在收斂之後、休假重分配之前(可能微調班數，後續會再平衡)。
+  fixIsolatedShifts(newSched, fullSched, dates);
+
+  // 需求：依年資(主)＋大夜(輔)重新分配休假天數——資深假多、資淺假少，同資深時大夜假多。
+  reallocateOffBySeniority(newSched, fullSched, dates);
+
+  // 鐵則：休假最多(班數最少)者必須是資深；若混入資淺者，讓資深接手其休假名額。
+  enforceMaxOffSenior(newSched, fullSched, dates);
 
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
   return newSched;
 }
-// 評估一份候選班表的品質：先看空班數(鐵則1，優先度最高)，再看參與整月排班者
-// 班數的全距(鐵則2，全距<=1代表已收斂到只剩相鄰兩數)。
+// 評估一份候選班表的品質，供多次嘗試取最佳解。優先序(由高到低)：
+//  1) 空班數(鐵則1，絕不能空班)
+//  2) 孤立單班數(OFF-上班-OFF，使用者要求不可出現)
+//  3) 休假最多者是否為資深(違反＝最少班數者含資淺，記為 1)
+//  4) 班數全距(越小越集中；使用者可接受到4種相鄰數字，即全距<=3)
 function scheduleQuality(newSched,y,m){
   const empty=countEmpty(newSched);
   const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
   const counts=parts.map(d=>calcNurseShiftCount(d.id,newSched));
   const spread=counts.length?Math.max(...counts)-Math.min(...counts):0;
-  return {empty,spread};
+  let isolated=0;
+  const dates=monthDates(y,m);
+  for(const d of state.doctors){ if(d.type!=='full') continue;
+    for(const dt of dates){ if(isIsolatedWorkDay(d.id,dt,newSched)) isolated++; } }
+  let maxOffNotSenior=0;
+  if(counts.length){
+    const mn=Math.min(...counts);
+    // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
+    maxOffNotSenior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mn&&!isSenior(d.id)).length;
+  }
+  return {empty,isolated,maxOffNotSenior,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
   if(q.empty!==best.empty) return q.empty<best.empty;
+  if(q.isolated!==best.isolated) return q.isolated<best.isolated;
+  if(q.maxOffNotSenior!==best.maxOffNotSenior) return q.maxOffNotSenior<best.maxOffNotSenior;
   return q.spread<best.spread;
 }
 const AUTO_SCHEDULE_ATTEMPTS=8;
@@ -1675,7 +1883,8 @@ function autoSchedule(){
     const cand=generateScheduleAttempt(y,m,dates);
     const q=scheduleQuality(cand,y,m);
     if(isQualityBetter(q,bestQ)){ best=cand; bestQ=q; }
-    if(bestQ.empty===0&&bestQ.spread<=1) break;
+    // 達到理想(零空班、無孤立單班、最多假者為資深、班數全距<=1)即提早停止
+    if(bestQ.empty===0&&bestQ.isolated===0&&bestQ.maxOffNotSenior===0&&bestQ.spread<=1) break;
   }
 
   Object.assign(state.schedule, best);
@@ -1945,6 +2154,7 @@ function openNurseModal(id){
   document.getElementById('doc-type').value=d.type;
   document.getElementById('doc-color').value=d.color;
   document.getElementById('doc-gender').value=d.prefs.gender||'F';
+  document.getElementById('doc-seniority').value=isSenior(d)?'senior':'junior';
   const st=isEdit?getNurseShiftType(d.id,state.year,state.month):'D';
   document.getElementById('shift-D').checked=(st==='D');
   document.getElementById('shift-E').checked=(st==='E');
@@ -1966,6 +2176,7 @@ function saveDoc(){
   if(!shiftRadio){showToast('請選擇班別','warn');return;}
   const level=document.getElementById('doc-level').value;
   const gender=document.getElementById('doc-gender').value;
+  const seniority=document.getElementById('doc-seniority').value;
   const allowSupport=document.getElementById('doc-allow-support').checked;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
@@ -1976,12 +2187,12 @@ function saveDoc(){
   pushUndo();
   if(id){
     const d=state.doctors.find(x=>x.id===id);
-    d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.allowSupport=allowSupport;
+    d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.seniority=seniority; d.prefs.allowSupport=allowSupport;
     setNurseShiftType(id,state.year,state.month,shiftRadio.value);
     setWorkRange(id,state.year,state.month,wr);
   } else {
     const newId='n_'+(_idCnt++);
-    const prefs={defaultShiftType:shiftRadio.value, level, gender, allowSupport};
+    const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport};
     state.doctors.push({id:newId,name,type,color,prefs});
     setNurseShiftType(newId,state.year,state.month,shiftRadio.value);
     setWorkRange(newId,state.year,state.month,wr);
