@@ -1695,22 +1695,11 @@ function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-m
 // ============================================================
 // NURSE TABLE / MODAL
 // ============================================================
-let _nurseYear=new Date().getFullYear();
-let _nurseMonth=new Date().getMonth();
-function changeNurseMonth(delta){
-  _nurseMonth+=delta;
-  if(_nurseMonth<0){_nurseMonth=11;_nurseYear--;}
-  if(_nurseMonth>11){_nurseMonth=0;_nurseYear++;}
-  renderNurseTable();
-}
-function jumpNurseMonth(){
-  const input=prompt('輸入年月 (格式 YYYY-MM)：',`${_nurseYear}-${String(_nurseMonth+1).padStart(2,'0')}`);
-  if(!input) return;
-  const mt=input.match(/^(\d{4})-(\d{1,2})$/);
-  if(!mt){showToast('格式錯誤','warn');return;}
-  _nurseYear=parseInt(mt[1]); _nurseMonth=parseInt(mt[2])-1;
-  renderNurseTable();
-}
+// 護理師設定的月份與頁面最上面的月份是「同一個」全域月份(state.year/state.month)，
+// 不再各自獨立——不論從頁首或本頁的箭頭/跳轉切換，都會連動所有分頁，
+// 兩處月份數字保證一致，不會再出現各分頁顯示不同月份的情形。
+function changeNurseMonth(delta){ changeMonth(delta); }
+function jumpNurseMonth(){ jumpMonth(); }
 // 將某月的班別設定「實體化」為明確紀錄：只要該月尚未有任何一筆設定，
 // 就把每位護理師當下會沿用(最近一次設定)的班別，直接寫成這個月自己的設定。
 // 這樣一開始檢視/編輯某個月時，資料就是完整、獨立的一份快照——
@@ -1728,26 +1717,26 @@ function materializeMonthShiftTypes(y,m){
   return changed;
 }
 function resetMonthToLastMonth(){
-  if(!confirm(`確定要將 ${_nurseYear}年${_nurseMonth+1}月 的班別設定重設為沿用上個月的結果？此動作會覆蓋本月目前的班別設定（工作日期不受影響）。`)) return;
-  let mm=_nurseMonth-1, yy=_nurseYear;
+  if(!confirm(`確定要將 ${state.year}年${state.month+1}月 的班別設定重設為沿用上個月的結果？此動作會覆蓋本月目前的班別設定（工作日期不受影響）。`)) return;
+  let mm=state.month-1, yy=state.year;
   if(mm<0){mm=11;yy--;}
-  const mk=monthKey(_nurseYear,_nurseMonth);
+  const mk=monthKey(state.year,state.month);
   delete state.monthlyShiftType[mk];
-  materializeMonthShiftTypes(_nurseYear,_nurseMonth);
+  materializeMonthShiftTypes(state.year,state.month);
   autoSave();
   renderNurseTable();
   showToast('✅ 已重設為沿用上個月設定');
 }
 function renderNurseTable(){
-  materializeMonthShiftTypes(_nurseYear,_nurseMonth);
+  materializeMonthShiftTypes(state.year,state.month);
   const lbl=document.getElementById('nurse-month-label');
-  if(lbl) lbl.textContent=`${_nurseYear}年${_nurseMonth+1}月`;
-  document.getElementById('nurse-tbody').innerHTML=sortedRoster(_nurseYear,_nurseMonth).map(d=>{
-    const shiftStr=d.type==='full'?getNurseShiftType(d.id,_nurseYear,_nurseMonth):'-';
+  if(lbl) lbl.textContent=`${state.year}年${state.month+1}月`;
+  document.getElementById('nurse-tbody').innerHTML=sortedRoster(state.year,state.month).map(d=>{
+    const shiftStr=d.type==='full'?getNurseShiftType(d.id,state.year,state.month):'-';
     const lvl=d.prefs.level||'L';
     const genderLabel=d.prefs.gender==='M'?'男':'女';
-    const wr=getWorkRange(d.id,_nurseYear,_nurseMonth);
-    const dim=daysInMonth(_nurseYear,_nurseMonth);
+    const wr=getWorkRange(d.id,state.year,state.month);
+    const dim=daysInMonth(state.year,state.month);
     const wrStr=(wr.start===1&&wr.end===dim)?'全月':`${wr.start}-${wr.end}`;
     const supportStr=d.prefs.allowSupport!==false?'✔':'✕';
     return `<tr>
@@ -1790,23 +1779,23 @@ function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
   const titleEl=document.getElementById('doc-modal-shift-title');
-  if(titleEl) titleEl.textContent=`${_nurseYear}年${_nurseMonth+1}月 班別 (指派，僅能擇一)`;
+  if(titleEl) titleEl.textContent=`${state.year}年${state.month+1}月 班別 (指派，僅能擇一)`;
   const d=isEdit?state.doctors.find(x=>x.id===id):{id:'',name:'',type:'full',color:'#1565c0',prefs:defPrefs('D')};
   document.getElementById('doc-id').value=d.id;
   document.getElementById('doc-name').value=d.name;
   document.getElementById('doc-type').value=d.type;
   document.getElementById('doc-color').value=d.color;
   document.getElementById('doc-gender').value=d.prefs.gender||'F';
-  const st=isEdit?getNurseShiftType(d.id,_nurseYear,_nurseMonth):'D';
+  const st=isEdit?getNurseShiftType(d.id,state.year,state.month):'D';
   document.getElementById('shift-D').checked=(st==='D');
   document.getElementById('shift-E').checked=(st==='E');
   document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
   document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
   const wrTitle=document.getElementById('doc-modal-workrange-title');
-  if(wrTitle) wrTitle.textContent=`${_nurseYear}年${_nurseMonth+1}月 工作日期`;
-  const dim=daysInMonth(_nurseYear,_nurseMonth);
-  const wr=isEdit?getWorkRange(d.id,_nurseYear,_nurseMonth):{start:1,end:dim};
+  if(wrTitle) wrTitle.textContent=`${state.year}年${state.month+1}月 工作日期`;
+  const dim=daysInMonth(state.year,state.month);
+  const wr=isEdit?getWorkRange(d.id,state.year,state.month):{start:1,end:dim};
   document.getElementById('doc-workrange').value=(wr.start===1&&wr.end===dim)?'':`${wr.start}-${wr.end}`;
   document.getElementById('nurse-modal').classList.add('show');
 }
@@ -1821,21 +1810,21 @@ function saveDoc(){
   const allowSupport=document.getElementById('doc-allow-support').checked;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
-  const dim=daysInMonth(_nurseYear,_nurseMonth);
+  const dim=daysInMonth(state.year,state.month);
   const wrInput=document.getElementById('doc-workrange').value;
   const wr=parseWorkRangeInput(wrInput,dim);
   if(wrInput.trim()&&!wr){showToast('工作日期格式錯誤，請用「開始-結束」例如 1-18','warn');return;}
   if(id){
     const d=state.doctors.find(x=>x.id===id);
     d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.allowSupport=allowSupport;
-    setNurseShiftType(id,_nurseYear,_nurseMonth,shiftRadio.value);
-    setWorkRange(id,_nurseYear,_nurseMonth,wr);
+    setNurseShiftType(id,state.year,state.month,shiftRadio.value);
+    setWorkRange(id,state.year,state.month,wr);
   } else {
     const newId='n_'+(_idCnt++);
     const prefs={defaultShiftType:shiftRadio.value, level, gender, allowSupport};
     state.doctors.push({id:newId,name,type,color,prefs});
-    setNurseShiftType(newId,_nurseYear,_nurseMonth,shiftRadio.value);
-    setWorkRange(newId,_nurseYear,_nurseMonth,wr);
+    setNurseShiftType(newId,state.year,state.month,shiftRadio.value);
+    setWorkRange(newId,state.year,state.month,wr);
   }
   autoSave();
   closeModal('nurse-modal');
@@ -2266,7 +2255,6 @@ function closeModal(id){ document.getElementById(id).classList.remove('show'); r
 // 統計報表)所用的年月變數與畫面都要一併同步，否則使用者若正停留在該分頁，切換月份會
 // 看起來「沒有反應」(背景變數其實已更新，只是畫面沒重繪)。
 function syncOtherTabsToCurrentMonth(){
-  _nurseYear=state.year; _nurseMonth=state.month;
   _prListYear=state.year; _prListMonth=state.month;
   _statsYear=state.year; _statsMonth=state.month;
   renderNurseTable();
@@ -2666,7 +2654,6 @@ function generatePDF(){
 window.onload=()=>{
   autoLoad();
   _prCalYear=state.year; _prCalMonth=state.month;
-  _nurseYear=state.year; _nurseMonth=state.month;
   _prListYear=state.year; _prListMonth=state.month;
   _statsYear=state.year; _statsMonth=state.month;
   renderCalendar();
