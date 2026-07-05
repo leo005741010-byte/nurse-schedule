@@ -33,12 +33,15 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .cal-day.holiday{background:#fde8e8;}
 .cal-day.empty{background:transparent;border:none;cursor:default;}
 .day-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:3px;}
-.day-num{font-size:12px;font-weight:700;}
-.day-num.weekend-num{color:#c0392b;}
+.day-num{font-size:16px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;padding:0 5px;border-radius:5px;background:#e6f5f1;color:#0d5c4a;}
+.day-num.weekend-num{background:#fbdcd7;color:#c0392b;}
 .day-badges{display:flex;gap:2px;align-items:center;flex-wrap:wrap;}
 .badge-hol{font-size:9px;background:#c0392b;color:#fff;padding:1px 4px;border-radius:2px;cursor:pointer;}
 .badge-sethol{font-size:9px;background:#eee;color:#666;padding:1px 4px;border-radius:2px;cursor:pointer;display:none;}
 .cal-day:hover .badge-sethol{display:inline;}
+.day-note-input{width:100%;box-sizing:border-box;border:1px dashed #d0a24c;border-radius:3px;background:#fffde7;font-size:10px;font-weight:600;color:#7a5b00;padding:2px 4px;margin-bottom:4px;}
+.day-note-input::placeholder{color:#c9b98a;font-weight:400;}
+.day-note-input:focus{outline:none;border-style:solid;border-color:#f9a825;background:#fff8e1;}
 .shift-block{margin-bottom:3px;}
 .shift-block-hd{display:flex;align-items:center;gap:3px;margin-bottom:1px;}
 .slot-tag{min-width:16px;height:16px;padding:0 3px;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;border-radius:2px;flex-shrink:0;}
@@ -514,6 +517,7 @@ let state = {
   minRestHours: 16,
   schedule: {},
   hourAdjust: {},
+  dayNotes: {},
   preRequests: {},
   monthlyShiftType: {},
   workDateRange: {},
@@ -564,7 +568,7 @@ let _redoStack = [];
 // 若能被還原/重做繞過就失去密碼保護的意義，因此鎖定狀態本身不列入還原範圍)。
 function snapshotUndoable(){
   return JSON.stringify({
-    schedule:state.schedule, hourAdjust:state.hourAdjust, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
+    schedule:state.schedule, hourAdjust:state.hourAdjust, dayNotes:state.dayNotes, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
     doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
@@ -572,7 +576,7 @@ function snapshotUndoable(){
   });
 }
 function restoreUndoable(snap){
-  state.schedule=snap.schedule; state.hourAdjust=snap.hourAdjust||{}; state.preRequests=snap.preRequests;
+  state.schedule=snap.schedule; state.hourAdjust=snap.hourAdjust||{}; state.dayNotes=snap.dayNotes||{}; state.preRequests=snap.preRequests;
   state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
   state.holidays=new Set(snap.holidays||[]); state.minRestHours=snap.minRestHours??state.minRestHours;
   state.workDateRange=snap.workDateRange||{}; state.maxConsecByShift=snap.maxConsecByShift||state.maxConsecByShift;
@@ -2078,7 +2082,9 @@ function renderCalendar(){
     if(isManHol) badges+=`<span class="badge-hol" onclick="toggleHol('${dateStr}',event)" title="取消假日">假</span>`;
     else if(!isWknd) badges+=`<span class="badge-sethol" onclick="toggleHol('${dateStr}',event)" title="設為假日">設假</span>`;
     else badges+=`<span style="font-size:9px;color:#c0392b">${dowNames[dow]}</span>`;
-    cell.innerHTML=`<div class="day-header"><span class="day-num${isWknd?' weekend-num':''}">${day}</span><div class="day-badges">${badges}</div></div>`;
+    const noteVal=(state.dayNotes&&state.dayNotes[dateStr])||'';
+    cell.innerHTML=`<div class="day-header"><span class="day-num${isWknd?' weekend-num':''}">${day}</span><div class="day-badges">${badges}</div></div>`+
+      `<input type="text" class="day-note-input" placeholder="備註(如ACLS、評鑑)" value="${escAttr(noteVal)}" onclick="event.stopPropagation()" onchange="updateDayNote('${dateStr}',this.value)" title="自由填寫備註，如訓練/評鑑等提醒事項">`;
 
     const ds=state.schedule[dateStr]||{};
     for(const si of slotInfo){
@@ -2120,6 +2126,16 @@ function toggleHol(dateStr,e){
   if(state.holidays.has(dateStr)) state.holidays.delete(dateStr);
   else state.holidays.add(dateStr);
   autoSave(); renderCalendar();
+}
+function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// 每日自由備註(如ACLS訓練、評鑑等提醒事項)，與班別指派無關，不受本月鎖定限制。
+function updateDayNote(dateStr,rawVal){
+  const v=(rawVal||'').trim();
+  pushUndo();
+  if(!state.dayNotes) state.dayNotes={};
+  if(v) state.dayNotes[dateStr]=v; else delete state.dayNotes[dateStr];
+  autoSave();
+  renderCalendar();
 }
 
 // ============================================================
@@ -2896,7 +2912,7 @@ let _fbApp=null,_fbRef=null,_fbIgnoreOwn=false,_fbIgnoreTimer=null;
 
 function serializeState(){
   return {
-    doctors:state.doctors,schedule:state.schedule,hourAdjust:state.hourAdjust||{},preRequests:state.preRequests,
+    doctors:state.doctors,schedule:state.schedule,hourAdjust:state.hourAdjust||{},dayNotes:state.dayNotes||{},preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
     workDateRange:state.workDateRange||{},
@@ -2930,6 +2946,7 @@ function applyData(d){
   if(d.doctors) state.doctors=migrateDoctorPrefs(d.doctors);
   if(d.schedule) state.schedule=d.schedule;
   state.hourAdjust=d.hourAdjust||{};
+  state.dayNotes=d.dayNotes||{};
   state.preRequests=d.preRequests||{};
   state.holidays=new Set(d.holidays||[]);
   if(d.year!=null) state.year=d.year;
@@ -3196,6 +3213,11 @@ function generatePDF(){
     const bgCol=isHol?'background:#fde8e8;':'';
     return `<th style="${bgCol}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
+  // 假日班別的底色需與平日班別不同(方便一眼辨識)，同時仍要保留D/E/N各自的識別色，
+  // 因此不能單純疊加「假日底色」再蓋上「班別底色」(inline style同屬性後者會直接覆蓋前者，
+  // 假日底色等於白疊，之前就是這樣才會看不出來)。改採「假日版=同色系但更深」的做法。
+  const SHIFT_BG={D:'background:#fff8e1;color:#e65100',E:'background:#e3f2fd;color:#1565c0',N:'background:#f3e5f5;color:#6a1b9a'};
+  const SHIFT_BG_HOL={D:'background:#ffcc80;color:#8a4a00',E:'background:#90caf9;color:#0d3c78',N:'background:#ce93d8;color:#4a1461'};
   const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
@@ -3206,7 +3228,7 @@ function generatePDF(){
       const sh=shiftOfNurseOnDate(doc.id,d);
       const adj=getHourAdjust(doc.id,d);
       const adjBadge=adj!==null?`<div style="font-size:7px;font-weight:700;color:#e65100">${adj}h</div>`:'';
-      if(sh){ total++; if(wknd) holCount++; return `<td style="${holBg}${sh==='D'?'background:#fff8e1;color:#e65100':sh==='E'?'background:#e3f2fd;color:#1565c0':'background:#f3e5f5;color:#6a1b9a'};font-weight:700">${sh}${adjBadge}</td>`; }
+      if(sh){ total++; if(wknd) holCount++; const sb=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="${sb};font-weight:700">${sh}${adjBadge}</td>`; }
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF${adjBadge}</td>`;
       return `<td style="${holBg}">${adjBadge}</td>`;
@@ -3242,11 +3264,14 @@ function generatePDF(){
         <span style="flex:1;font-size:7px;line-height:1.3;">${names}</span>
       </div>`;
     }
+    const note=(state.dayNotes&&state.dayNotes[d])||'';
     calCells+=`<div style="background:${bg};border:1px solid #ddd;border-radius:3px;padding:3px;min-height:110px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
         <span style="font-size:11px;font-weight:700;${dow>=5||hol?'color:#c0392b':'color:#333'}">${day}</span>
         ${hol?'<span style="font-size:8px;background:#c0392b;color:#fff;padding:1px 3px;border-radius:2px;">假</span>':''}
-      </div>${rows}
+      </div>
+      ${note?`<div style="font-size:7px;font-weight:700;color:#7a5b00;background:#fffde7;border:1px dashed #d0a24c;border-radius:2px;padding:1px 3px;margin-bottom:2px;">${escAttr(note)}</div>`:''}
+      ${rows}
     </div>`;
   }
   const calHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:16px;">${wdHeaders}${calCells}</div>`;
