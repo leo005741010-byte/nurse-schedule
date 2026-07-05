@@ -2266,6 +2266,7 @@ function changeMonth(delta){
   state.month+=delta;
   if(state.month<0){state.month=11;state.year--;}
   if(state.month>11){state.month=0;state.year++;}
+  _nurseYear=state.year; _nurseMonth=state.month; // 護理師設定月份同步
   renderCalendar();
   renderMasterGrid();
 }
@@ -2275,6 +2276,7 @@ function jumpMonth(){
   const mt=input.match(/^(\d{4})-(\d{1,2})$/);
   if(!mt){showToast('格式錯誤','warn');return;}
   state.year=parseInt(mt[1]); state.month=parseInt(mt[2])-1;
+  _nurseYear=state.year; _nurseMonth=state.month; // 護理師設定月份同步
   renderCalendar();
   renderMasterGrid();
 }
