@@ -1003,7 +1003,11 @@ function balanceOffDays(newSched, fullSched, dates){
           const role=roles[i];
           if(!roleAllowed(u.prefs.level,role)) continue;
           arr[i]=null;
-          if(canWork(u.id,d,homeShift,role,fullSched)||canWorkForce(u.id,d,homeShift,role,fullSched)){
+          // 本班別內同班次swap，卡關較可能是連班上限(而非跨班別常見的休息時數衝突)，
+          // 用鏈式指派多爭取一次機會；跨班別(Phase C/D的cross分支)則卡關多為休息時數
+          // 衝突(N/D作息完全相反)，連鎖挪動無法解決該類物理限制，故不在那些分支套用，
+          // 避免白白增加運算量。
+          if(tryChainAssign(u.id,d,homeShift,role,newSched,fullSched,true)){
             arr[i]=u.id; counts[u.id]++; counts[occ]--; progressed=true;
             if(counts[u.id]>=lo) break outerB;
           } else {
@@ -1062,7 +1066,9 @@ function balanceOffDays(newSched, fullSched, dates){
         for(const r of recipients){
           arr[idx]=null;
           const sameGroup=homeOf(r)===homeShiftO;
-          const ok=sameGroup?(canWork(r.id,d,homeShiftO,role,fullSched)||canWorkForce(r.id,d,homeShiftO,role,fullSched))
+          // 同班次時卡關多為連班上限，值得用鏈式指派多爭取一次；跨班別支援時卡關多為
+          // 休息時數衝突(連鎖挪動解決不了)，直接用 canWorkSupport 判斷即可，避免空耗運算。
+          const ok=sameGroup?tryChainAssign(r.id,d,homeShiftO,role,newSched,fullSched,true)
                              :canWorkSupport(r.id,d,homeShiftO,role,fullSched);
           if(ok){
             arr[idx]=r.id; counts[o.id]--; counts[r.id]++; progressed=true;
@@ -1243,6 +1249,42 @@ function tryRelocateOccupant(nurseId, date, shift, role, newSched, fullSched){
   arr[idx]=scored[0].id;
   return true;
 }
+// 鏈式指派：休假天數平衡的轉調搜尋專用。先試直接指派(本班別或跨班別支援)；
+// 若唯一卡關原因是「連續上班天數上限」(其餘鐵則皆已通過)，比照 repairAndFillSlot
+// 的「情況一」，先把候選人鄰近一天既有的班次挪給別人騰出空間，再重試指派——
+// 讓休假天數平衡不再侷限於「純1對1直接swap」，能多繞一手，收斂到更接近
+// 「只剩相鄰兩個數字」的鐵則要求。挪動失敗則還原，不留副作用。
+function tryChainAssign(nurseId, date, shift, role, newSched, fullSched, homeMatch){
+  const direct = homeMatch
+    ? (canWork(nurseId,date,shift,role,fullSched)||canWorkForce(nurseId,date,shift,role,fullSched))
+    : canWorkSupport(nurseId,date,shift,role,fullSched);
+  if(direct) return true;
+
+  const doc=state.doctors.find(d=>d.id===nurseId);
+  if(!doc||doc.type!=='full') return false;
+  if(isAssignedThatDay(nurseId,date,newSched)) return false;
+  if(!isEmployedOnDate(nurseId,date)) return false;
+  if(!roleAllowed(doc.prefs.level,role)) return false;
+  if(offBlocked(nurseId,date)) return false;
+  if(!restOK(nurseId,date,shift,fullSched)) return false;
+  if(violatesNOffD(nurseId,date,shift,fullSched)) return false;
+  if(!homeMatch&&doc.prefs.allowSupport===false) return false;
+  if(!wouldExceedConsec(nurseId,date,fullSched)) return false; // 其餘鐵則皆通過，代表不是連班卡關，判定不可行
+
+  const prevDay=addDays(date,-1), nextDay=addDays(date,1);
+  const prevSlot=findSlotOccupant(nurseId,prevDay,newSched);
+  const nextSlot=findSlotOccupant(nurseId,nextDay,newSched);
+  const boundaries=[prevSlot?{...prevSlot,date:prevDay}:null, nextSlot?{...nextSlot,date:nextDay}:null].filter(Boolean);
+  const relocated=[];
+  for(const b of boundaries){
+    if(tryRelocateOccupant(nurseId,b.date,b.shift,b.role,newSched,fullSched)){
+      relocated.push(b);
+      if(!wouldExceedConsec(nurseId,date,fullSched)) return true;
+    }
+  }
+  for(const b of relocated){ newSched[b.date][b.shift][b.idx]=nurseId; }
+  return false;
+}
 function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
   const arr=newSched[date][shift]; const role=newSched[date].roles[shift][roleIdx];
   if(arr[roleIdx]) return true;
@@ -1399,20 +1441,12 @@ function enforceWorkPreRequests(newSched, dates){
     }
   }
 }
-function autoSchedule(){
-  if(isCurrentMonthLocked()){
-    const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
-    if(pwd===null) return;
-    if(pwd!=='0320'){showToast('❌ 密碼錯誤','warn');return;}
-    _lockedMonths.delete(`${state.year}-${state.month}`);
-    updateUndoBtn(); updateRedoBtn();
-    autoSave();
-  }
-  if(!window.__skipConfirm && !confirm('確定要自動排班？這將覆蓋本月班表。')) return;
-  pushUndo();
-  const y=state.year, m=state.month;
-  materializeMonthShiftTypes(y,m);
-  const dates=monthDates(y,m);
+// 產生「一次」排班嘗試，回傳完整的候選班表(不寫回 state.schedule)。
+// 排班過程中大量使用亂數(shuffle/評分抖動)做為打散僵局的手段，同一份輸入資料
+// 每次執行的結果不一定相同——多數情況下會收斂到「零空班、班數只差相鄰兩數」，
+// 但在人力結構本來就緊繃(例如某角色全月合格人選很少)時，偶爾某一輪的亂數順序
+// 會導致收斂較差。因此 autoSchedule() 會呼叫本函式多次，取其中最好的一份結果。
+function generateScheduleAttempt(y,m,dates){
   const newSched={};
   for(const d of dates){
     const existing=state.schedule[d]||{};
@@ -1520,12 +1554,9 @@ function autoSchedule(){
   // 平衡的結果稍微跑掉幾個班次。改用「實際目前的班數平均」(而非排班前的預估值)固定
   // 當作目標，反覆只跑休假天數/假日班數平衡本身(不夾雜會再度打亂結果的後製步驟)，
   // 讓離群值確實收斂到只剩相鄰兩個數字(鐵則)，最後才重跑一次後製步驟收尾。
-  function recomputeEqTargetsFromActual(){
-    const nonExemptFinal=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
-    const avgActual=nonExemptFinal.length?nonExemptFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/nonExemptFinal.length:0;
-    _eqTargets={deAvg:avgActual, nAvg:avgActual};
-  }
-  recomputeEqTargetsFromActual();
+  const nonExemptFinal=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
+  const avgActual=nonExemptFinal.length?nonExemptFinal.reduce((s,d)=>s+calcNurseShiftCount(d.id,newSched),0)/nonExemptFinal.length:0;
+  _eqTargets={deAvg:avgActual, nAvg:avgActual};
   for(let tighten=0; tighten<20; tighten++){
     balanceOffDays(newSched, fullSched, dates);
     balanceHolidayShifts(newSched, fullSched, dates);
@@ -1550,12 +1581,54 @@ function autoSchedule(){
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
-  Object.assign(state.schedule, newSched);
+  return newSched;
+}
+// 評估一份候選班表的品質：先看空班數(鐵則1，優先度最高)，再看參與整月排班者
+// 班數的全距(鐵則2，全距<=1代表已收斂到只剩相鄰兩數)。
+function scheduleQuality(newSched,y,m){
+  const empty=countEmpty(newSched);
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,y,m));
+  const counts=parts.map(d=>calcNurseShiftCount(d.id,newSched));
+  const spread=counts.length?Math.max(...counts)-Math.min(...counts):0;
+  return {empty,spread};
+}
+function isQualityBetter(q,best){
+  if(!best) return true;
+  if(q.empty!==best.empty) return q.empty<best.empty;
+  return q.spread<best.spread;
+}
+const AUTO_SCHEDULE_ATTEMPTS=8;
+function autoSchedule(){
+  if(isCurrentMonthLocked()){
+    const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
+    if(pwd===null) return;
+    if(pwd!=='0320'){showToast('❌ 密碼錯誤','warn');return;}
+    _lockedMonths.delete(`${state.year}-${state.month}`);
+    updateUndoBtn(); updateRedoBtn();
+    autoSave();
+  }
+  if(!window.__skipConfirm && !confirm('確定要自動排班？這將覆蓋本月班表。')) return;
+  pushUndo();
+  const y=state.year, m=state.month;
+  materializeMonthShiftTypes(y,m);
+  const dates=monthDates(y,m);
+
+  // 排班過程含亂數，單次結果偶爾收斂較差(見 generateScheduleAttempt 說明)。
+  // 這裡嘗試多次、只採用最好的一份，讓「零空班」與「班數只差相鄰兩數」更穩定達成，
+  // 一旦已達到雙鐵則同時滿足的理想結果就提早停止，不浪費運算時間。
+  let best=null, bestQ=null;
+  for(let attempt=0; attempt<AUTO_SCHEDULE_ATTEMPTS; attempt++){
+    const cand=generateScheduleAttempt(y,m,dates);
+    const q=scheduleQuality(cand,y,m);
+    if(isQualityBetter(q,bestQ)){ best=cand; bestQ=q; }
+    if(bestQ.empty===0&&bestQ.spread<=1) break;
+  }
+
+  Object.assign(state.schedule, best);
   autoSave();
   renderCalendar();
   switchTab('master');
-  const empty=countEmpty(newSched);
-  showToast(empty>0?`排班完成，${empty} 個職位即使連鎖調整仍無法排入(人力總量不足)，維持空班。`:'✅ 自動排班完成，已全數排滿！',empty>0?'warn':'ok');
+  showToast(bestQ.empty>0?`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最佳解)，維持空班。`:'✅ 自動排班完成，已全數排滿！',bestQ.empty>0?'warn':'ok');
 }
 
 // ============================================================
