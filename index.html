@@ -183,15 +183,15 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         </span>
         <div class="split-control">
           <label>最少休息時數：</label>
-          <select id="min-rest" onchange="state.minRestHours=parseInt(this.value);autoSave();">
+          <select id="min-rest" onchange="pushUndo();state.minRestHours=parseInt(this.value);autoSave();">
             <option value="8">8小時</option><option value="11">11小時</option><option value="16" selected>16小時</option>
           </select>
         </div>
         <div class="split-control">
           <label>最多連上：</label>
-          D<input type="number" id="max-consec-D" min="1" style="width:40px" onchange="state.maxConsecByShift.D=parseInt(this.value)||5;autoSave();">
-          E<input type="number" id="max-consec-E" min="1" style="width:40px" onchange="state.maxConsecByShift.E=parseInt(this.value)||5;autoSave();">
-          N<input type="number" id="max-consec-N" min="1" style="width:40px" onchange="state.maxConsecByShift.N=parseInt(this.value)||4;autoSave();">
+          D<input type="number" id="max-consec-D" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.D=parseInt(this.value)||5;autoSave();">
+          E<input type="number" id="max-consec-E" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.E=parseInt(this.value)||5;autoSave();">
+          N<input type="number" id="max-consec-N" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.N=parseInt(this.value)||4;autoSave();">
           <span>天（可自行填選，無上限）</span>
         </div>
         <span style="font-size:11px;color:#888">N-OFF-D不可出現；同班次不可全為男性；空班會盡量拉其他班別支援</span>
@@ -249,9 +249,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <div style="margin-bottom:12px;background:#f5f9f8;padding:8px 12px;border-radius:6px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
           <label style="font-size:12px;font-weight:700;color:#555">每人每月最多預假天數：</label>
-          <input type="number" id="max-off-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxOffDays=this.value?parseInt(this.value):null;autoSave();">
+          <input type="number" id="max-off-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="pushUndo();state.maxOffDays=this.value?parseInt(this.value):null;autoSave();">
           <label style="font-size:12px;font-weight:700;color:#555;margin-left:10px">其中假日最多：</label>
-          <input type="number" id="max-off-holiday-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="state.maxOffHolidayDays=this.value?parseInt(this.value):null;autoSave();">
+          <input type="number" id="max-off-holiday-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="pushUndo();state.maxOffHolidayDays=this.value?parseInt(this.value):null;autoSave();">
           <span style="font-size:11px;color:#888">天（僅限「當天OFF」類型；預上班(排D/E/N班)不受此限）</span>
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
@@ -532,8 +532,35 @@ const _lockedMonths = new Set();
 function isCurrentMonthLocked(){ return _lockedMonths.has(`${state.year}-${state.month}`); }
 let _undoStack = [];
 let _redoStack = [];
+// 還原/重做涵蓋所有會被使用者編輯動作改動的資料本身(排班、預假/預班、護理師名冊、
+// 假日、休息時數、連班上限、預假天數上限、長假設定、避免同班配對、當月工作日期等)。
+// 刻意排除：year/month(僅為目前檢視到哪個月，不是資料)、_idCnt(內部單調遞增計數器，
+// 回復舊值可能讓新建護理師撞到已存在的ID)、lockedMonths(鎖定需輸入密碼才能解鎖，
+// 若能被還原/重做繞過就失去密碼保護的意義，因此鎖定狀態本身不列入還原範圍)。
+function snapshotUndoable(){
+  return JSON.stringify({
+    schedule:state.schedule, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
+    doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours,
+    workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
+    maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
+    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs
+  });
+}
+function restoreUndoable(snap){
+  state.schedule=snap.schedule; state.preRequests=snap.preRequests;
+  state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
+  state.holidays=new Set(snap.holidays||[]); state.minRestHours=snap.minRestHours??state.minRestHours;
+  state.workDateRange=snap.workDateRange||{}; state.maxConsecByShift=snap.maxConsecByShift||state.maxConsecByShift;
+  state.maxOffDays=snap.maxOffDays??null; state.maxOffHolidayDays=snap.maxOffHolidayDays??null;
+  state.longLeaveExempt=snap.longLeaveExempt||{}; state.longLeaveDays=snap.longLeaveDays||{};
+  state.avoidPairs=snap.avoidPairs||[];
+}
+function rerenderAfterUndoRedo(){
+  renderCalendar(); renderMasterGrid(); renderPRList(); renderPRCalGrid();
+  renderNurseTable(); renderAvoidPairs(); renderStats();
+}
 function pushUndo(){
-  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
+  _undoStack.push(snapshotUndoable());
   if(_undoStack.length>10) _undoStack.shift();
   _redoStack=[];
   updateUndoBtn(); updateRedoBtn();
@@ -542,22 +569,22 @@ function undoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法還原','warn');return;}
   if(!_undoStack.length){showToast('沒有可還原的操作','warn');return;}
   if(!confirm('確定還原到上一個狀態？')) return;
-  _redoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
+  _redoStack.push(snapshotUndoable());
   if(_redoStack.length>10) _redoStack.shift();
   const snap=JSON.parse(_undoStack.pop());
-  state.schedule=snap.schedule; state.preRequests=snap.preRequests; state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
-  autoSave(); renderCalendar(); renderPRList(); renderNurseTable();
+  restoreUndoable(snap);
+  autoSave(); rerenderAfterUndoRedo();
   showToast('✅ 已還原'); updateUndoBtn(); updateRedoBtn();
 }
 function redoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法重做','warn');return;}
   if(!_redoStack.length){showToast('沒有可重做的操作','warn');return;}
   if(!confirm('確定重做？')) return;
-  _undoStack.push(JSON.stringify({schedule:state.schedule,preRequests:state.preRequests,monthlyShiftType:state.monthlyShiftType,doctors:state.doctors}));
+  _undoStack.push(snapshotUndoable());
   if(_undoStack.length>10) _undoStack.shift();
   const snap=JSON.parse(_redoStack.pop());
-  state.schedule=snap.schedule; state.preRequests=snap.preRequests; state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
-  autoSave(); renderCalendar(); renderPRList(); renderNurseTable();
+  restoreUndoable(snap);
+  autoSave(); rerenderAfterUndoRedo();
   showToast('✅ 已重做'); updateUndoBtn(); updateRedoBtn();
 }
 function toggleLock(){
@@ -1613,6 +1640,7 @@ function renderCalendar(){
 function toggleHol(dateStr,e){
   if(e) e.stopPropagation();
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
+  pushUndo();
   if(state.holidays.has(dateStr)) state.holidays.delete(dateStr);
   else state.holidays.add(dateStr);
   autoSave(); renderCalendar();
@@ -1718,6 +1746,7 @@ function materializeMonthShiftTypes(y,m){
 }
 function resetMonthToLastMonth(){
   if(!confirm(`確定要將 ${state.year}年${state.month+1}月 的班別設定重設為沿用上個月的結果？此動作會覆蓋本月目前的班別設定（工作日期不受影響）。`)) return;
+  pushUndo();
   let mm=state.month-1, yy=state.year;
   if(mm<0){mm=11;yy--;}
   const mk=monthKey(state.year,state.month);
@@ -1770,11 +1799,12 @@ function addAvoidPair(){
   if(!a||!b||a===b){showToast('請選擇兩位不同護理師','warn');return;}
   if(!state.avoidPairs) state.avoidPairs=[];
   if(state.avoidPairs.some(p=>(p[0]===a&&p[1]===b)||(p[0]===b&&p[1]===a))){showToast('此組合已存在','warn');return;}
+  pushUndo();
   state.avoidPairs.push([a,b]);
   autoSave(); renderAvoidPairs();
   showToast('已新增');
 }
-function removeAvoidPair(i){ state.avoidPairs.splice(i,1); autoSave(); renderAvoidPairs(); }
+function removeAvoidPair(i){ pushUndo(); state.avoidPairs.splice(i,1); autoSave(); renderAvoidPairs(); }
 function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
@@ -1814,6 +1844,7 @@ function saveDoc(){
   const wrInput=document.getElementById('doc-workrange').value;
   const wr=parseWorkRangeInput(wrInput,dim);
   if(wrInput.trim()&&!wr){showToast('工作日期格式錯誤，請用「開始-結束」例如 1-18','warn');return;}
+  pushUndo();
   if(id){
     const d=state.doctors.find(x=>x.id===id);
     d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.allowSupport=allowSupport;
@@ -1833,6 +1864,7 @@ function saveDoc(){
 }
 function deleteDoc(id){
   if(!confirm('確定刪除此護理師？其已排入的班別將維持顯示但需手動清除。')) return;
+  pushUndo();
   state.doctors=state.doctors.filter(x=>x.id!==id);
   autoSave(); renderNurseTable(); renderCalendar();
 }
@@ -1934,6 +1966,7 @@ function isFullMonthParticipant(nurseId,y,m){
   return wr.start===1&&wr.end===daysInMonth(y,m);
 }
 function toggleLongLeaveExempt(nurseId,val){
+  pushUndo();
   const k=monthKey(_prListYear,_prListMonth);
   if(!state.longLeaveExempt[k]) state.longLeaveExempt[k]=[];
   const arr=state.longLeaveExempt[k];
@@ -1951,6 +1984,7 @@ function getNurseLongLeaveDays(nurseId,y,m){
   return (state.longLeaveDays[k]&&state.longLeaveDays[k][nurseId])||0;
 }
 function setLongLeaveDays(nurseId,val){
+  pushUndo();
   const k=monthKey(_prListYear,_prListMonth);
   if(!state.longLeaveDays[k]) state.longLeaveDays[k]={};
   const n=Math.max(0,parseInt(val)||0);
@@ -2009,6 +2043,7 @@ function addPR(){
       }
     }
   }
+  pushUndo();
   let cur=start, cnt=0;
   while(cur<=end&&cnt<366){
     if(!state.preRequests[cur]) state.preRequests[cur]=[];
@@ -2022,6 +2057,7 @@ function addPR(){
 function delPR(date,prId){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
   if(!state.preRequests[date]) return;
+  pushUndo();
   state.preRequests[date]=state.preRequests[date].filter(p=>p.id!==prId);
   if(!state.preRequests[date].length) delete state.preRequests[date];
   autoSave(); renderPRList(); renderCalendar();
@@ -2030,6 +2066,7 @@ let _prMergedGroups={};
 function delPRRange(gid){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
   const ids=_prMergedGroups[gid]; if(!ids) return;
+  pushUndo();
   const idSet=new Set(ids);
   for(const date of Object.keys(state.preRequests)){
     state.preRequests[date]=state.preRequests[date].filter(p=>!idSet.has(p.id));
