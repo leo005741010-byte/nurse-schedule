@@ -857,6 +857,11 @@ function leaveAvailRatio(nurseId,date){
 // 自動排班進行中會使用預先算好的均衡目標(_eqTargets)，避免動態平均造成回饋震盪；
 // 其他情境(如僅呼叫單一函式除錯)則退回即時平均計算。
 let _eqTargets=null;
+// 預上班(預排D/E/N班)為鐵則，一旦排入就「鎖定」該職位，後續所有平衡／清理／
+// 性別／挪動步驟都不得移除或改派。以 `日期|班別|職位索引` 為鍵。
+let _workLocks=new Set();
+function cellKey(date,shift,idx){ return `${date}|${shift}|${idx}`; }
+function isWorkLocked(date,shift,idx){ return _workLocks.has(cellKey(date,shift,idx)); }
 function personalTargetShiftCount(nurseId,date,sched){
   const base=_eqTargets?_eqTargets.deAvg:avgShiftCount(sched);
   return base*leaveAvailRatio(nurseId,date);
@@ -897,6 +902,10 @@ function countEmpty(sched){
 }
 // ============================================================
 // 休假天數平衡：讓非長假護理師(不分D/E/N)的本月班數盡量只落在相鄰兩個數字(lo/hi)。
+// 需求2：總班數無法被人數整除時，會有 nLo 人落在 lo(班少→假多)、nHi 人落在 hi(班多→假少)。
+// 為每位護理師預先指派「本人專屬目標班數」(lo 或 hi)，並把 lo(多放1天假)的名額
+// 優先分配給大夜(N)人員、hi 的名額優先分配給 D/E 人員。之後所有 under/over 判斷與轉調
+// 都以「本人專屬目標」為準，因此平衡收斂後大夜人員就會自然落在 lo(多放一天假)。
 // ============================================================
 function balanceOffDays(newSched, fullSched, dates){
   const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
@@ -904,11 +913,20 @@ function balanceOffDays(newSched, fullSched, dates){
   const counts={};
   for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
   const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
-  // 使用排班前預先算好的均衡目標(_eqTargets)，而非即時平均，避免動態平均造成回饋震盪。
-  const avg=_eqTargets?_eqTargets.deAvg:
-    (nonExempt.length?nonExempt.reduce((s,d)=>s+counts[d.id],0)/nonExempt.length:0);
-  const bounds={lo:Math.floor(avg),hi:Math.ceil(avg)};
-  const boundsFor=d=>bounds;
+  // 目標總班數 T：以「目前參與者實際總班數」為準，確保各人目標加總 = T(純重分配、不憑空多／少排)。
+  const P=nonExempt.length;
+  const T=nonExempt.reduce((s,d)=>s+counts[d.id],0);
+  const lo=Math.floor(T/P), hi=Math.ceil(T/P);
+  const nHi=T-lo*P;              // 落在 hi(班多假少)的人數；其餘 P-nHi 人落在 lo(班少假多)
+  // 排序：大夜(N)在前→優先拿到 lo(多放假)的名額；同組時班數少者先(降低擾動)。
+  const order=[...nonExempt].sort((a,b)=>{
+    const na=homeOf(a)==='N'?0:1, nb=homeOf(b)==='N'?0:1;
+    if(na!==nb) return na-nb;
+    return counts[a.id]-counts[b.id];
+  });
+  const targetOf={};
+  order.forEach((d,i)=>{ targetOf[d.id]= (i < P-nHi) ? lo : hi; });
+  const boundsFor=d=>({lo:targetOf[d.id], hi:targetOf[d.id]});
 
   // 鐵則：參與整月排班的人，班數只能落在相鄰兩個數字(lo/hi)，不可以有第三種數字。
   // 迴圈持續到「已無人低於lo、也無人高於hi」才停止(而非固定跑幾輪就停)，
@@ -947,6 +965,7 @@ function balanceOffDays(newSched, fullSched, dates){
         if(isAssignedThatDay(u.id,d,newSched)) continue;
         const arr=newSched[d][homeShift]; const roles=newSched[d].roles[homeShift];
         for(let i=0;i<arr.length;i++){
+          if(isWorkLocked(d,homeShift,i)) continue; // 預上班鎖定，不可改派
           const occ=arr[i];
           if(!occ) continue;
           const occDoc=state.doctors.find(x=>x.id===occ);
@@ -972,6 +991,7 @@ function balanceOffDays(newSched, fullSched, dates){
           if(homeOf(u)===shift) continue; // 僅跨班別支援(本班別已在Phase B處理過)
           const arr=newSched[d][shift]; const roles=newSched[d].roles[shift];
           for(let i=0;i<arr.length;i++){
+            if(isWorkLocked(d,shift,i)) continue; // 預上班鎖定，不可改派
             const occupant=arr[i];
             if(!occupant||counts[occupant]===undefined) continue;
             const occDoc=state.doctors.find(x=>x.id===occupant);
@@ -1003,8 +1023,9 @@ function balanceOffDays(newSched, fullSched, dates){
       outerD:
       for(const d of shuffle([...dates])){
         const arr=newSched[d][homeShiftO]; const roles=newSched[d].roles[homeShiftO];
-        const idx=arr.indexOf(o.id);
-        if(idx<0) continue;
+        let idx=-1;
+        for(let k=0;k<arr.length;k++){ if(arr[k]===o.id&&!isWorkLocked(d,homeShiftO,k)){idx=k;break;} }
+        if(idx<0) continue; // 沒有可移動(未鎖定)的班次
         const role=roles[idx];
         let recipients=nonExempt.filter(r=>r.id!==o.id&&counts[r.id]<boundsFor(r).hi
           &&roleAllowed(r.prefs.level,role)&&!isAssignedThatDay(r.id,d,newSched));
@@ -1055,6 +1076,7 @@ function balanceHolidayShifts(newSched, fullSched, dates){
         const homeShift=getNurseShiftTypeAtDate(u.id,hd);
         const arr=newSched[hd][homeShift]; const roles=newSched[hd].roles[homeShift];
         for(let i=0;i<arr.length&&!fixedThisNurse;i++){
+          if(isWorkLocked(hd,homeShift,i)) continue; // 預上班鎖定的假日班不對調
           const occ=arr[i];
           if(!occ||holCounts[occ]===undefined||holCounts[occ]<=hi) continue;
           if(getNurseShiftTypeAtDate(occ,hd)!==homeShift) continue;
@@ -1065,6 +1087,7 @@ function balanceHolidayShifts(newSched, fullSched, dates){
             const arr2=newSched[wd][homeShift]; const roles2=newSched[wd].roles[homeShift];
             const idx2=arr2.indexOf(u.id);
             if(idx2<0) continue;
+            if(isWorkLocked(wd,homeShift,idx2)) continue; // 預上班鎖定的平日班不對調
             const role2=roles2[idx2];
             const occDoc=state.doctors.find(x=>x.id===occ);
             if(!roleAllowed(occDoc.prefs.level,role2)) continue;
@@ -1095,6 +1118,7 @@ function cleanupNOffD(newSched, fullSched, dates){
     const arr=newSched[d]['D']; if(!arr) continue;
     for(let i=0;i<arr.length;i++){
       const nid=arr[i]; if(!nid) continue;
+      if(isWorkLocked(d,'D',i)) continue; // 預上班為管理者手動指定，優先於 N-OFF-D
       if(violatesNOffD(nid,d,'D',fullSched)){ arr[i]=null; removed++; }
     }
   }
@@ -1144,6 +1168,7 @@ function fixGenderDiversity(newSched, fullSched, dates){
       });
       if(!allMale) continue;
       for(const{nid,i} of assigned){
+        if(isWorkLocked(d,shift,i)) continue; // 預上班鎖定，不因性別多元化被換出
         const role=roles[i];
         arr[i]=null;
         const females=state.doctors.filter(doc=>doc.type==='full'&&doc.prefs.gender==='F'&&
@@ -1179,6 +1204,7 @@ function tryRelocateOccupant(nurseId, date, shift, role, newSched, fullSched){
   const arr=newSched[date][shift];
   const idx=arr.indexOf(nurseId);
   if(idx<0) return false;
+  if(isWorkLocked(date,shift,idx)) return false; // 預上班鎖定，不可被挪動
   const candidates=state.doctors.filter(doc=>doc.id!==nurseId&&doc.type==='full'&&
     !isAssignedThatDay(doc.id,date,newSched)&&
     (canWork(doc.id,date,shift,role,fullSched)||canWorkForce(doc.id,date,shift,role,fullSched)||canWorkSupport(doc.id,date,shift,role,fullSched)));
@@ -1273,6 +1299,77 @@ function finalGuaranteeNoEmpty(newSched, fullSched, dates){
     if(!anyEmpty) break;
   }
 }
+// ============================================================
+// 需求2：全月參與者的休假天數盡量一致；無法完全一致(總班數無法被人數整除)時，
+// 讓「大夜(N)」人員優先多放1天。
+// 作法：在不改變任何人班數落點(仍落在相鄰兩數 lo/hi)的前提下，做1對1班次移轉——
+// 把「本班別為大夜且班數為 hi(假較少)」者的一個班次，轉給「非大夜且班數為 lo(假較多)」
+// 者承接；交換後 N 方降到 lo(多放1天)、接手方升到 hi。純班數守恆、不製造空班、不違反鐵則、
+// 不動預上班鎖定格。若大夜人數多到 lo 名額不夠，則盡可能讓最多大夜者拿到那一天假。
+// ============================================================
+function assignExtraOffToNight(newSched, fullSched, dates){
+  const nonExempt=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(nonExempt.length<2) return;
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  if(!nonExempt.some(d=>homeOf(d)==='N')) return; // 沒有大夜人員就無須處理
+  for(let round=0;round<200;round++){
+    const counts={};
+    for(const d of nonExempt) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const vals=nonExempt.map(d=>counts[d.id]);
+    const lo=Math.min(...vals), hi=Math.max(...vals);
+    if(hi-lo!==1) break; // 已完全一致(hi===lo)，或落差>1(應先由 balanceOffDays 收斂)
+    const givers=nonExempt.filter(d=>homeOf(d)==='N'&&counts[d.id]===hi); // 大夜、假較少→想多放假
+    const takers=nonExempt.filter(d=>homeOf(d)!=='N'&&counts[d.id]===lo); // 非大夜、假較多→可多上一班
+    if(!givers.length||!takers.length) break;
+    let moved=false;
+    for(const g of givers){
+      if(counts[g.id]!==hi) continue;
+      let done=false;
+      for(const t of takers){
+        if(done) break;
+        if(counts[t.id]!==lo) continue;
+        for(const dt of shuffle([...dates])){
+          const occ=findSlotOccupant(g.id,dt,newSched);
+          if(!occ) continue;
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue; // 預上班鎖定，不移轉
+          if(isAssignedThatDay(t.id,dt,newSched)) continue;
+          if(!roleAllowed(t.prefs.level,occ.role)) continue;
+          const arr=newSched[dt][occ.shift];
+          arr[occ.idx]=null;
+          const ok = homeOf(t)===occ.shift
+            ? (canWork(t.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(t.id,dt,occ.shift,occ.role,fullSched))
+            : canWorkSupport(t.id,dt,occ.shift,occ.role,fullSched);
+          if(ok){
+            arr[occ.idx]=t.id; counts[g.id]--; counts[t.id]++;
+            moved=true; done=true; break;
+          } else {
+            arr[occ.idx]=g.id; // 還原，維持不留空班
+          }
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
+// 鐵則保底：預上班一定要給。所有步驟跑完後，逐一確認每筆預上班都在班；
+// 若因極端狀況(如排入時該班已滿)遺漏，於此補回空缺職位(僅填空、不驅離他人)。
+function enforceWorkPreRequests(newSched, dates){
+  for(const d of dates){
+    for(const pr of (state.preRequests[d]||[])){
+      if(!pr.type.startsWith('WORK_')) continue;
+      const sh=pr.type.replace('WORK_','');
+      if(!SHIFTS.includes(sh)) continue;
+      if((newSched[d][sh]||[]).includes(pr.docId)) continue; // 已在該班
+      if(isAssignedThatDay(pr.docId,d,newSched)) continue;    // 當天已在其他班，避免雙班
+      const arr=newSched[d][sh]; const roles=newSched[d].roles[sh];
+      const doc=state.doctors.find(x=>x.id===pr.docId);
+      let idx=-1;
+      for(let i=0;i<arr.length;i++){ if(!arr[i]&&(!doc||roleAllowed(doc.prefs.level,roles[i]))){idx=i;break;} }
+      if(idx<0) for(let i=0;i<arr.length;i++){ if(!arr[i]){idx=i;break;} }
+      if(idx>=0){ arr[idx]=pr.docId; _workLocks.add(cellKey(d,sh,idx)); }
+    }
+  }
+}
 function autoSchedule(){
   if(isCurrentMonthLocked()){
     const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
@@ -1318,11 +1415,14 @@ function autoSchedule(){
   }
 
   // Apply WORK pre-requests (place into first eligible empty role slot for that shift)
+  // 鐵則：預上班一定要給。排入後鎖定該職位(_workLocks)，後續平衡/清理/性別/挪動皆不得動它。
+  _workLocks=new Set();
   for(const d of dates){
     for(const pr of (state.preRequests[d]||[])){
       if(!pr.type.startsWith('WORK_')) continue;
       const sh=pr.type.replace('WORK_','');
       if(!SHIFTS.includes(sh)) continue;
+      if(isAssignedThatDay(pr.docId,d,newSched)) continue; // 同日已排(避免重複/雙班)
       const arr=newSched[d][sh]; const roles=newSched[d].roles[sh];
       const doc=state.doctors.find(x=>x.id===pr.docId);
       let idx=-1;
@@ -1330,7 +1430,7 @@ function autoSchedule(){
         for(let i=0;i<arr.length;i++){ if(!arr[i]&&roleAllowed(doc.prefs.level,roles[i])){idx=i;break;} }
       }
       if(idx<0) idx=arr.indexOf(null);
-      if(idx>=0) arr[idx]=pr.docId;
+      if(idx>=0){ arr[idx]=pr.docId; _workLocks.add(cellKey(d,sh,idx)); }
     }
   }
 
@@ -1410,9 +1510,16 @@ function autoSchedule(){
     balanceHolidayShifts(newSched, fullSched, dates);
   }
 
+  // 需求2：休假天數已收斂到相鄰兩數；此時把「多放的那一天假」優先給大夜人員。
+  // 純班數守恆，不會使任何人跳出 lo/hi，也不會製造空班，故 balanceOffDays 不會回頭推翻它。
+  assignExtraOffToNight(newSched, fullSched, dates);
+
   // 鐵則：絕對不能空班，優先權高於休假天數平衡。此步驟之後刻意不再重跑
   // balanceOffDays/balanceHolidayShifts，避免把剛連鎖挪動補滿的職位又拉走。
   finalGuaranteeNoEmpty(newSched, fullSched, dates);
+
+  // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
+  enforceWorkPreRequests(newSched, dates);
 
   Object.assign(state.schedule, newSched);
   autoSave();
