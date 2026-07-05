@@ -140,6 +140,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 </head>
 <body>
 
@@ -154,6 +155,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <button id="btn-undo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="undoLast()" disabled title="無可還原操作">↩ 還原</button>
   <button id="btn-redo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="redoLast()" disabled title="無可重做操作">↪ 重做</button>
   <button class="action-btn btn-blue" onclick="exportCSV()">📊 匯出CSV</button>
+  <button class="action-btn" style="background:#1e7145;color:#fff" onclick="exportExcel()">📗 匯出Excel</button>
   <button class="action-btn" style="background:#6a1b9a;color:#fff" onclick="generatePDF()">🖨 生成PDF</button>
   <span id="_autosave_ind" style="font-size:11px;color:#a5d6a7;opacity:0;transition:opacity .4s">✓ 已自動存檔</span>
   <button class="action-btn btn-purple" onclick="openCloudSettings()" style="font-size:11px">☁️ 雲端設定</button>
@@ -2523,6 +2525,123 @@ function exportCSV(){
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download=`天晟護理排班_${state.year}_${state.month+1}.csv`;
   a.click();
+}
+
+// ============================================================
+// EXCEL 匯出 (ExcelJS)：一鍵輸出「月班總表」＋「排班表」兩個分頁，
+// 底色與畫面上的 D/E/N/OFF 顏色一致，方便直接列印或轉發。
+// ============================================================
+function hexToARGB(hex){ return 'FF'+(hex||'#000000').replace('#','').toUpperCase(); }
+const XLSX_FILL={
+  D:{fg:'FFFFF8E1',font:'FFE65100'}, E:{fg:'FFE3F2FD',font:'FF1565C0'},
+  N:{fg:'FFF3E5F5',font:'FF6A1B9A'}, OFF:{fg:'FFFDECEA',font:'FFC0392B'},
+  NA:{fg:'FFE0E0E0',font:'FFAAAAAA'}, HOL_HEAD:{fg:'FFC0392B',font:'FFFFFFFF'}
+};
+function xlsxFillFont(cell,def){
+  cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:def.fg}};
+  cell.font={...(cell.font||{}),color:{argb:def.font},bold:true};
+}
+async function exportExcel(){
+  if(!window.ExcelJS){ showToast('❌ Excel匯出元件載入失敗，請檢查網路連線','warn'); return; }
+  const y=state.year, m=state.month;
+  const dates=monthDates(y,m);
+  const dowNames=['一','二','三','四','五','六','日'];
+  const thinBorder={style:'thin',color:{argb:'FFCCCCCC'}};
+  const allBorders={top:thinBorder,left:thinBorder,bottom:thinBorder,right:thinBorder};
+
+  const wb=new ExcelJS.Workbook();
+  wb.creator='天晟護理排班系統';
+  wb.created=new Date();
+
+  // ---- 分頁1：月班總表 ----
+  const ws1=wb.addWorksheet(`月班總表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',xSplit:1,ySplit:1}]});
+  const header1=['護理師',...dates.map(d=>`${parseInt(d.slice(-2))}(${dowNames[getDOW(d)]})`),'總班數','放假數','假日班數'];
+  const hRow1=ws1.addRow(header1);
+  hRow1.eachCell((cell,colNumber)=>{
+    cell.alignment={horizontal:'center',vertical:'middle'};
+    cell.border=allBorders;
+    cell.font={bold:true};
+    if(colNumber>1&&colNumber<=1+dates.length){
+      const d=dates[colNumber-2];
+      if(isHoliday(d)) xlsxFillFont(cell,XLSX_FILL.HOL_HEAD);
+      else cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}};
+    } else {
+      cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}};
+    }
+  });
+  ws1.getColumn(1).width=14;
+  for(let i=0;i<dates.length;i++) ws1.getColumn(2+i).width=5;
+  ws1.getColumn(2+dates.length).width=8; ws1.getColumn(3+dates.length).width=8; ws1.getColumn(4+dates.length).width=9;
+
+  for(const doc of sortedRoster(y,m)){
+    let total=0, holCount=0, empDays=0;
+    const rowVals=[doc.name+(doc.type==='head'?'(管理)':'')];
+    for(const d of dates){
+      if(doc.type!=='full'){ rowVals.push(''); continue; }
+      if(!isEmployedOnDate(doc.id,d)){ rowVals.push('－'); continue; }
+      empDays++;
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(sh){ total++; if(isHoliday(d)) holCount++; rowVals.push(sh); }
+      else{
+        const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
+        rowVals.push(offReq?'OFF':'');
+      }
+    }
+    const offCount=doc.type==='full'?Math.max(0,empDays-total):'';
+    rowVals.push(doc.type==='full'?total:'', offCount, doc.type==='full'?holCount:'');
+    const row=ws1.addRow(rowVals);
+    row.eachCell((cell,colNumber)=>{
+      cell.alignment={horizontal:'center',vertical:'middle'};
+      cell.border=allBorders;
+      if(colNumber===1){ cell.alignment={horizontal:'left',vertical:'middle'}; return; }
+      if(colNumber>1&&colNumber<=1+dates.length){
+        const v=cell.value;
+        if(v==='D'||v==='E'||v==='N') xlsxFillFont(cell,XLSX_FILL[v]);
+        else if(v==='OFF') xlsxFillFont(cell,XLSX_FILL.OFF);
+        else if(v==='－') xlsxFillFont(cell,XLSX_FILL.NA);
+      } else {
+        cell.font={bold:true};
+      }
+    });
+  }
+
+  // ---- 分頁2：排班表 ----
+  const ws2=wb.addWorksheet(`排班表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',ySplit:1}]});
+  const roleHeader2=['日期','星期','假日'];
+  for(const sh of ['D','E']) for(const r of ROLES[sh]) roleHeader2.push(sh+r);
+  for(const r of ROLES.N) roleHeader2.push('N'+r);
+  const hRow2=ws2.addRow(roleHeader2);
+  hRow2.eachCell(cell=>{ cell.font={bold:true}; cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders; cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}}; });
+  ws2.getColumn(1).width=12; ws2.getColumn(2).width=6; ws2.getColumn(3).width=6;
+  for(let i=4;i<=roleHeader2.length;i++) ws2.getColumn(i).width=10;
+
+  for(const d of dates){
+    const ds=state.schedule[d]||{};
+    const hol=isHoliday(d);
+    const rowVals=[d,dowNames[getDOW(d)],hol?'是':''];
+    const shiftOfCol=[null,null,null];
+    for(const sh of SHIFTS){
+      const arr=ds[sh]||Array(ROLES[sh].length).fill(null);
+      for(const nid of arr){ rowVals.push(nid?getDocName(nid):''); shiftOfCol.push(sh); }
+    }
+    const row=ws2.addRow(rowVals);
+    row.eachCell((cell,colNumber)=>{
+      cell.alignment={horizontal:'center',vertical:'middle'};
+      cell.border=allBorders;
+      if(colNumber===3&&hol) xlsxFillFont(cell,XLSX_FILL.HOL_HEAD);
+      else if(colNumber>3){
+        const sh=shiftOfCol[colNumber-1];
+        if(sh&&cell.value) xlsxFillFont(cell,XLSX_FILL[sh]);
+      }
+    });
+  }
+
+  const buf=await wb.xlsx.writeBuffer();
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
+  a.download=`天晟護理排班_${y}_${m+1}.xlsx`;
+  a.click();
+  showToast('✅ Excel已匯出');
 }
 
 function generatePDF(){
