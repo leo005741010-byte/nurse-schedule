@@ -111,9 +111,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #master-table th.mg-col-active{background:#f9a825!important;color:#3e2723!important;}
 #master-table td.mg-col-active{border-left:2px solid #0d5c4a;border-right:2px solid #0d5c4a;}
 #master-table .mg-glow{box-shadow:inset 0 0 0 2px #f9a825;}
-.mg-note-input{width:100%;max-width:38px;box-sizing:border-box;border:1px dashed #7ec9b5;border-radius:2px;background:#0d5c4a;color:#fff;font-size:7px;font-weight:600;text-align:center;padding:1px 0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.mg-note-input::placeholder{color:#a8d5c8;}
-.mg-note-input:focus{outline:none;border-style:solid;border-color:#f9a825;background:#fff;color:#333;}
+#master-table tr.mg-note-row td{background:#fffde7;}
+#master-table tr.mg-note-row td.nm{background:#f5f5f5;font-weight:700;}
+.mg-note-row-input{width:100%;box-sizing:border-box;border:1px dashed #d0a24c;border-radius:2px;background:transparent;color:#7a5b00;font-size:9px;font-weight:600;text-align:center;padding:3px 1px;}
+.mg-note-row-input::placeholder{color:#c9b98a;}
+.mg-note-row-input:focus{outline:none;border-style:solid;border-color:#f9a825;background:#fff;}
 #master-table td.nm.mg-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
 .alert{padding:7px 12px;border-radius:4px;margin-bottom:7px;font-size:12px;}
 .alert-warn{background:#fff3cd;border:1px solid #ffc107;color:#856404;}
@@ -176,8 +178,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 </div>
 
 <div id="tabs">
-  <div class="tab" onclick="switchTab('master')">🗂 月班總表</div>
-  <div class="tab active" onclick="switchTab('schedule')">📅 排班表</div>
+  <div class="tab active" onclick="switchTab('master')">🗂 月班總表</div>
+  <div class="tab" onclick="switchTab('schedule')">📅 排班表</div>
   <div class="tab" onclick="switchTab('nurses')">👩‍⚕️ 護理師設定</div>
   <div class="tab" onclick="switchTab('prereq')">📝 預假/預班</div>
   <div class="tab" onclick="switchTab('stats')">📈 統計報表</div>
@@ -186,7 +188,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 <div id="content">
 
   <!-- ======= 排班表 ======= -->
-  <div id="tab-schedule" class="tab-pane active">
+  <div id="tab-schedule" class="tab-pane">
     <div id="cal-header">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <span style="font-size:11px">
@@ -217,7 +219,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   </div>
 
   <!-- ======= 月班總表 ======= -->
-  <div id="tab-master" class="tab-pane">
+  <div id="tab-master" class="tab-pane active">
     <div class="stats-wrap">
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
     </div>
@@ -2751,31 +2753,50 @@ function mgSelectDate(dateStr){
 }
 function renderMasterGrid(){
   const y=state.year, m=state.month;
-  const dates=monthDates(y,m);
+  const allDates=monthDates(y,m);
+  // 點選護理師時，日期欄只顯示該人有上班的日期(篩選)，方便一眼看出排班日；
+  // 再點一次(或改點日期)取消篩選、還原顯示全部日期。月合計欄一律以整月為準，不受篩選影響。
+  const dates=_mgSelNurse?(allDates.filter(d=>shiftOfNurseOnDate(_mgSelNurse,d))||[]):allDates;
+  const visibleDates=dates.length?dates:allDates;
   const dowNames=['一','二','三','四','五','六','日'];
-  let thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
+  let thead=`<tr><th class="nm">護理師</th>`+visibleDates.map(d=>{
     const dow=getDOW(d); const wknd=dow>=5||isHoliday(d);
     const colSel=_mgSelDate===d;
     const selNurseWorked=_mgSelNurse&&shiftOfNurseOnDate(_mgSelNurse,d);
     const thClass=['dt',wknd?'wknd':'',colSel?'mg-col-active':'',selNurseWorked?'mg-glow':''].filter(Boolean).join(' ');
-    const note=(state.dayNotes&&state.dayNotes[d])||'';
-    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}<input type="text" class="mg-note-input" placeholder="備註" value="${escAttr(note)}" onclick="event.stopPropagation()" onchange="updateDayNote('${d}',this.value)" title="${note?escAttr(note):'自由備註，如ACLS、評鑑等'}"></th>`;
+    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}<br>${dowNames[dow]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
+
+  // 備註列：獨立一整列、每個日期各一格，比原本擠在日期表頭裡的小輸入框好填寫、好看清楚。
+  const noteCells=visibleDates.map(d=>{
+    const note=(state.dayNotes&&state.dayNotes[d])||'';
+    return `<td class="dt" style="padding:1px"><input type="text" class="mg-note-row-input" placeholder="備註" value="${escAttr(note)}" onchange="updateDayNote('${d}',this.value)" title="${note?escAttr(note):'自由備註，如ACLS、評鑑等'}"></td>`;
+  }).join('');
+  const noteRow=`<tr class="mg-note-row"><td class="nm" style="color:#888">備註</td>${noteCells}<td></td><td></td><td></td><td></td></tr>`;
 
   const rows=sortedRoster(y,m).map(doc=>{
     const rowSel=_mgSelNurse===doc.id;
     const nurseWorkedSelDate=_mgSelDate&&doc.type==='full'&&shiftOfNurseOnDate(doc.id,_mgSelDate);
-    let total=0, holCount=0, empDays=0, hourTotal=0;
-    const cells=dates.map(d=>{
+
+    // 月合計(總班數/放假數/假日班數/總時數)一律以整月計算，不受目前欄位篩選影響。
+    let total=0, holCount=0, empDays=0;
+    if(doc.type==='full'){
+      for(const d of allDates){
+        if(!isEmployedOnDate(doc.id,d)) continue;
+        empDays++;
+        const sh=shiftOfNurseOnDate(doc.id,d);
+        if(sh){ total++; if(isHoliday(d)) holCount++; }
+      }
+    }
+    const hourTotal=doc.type==='full'?calcNurseTotalHours(doc.id,allDates):0;
+
+    const cells=visibleDates.map(d=>{
       const wknd=isHoliday(d);
       const colSel=_mgSelDate===d;
       if(doc.type!=='full') return `<td class="dt ${wknd?'wknd-col':''}${colSel?' mg-col-active':''}"></td>`;
       if(!isEmployedOnDate(doc.id,d)) return `<td class="dt${colSel?' mg-col-active':''}" style="background:#e0e0e0;color:#aaa">－</td>`;
-      empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
-      if(sh){ total++; if(wknd) holCount++; }
-      hourTotal+=hoursOnDate(doc.id,d);
       const offReq=!sh&&(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       const adj=getHourAdjust(doc.id,d);
       const glow=(rowSel&&sh)||(colSel&&sh);
@@ -2788,9 +2809,10 @@ function renderMasterGrid(){
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
     const nmClass=`nm${nurseWorkedSelDate?' mg-glow':''}`;
-    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="點擊反白此護理師"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
+    const nmTitle=rowSel?'再次點擊還原顯示全部日期':'點擊只顯示此人有上班的日期';
+    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
-  document.getElementById('master-tbody').innerHTML=rows;
+  document.getElementById('master-tbody').innerHTML=noteRow+rows;
 }
 // 月班總表手動編輯：
 //   輸入 D/E/N → 指派班別(留空代表OFF)；輸入數字(如6.5、0) → 只調整當天實際時數
@@ -3392,6 +3414,7 @@ window.onload=()=>{
   _prListYear=state.year; _prListMonth=state.month;
   _statsYear=state.year; _statsMonth=state.month;
   renderCalendar();
+  renderMasterGrid();
   renderNurseTable();
   renderPRList();
   renderPRCalGrid();
