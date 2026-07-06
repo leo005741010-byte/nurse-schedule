@@ -2424,8 +2424,10 @@ function _renderDayDraft(){
       </div>`;
     arr.forEach((nid,i)=>{
       const role=roles[i];
+      // 階級不符者不列入清單(除非是目前已指派在這格的人，讓既有的不符狀況仍可見/可改)，
+      // 避免管理者手動選人時誤選到不符階級的人。
       const opts=`<option value=""${!nid?' selected':''}>-- 空缺 --</option>`+
-        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>{
+        state.doctors.filter(n=>n.id===nid||(n.type==='full'&&roleAllowed(n.prefs.level,role))).map(n=>{
           let warn='';
           if(n.type==='full'){
             if(getNurseShiftTypeAtDate(n.id,_dayDraftDate)!==c.shift) warn+=' ⚠非當月班別';
