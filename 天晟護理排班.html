@@ -209,7 +209,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           N<input type="number" id="max-consec-N" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.N=parseInt(this.value)||4;autoSave();">
           <span>天（可自行填選，無上限）</span>
         </div>
-        <span style="font-size:11px;color:#888">N-OFF-D不可出現；同班次不可全為男性；支援規則：D→E、E→D/N、N→E(上月D轉N者於本月第一個N班前可先上D)；休假天數落在4個相鄰數字，資深&gt;大夜&gt;資淺；不可OFF-上1天班-OFF</span>
+        <span style="font-size:11px;color:#888">N-OFF-D不可出現；同班次不可全為男性；支援規則：D→E、E→D/N、N→E(上月D轉N者於本月第一個N班前可先上D)；休假天數落在4個相鄰數字，資深&gt;大夜&gt;資淺；休假最多者必為資深、上最多班者必為資淺；不可OFF-上1天班-OFF</span>
       </div>
       <div id="doc-legend"></div>
     </div>
@@ -1696,6 +1696,56 @@ function enforceMaxOffSenior(newSched, fullSched, dates){
     if(!moved) break;
   }
 }
+// 鐵則：當月上最多班(班數最多，即休假最少)者必須是資淺。若最多班數的人裡混入資深者，
+// 而有資淺者班數更少，就把該資深者的一個班次轉給該資淺者——資深因此少一班(多放假)、
+// 資淺多一班(少放假)，直到「班數最多者皆為資淺」或已無可行移轉。純班數守恆、不製造空班、
+// 不違反鐵則、拒絕製造孤立單班。(資淺若因此升到比原最多更高也可接受——資淺本就該上最多班。)
+// 與 enforceMaxOffSenior 互為鏡像(該函式顧最少班數/最多假的一端須為資深)，兩者方向一致、
+// 互相加強收斂，不會互相牴觸。
+function enforceMaxShiftJunior(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(parts.length<2) return;
+  if(!parts.some(d=>!isSenior(d.id))) return; // 沒有資淺人員就無從滿足，略過
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  const c0=parts.map(d=>calcNurseShiftCount(d.id,newSched));
+  const mn0=Math.min(...c0), mx0=Math.max(...c0);
+  if(mn0===mx0) return; // 全員相同，無所謂最多班數者是誰
+  for(let round=0;round<300;round++){
+    const counts={};
+    for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const mx=Math.max(...parts.map(d=>counts[d.id]));
+    const seniorsAtMax=parts.filter(d=>counts[d.id]===mx&&isSenior(d.id));
+    if(!seniorsAtMax.length) break; // 最多班數者皆資淺，達標
+    // 資淺收方：班數需 <= mx0-1(多接1班後仍不超過帶頂 mx0)，越接近帶頂越優先(較少變動)
+    const juniorTakers=parts.filter(d=>!isSenior(d.id)&&counts[d.id]<=mx0-1).sort((a,b)=>counts[b.id]-counts[a.id]);
+    if(!juniorTakers.length) break;
+    let moved=false;
+    for(const s of seniorsAtMax){
+      if(counts[s.id]!==mx) continue;
+      let done=false;
+      for(const j of juniorTakers){
+        if(done) break;
+        if(counts[j.id]>mx0-1) continue;
+        for(const dt of shuffle([...dates])){
+          const occ=findSlotOccupant(s.id,dt,newSched);
+          if(!occ) continue;
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue;
+          if(isAssignedThatDay(j.id,dt,newSched)) continue;
+          if(!roleAllowed(j.prefs.level,occ.role)) continue;
+          if(moveWouldIsolate(s.id,j.id,dt,newSched)) continue;
+          const arr=newSched[dt][occ.shift];
+          arr[occ.idx]=null;
+          const ok = homeOf(j)===occ.shift
+            ? (canWork(j.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(j.id,dt,occ.shift,occ.role,fullSched))
+            : canWorkSupport(j.id,dt,occ.shift,occ.role,fullSched);
+          if(ok){ arr[occ.idx]=j.id; counts[s.id]--; counts[j.id]++; moved=true; done=true; break; }
+          else arr[occ.idx]=s.id;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
 // 「不在預假限制天數人員」若填了當月休假天數，該數字是「當月休假總天數」的硬性目標(含既有
 // 預假)，不是 leaveAvailRatio 原本的軟性比例調降。例如林思廷填休16天，代表他整個月休假天數
 // 就是16天(不論其中有沒有既有預假)，班數收斂為「在職天數-16」。
@@ -2178,10 +2228,15 @@ function generateScheduleAttempt(y,m,dates){
   // 鐵則：休假最多(班數最少)者必須是資深；若混入資淺者，讓資深接手其休假名額。
   enforceMaxOffSenior(newSched, fullSched, dates);
 
-  // 第二輪掃尾：上面兩步的移轉雖有 moveWouldIsolate 防護，但仍可能殘留先前
-  // 未能消除的孤立單班；再各跑一次(兩者皆不擴大班數帶，近收斂時成本極低)。
+  // 鐵則：上最多班(班數最多/休假最少)者必須是資淺；若混入資深者，讓資淺接手其班次。
+  enforceMaxShiftJunior(newSched, fullSched, dates);
+
+  // 第二輪掃尾：上面幾步的移轉雖有 moveWouldIsolate 防護，但仍可能殘留先前
+  // 未能消除的孤立單班；再各跑一次(皆不擴大班數帶，近收斂時成本極低)。
   fixIsolatedShifts(newSched, fullSched, dates);
   enforceSpreadLimit(newSched, fullSched, dates);
+  enforceMaxOffSenior(newSched, fullSched, dates);
+  enforceMaxShiftJunior(newSched, fullSched, dates);
 
   // 「不在預假限制天數人員」若填了休假天數，收斂其班數至精確目標(在職天數-休假天數)，
   // 放在一般公平性收斂之後執行，避免干擾一般人員的班數收斂過程。
@@ -2206,11 +2261,19 @@ function scheduleQuality(newSched,y,m){
   const dates=monthDates(y,m);
   for(const d of state.doctors){ if(d.type!=='full') continue;
     for(const dt of dates){ if(isIsolatedWorkDay(d.id,dt,newSched)) isolated++; } }
-  let maxOffNotSenior=0;
+  let maxOffNotSenior=0, maxShiftNotJunior=0;
   if(counts.length){
-    const mn=Math.min(...counts);
-    // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
-    maxOffNotSenior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mn&&!isSenior(d.id)).length;
+    const mn=Math.min(...counts), mx=Math.max(...counts);
+    // mn===mx時全員班數相同，「最少/最多班數者」是同一群人，資深/資淺兩條鐵則會直接互相
+    // 矛盾(同一群人不可能同時被要求全資深又全資淺)，此時視為規則不適用(與enforceMaxOffSenior/
+    // enforceMaxShiftJunior的mn0===mx0提早return保持一致)，不計入違反數，避免均分班數(理想
+    // 結果)反而被扣分。
+    if(mn!==mx){
+      // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
+      maxOffNotSenior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mn&&!isSenior(d.id)).length;
+      // 統計「上最多班(班數最多)卻是資深」的人數，越少越好(0＝最多班者皆資淺)
+      maxShiftNotJunior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mx&&isSenior(d.id)).length;
+    }
   }
   // 「不在預假限制天數人員」與其精確休假天數目標的總誤差(絕對值加總)，越小越好(0＝全部精準命中)。
   let longLeaveMiss=0;
@@ -2222,14 +2285,19 @@ function scheduleQuality(newSched,y,m){
     const target=Math.max(0,empDays-leaveDays);
     longLeaveMiss+=Math.abs(calcNurseShiftCount(doc.id,newSched)-target);
   }
-  return {empty,longLeaveMiss,isolated,maxOffNotSenior,spread};
+  // 「休最多假須資深」與「上最多班須資淺」是同等重要的鐵則；在班數全距被壓到很窄(如<=1)
+  // 且資深/資淺人數與該全距的兩端桶位大小不成比例時，兩者可能無法同時100%達成(數學上的
+  // 結構性限制，非程式錯誤)。評分時合併看「兩鐵則違反人數的加總」，不讓其中一項系統性地
+  // 壓過另一項，公平地取兩者總違反數最少的一次嘗試。
+  const seniorityViolations=maxOffNotSenior+maxShiftNotJunior;
+  return {empty,longLeaveMiss,isolated,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
   if(q.empty!==best.empty) return q.empty<best.empty;
   if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
-  if(q.maxOffNotSenior!==best.maxOffNotSenior) return q.maxOffNotSenior<best.maxOffNotSenior;
+  if(q.seniorityViolations!==best.seniorityViolations) return q.seniorityViolations<best.seniorityViolations;
   return q.spread<best.spread;
 }
 const AUTO_SCHEDULE_ATTEMPTS=8;
@@ -2256,8 +2324,9 @@ function autoSchedule(){
     const cand=generateScheduleAttempt(y,m,dates);
     const q=scheduleQuality(cand,y,m);
     if(isQualityBetter(q,bestQ)){ best=cand; bestQ=q; }
-    // 達到理想(零空班、長假天數精準命中、無孤立單班、最多假者為資深、班數全距<=1)即提早停止
-    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.maxOffNotSenior===0&&bestQ.spread<=1) break;
+    // 達到理想(零空班、長假天數精準命中、無孤立單班、最少班者為資深、最多班者為資淺、
+    // 班數全距<=1)即提早停止
+    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.seniorityViolations===0&&bestQ.spread<=1) break;
   }
 
   Object.assign(state.schedule, best);
@@ -2268,6 +2337,8 @@ function autoSchedule(){
     showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最佳解)，維持空班。`,'warn');
   } else if(bestQ.longLeaveMiss>0){
     showToast(`排班完成，但「不在預假限制天數人員」中有人受限於連班上限/孤立單班等鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最接近解)。`,'warn');
+  } else if(bestQ.seniorityViolations>0){
+    showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最接近解)。`,'warn');
   } else {
     showToast('✅ 自動排班完成，已全數排滿！','ok');
   }
