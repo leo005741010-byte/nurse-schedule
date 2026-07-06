@@ -219,6 +219,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 月班總表 ======= -->
   <div id="tab-master" class="tab-pane active">
     <div class="stats-wrap">
+      <div style="margin-bottom:6px">
+        <button class="action-btn" style="background:#6a1b9a;color:#fff;font-size:11px" onclick="clearAllManualLocks()" title="解除本月所有雙擊產生的✋手動鎖定，不影響預假/預班分頁的請求">🔓 解除本月所有手動鎖定</button>
+      </div>
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
     </div>
   </div>
@@ -3376,6 +3379,33 @@ function unlockManualCell(nurseId,dateStr){
   renderMasterGrid();
   renderCalendar();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
+}
+// 一鍵解除本月所有「月班總表手動鎖定」(雙擊格子產生的✋鎖定，id前綴為pr_manual_)；
+// 不影響「預假/預班」分頁建立的真正預假/預班請求(id前綴為pr_但沒有manual)，
+// 避免誤刪護理師實際的請假/預班紀錄。
+function clearAllManualLocks(){
+  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
+  const y=state.year, m=state.month;
+  const dates=monthDates(y,m);
+  let cnt=0;
+  for(const d of dates){
+    const prs=state.preRequests[d];
+    if(!prs) continue;
+    cnt+=prs.filter(pr=>pr.id&&pr.id.startsWith('pr_manual_')).length;
+  }
+  if(!cnt){ showToast('本月沒有手動鎖定的格子','warn'); return; }
+  if(!confirm(`確定要解除本月共 ${cnt} 格的手動鎖定嗎？(不影響預假/預班分頁的請求)`)) return;
+  pushUndo();
+  for(const d of dates){
+    const prs=state.preRequests[d];
+    if(!prs) continue;
+    const kept=prs.filter(pr=>!(pr.id&&pr.id.startsWith('pr_manual_')));
+    if(kept.length) state.preRequests[d]=kept; else delete state.preRequests[d];
+  }
+  autoSave();
+  renderMasterGrid();
+  renderCalendar();
+  showToast(`✅ 已解除本月共 ${cnt} 格手動鎖定`);
 }
 // D12/N12(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D12/N12時當天完全不用
 // 一般班——不只是收斂空缺格，連既有已指派的人都會一併清空(角色格數歸零)，並移除這些人
