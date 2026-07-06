@@ -107,6 +107,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-D8,.mg-N8{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
+.mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
 #master-table tr.mg-row-active{background:#e0f2f1;}
 #master-table tr.mg-row-active td.nm{background:#0d5c4a!important;color:#fff!important;}
 #master-table tr.mg-row-active td.nm .color-dot{box-shadow:0 0 0 1px #fff;}
@@ -2010,8 +2011,9 @@ function enforceWorkPreRequests(newSched, dates){
       const arr=newSched[d][sh]; const roles=newSched[d].roles[sh];
       const doc=state.doctors.find(x=>x.id===pr.docId);
       let idx=-1;
+      // 鐵則：階級不符者絕不可硬塞，即使是保底步驟也一樣——只找角色階級允許的空缺格，
+      // 若沒有這種格子就維持空班，不退而求其次塞進不符階級的格子。
       for(let i=0;i<arr.length;i++){ if(!arr[i]&&(!doc||roleAllowed(doc.prefs.level,roles[i]))){idx=i;break;} }
-      if(idx<0) for(let i=0;i<arr.length;i++){ if(!arr[i]){idx=i;break;} }
       if(idx>=0){ arr[idx]=pr.docId; _workLocks.add(cellKey(d,sh,idx)); }
     }
   }
@@ -2068,10 +2070,12 @@ function generateScheduleAttempt(y,m,dates){
       const arr=newSched[d][sh]; const roles=newSched[d].roles[sh];
       const doc=state.doctors.find(x=>x.id===pr.docId);
       let idx=-1;
+      // 鐵則：階級不符者絕不可硬塞——只找角色階級允許的空缺格；若當下沒有這種格子就先不排，
+      // 交由finalGuaranteeNoEmpty/enforceWorkPreRequests之後再試(屆時可能已有支援格可用)，
+      // 若始終沒有階級允許的格子，寧可維持空班也不違反階級鐵則。
       if(doc){
         for(let i=0;i<arr.length;i++){ if(!arr[i]&&roleAllowed(doc.prefs.level,roles[i])){idx=i;break;} }
       }
-      if(idx<0) idx=arr.indexOf(null);
       if(idx>=0){ arr[idx]=pr.docId; _workLocks.add(cellKey(d,sh,idx)); }
     }
   }
@@ -3007,6 +3011,13 @@ function shiftOfNurseOnDate(nurseId,dateStr){
   for(const sh of SPECIAL_SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
+// 該人在該日、該一般班別(D/E/N)實際擔任的角色(組長/檢傷/...)，供階級不符警示使用。
+function roleOfNurseOnDate(nurseId,dateStr,shift){
+  const ds=state.schedule[dateStr]; if(!ds||!ds.roles) return null;
+  const idx=(ds[shift]||[]).indexOf(nurseId);
+  if(idx<0) return null;
+  return (ds.roles[shift]&&ds.roles[shift][idx])||null;
+}
 // 每日實際時數手動調整(部分請假/整班請休等，與班別指派互相獨立)。
 // 未調整時回傳 null，由呼叫端自行決定預設時數(有班8小時、無班0小時)。
 function getHourAdjust(nurseId,dateStr){
@@ -3099,12 +3110,17 @@ function renderMasterGrid(){
       // 手動鎖定(WORK_D/E/N預班或OFF)以外框+右上角✋標示，與自動排班產生的結果做視覺區分；
       // 雙擊格子可解除鎖定(unlockManualCell)，讓下次自動排班可重新調整這一格。
       const isManual=sh&&SHIFTS.includes(sh)?isManualWorkPin(doc.id,d,sh):(!sh&&offReq);
-      const cellClass=['dt',sh?`mg-${sh}`:(offReq?'mg-OFF':''),wknd?'wknd-col':'',colSel?'mg-col-active':'',glow?'mg-glow':'',isManual?'mg-manual':''].filter(Boolean).join(' ');
+      // 階級不符警示：自動排班鐵則已保證不會發生，但手動輸入(月班總表/日期編輯視窗)未做資格
+      // 檢核，可能不小心排入不符階級的人，故在此格上加紅框+左上角❗提示(僅提示，不會擋輸入)。
+      const roleHere=sh&&SHIFTS.includes(sh)?roleOfNurseOnDate(doc.id,d,sh):null;
+      const roleMismatch=roleHere&&!roleAllowed(doc.prefs.level,roleHere);
+      const cellClass=['dt',sh?`mg-${sh}`:(offReq?'mg-OFF':''),wknd?'wknd-col':'',colSel?'mg-col-active':'',glow?'mg-glow':'',isManual?'mg-manual':'',roleMismatch?'mg-role-warn':''].filter(Boolean).join(' ');
       const manualTitle=isManual?'手動鎖定(自動排班不會更改；雙擊解除鎖定)；':'';
+      const roleWarnTitle=roleMismatch?`⚠ ${doc.name}(${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level})不符合「${roleHere}」的階級要求；`:'';
       return `<td class="${cellClass}" style="padding:0;position:relative">
         <input type="text" maxlength="5" value="${sh||''}" placeholder="${offReq?'OFF':''}"
           style="width:100%;min-width:32px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
-          onchange="updateMasterCell('${doc.id}','${d}',this.value)" ondblclick="unlockManualCell('${doc.id}','${d}')" title="${manualTitle}輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}${isManual?`<span style="position:absolute;top:1px;right:1px;font-size:7px;line-height:1;color:#6a1b9a">✋</span>`:''}
+          onchange="updateMasterCell('${doc.id}','${d}',this.value)" ondblclick="unlockManualCell('${doc.id}','${d}')" title="${roleWarnTitle}${manualTitle}輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}${isManual?`<span style="position:absolute;top:1px;right:1px;font-size:7px;line-height:1;color:#6a1b9a">✋</span>`:''}${roleMismatch?`<span style="position:absolute;top:1px;left:1px;font-size:7px;line-height:1;color:#c0392b">❗</span>`:''}
       </td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
