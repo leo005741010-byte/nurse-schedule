@@ -104,7 +104,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-D{background:#fff8e1;color:#e65100;font-weight:700;}
 .mg-E{background:#e3f2fd;color:#1565c0;font-weight:700;}
 .mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
-.mg-D8,.mg-N8{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
+.mg-D12,.mg-N12{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
 .mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
@@ -604,8 +604,8 @@ function sortedRoster(y,m){
 }
 // 月班總表點選日期篩選時，排序依「該日實際上的班別」(而非整月的當月班別)分組排列，
 // 因跨班別支援的人當天實際上的班可能跟他整月的當月班別不同，若仍照整月分組會讓
-// 同一天同班別的人排序看起來錯亂。順序：D→D8→E→N8→N，組內再依階級 L→T→A2→B。
-const SHIFT_SORT_ORDER={D:0,D8:1,E:2,N8:3,N:4};
+// 同一天同班別的人排序看起來錯亂。順序：D→D12→E→N12→N，組內再依階級 L→T→A2→B。
+const SHIFT_SORT_ORDER={D:0,D12:1,E:2,N12:3,N:4};
 function sortRosterForDate(list,dateStr){
   return [...list].sort((a,b)=>{
     const oa=SHIFT_SORT_ORDER[shiftOfNurseOnDate(a.id,dateStr)]??9;
@@ -811,18 +811,18 @@ function hoursBetween(d1,h1,d2,h2){
 // SHIFT HELPERS
 // ============================================================
 const SHIFTS=['D','E','N'];
-// 特殊12小時班(D8/N8)：手動排列、不參與自動排班，但需讓自動排班的休息時數／連續上班天數
+// 特殊12小時班(D12/N12)：手動排列、不參與自動排班，但需讓自動排班的休息時數／連續上班天數
 // 判斷正確感知這些班次的存在，避免同一人同一天被自動排班重複指派、或排班忽略12小時班
 // 前後應有的休息間隔。SPECIAL_SHIFTS 只用於「忙碌狀態」相關檢查，絕不出現在核心排班迴圈。
-const SPECIAL_SHIFTS=['D8','N8'];
-const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）',D8:'08:00-20:00',N8:'20:00-08:00（次日）'};
+const SPECIAL_SHIFTS=['D12','N12'];
+const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）',D12:'08:00-20:00',N12:'20:00-08:00（次日）'};
 function shiftRange(shift){
   switch(shift){
     case 'D': return {s:8,e:16};
     case 'E': return {s:16,e:24};
     case 'N': return {s:24,e:32};
-    case 'D8': return {s:8,e:20};
-    case 'N8': return {s:20,e:32};
+    case 'D12': return {s:8,e:20};
+    case 'N12': return {s:20,e:32};
   }
 }
 function getShiftStart(shift,date){ const{s}=shiftRange(shift); return s<24?{date,hour:s}:{date:addDays(date,1),hour:s-24}; }
@@ -838,9 +838,9 @@ function ensureDay(dateStr){
       ds[sh]=ds.roles[sh].map((r,i)=>old[i]!==undefined?old[i]:null);
     }
   }
-  // 特殊12小時班(D8/N8)：無固定格數，人力全由管理者手動增減，故不像D/E/N需對齊roles長度。
-  if(!ds.D8) ds.D8=[];
-  if(!ds.N8) ds.N8=[];
+  // 特殊12小時班(D12/N12)：無固定格數，人力全由管理者手動增減，故不像D/E/N需對齊roles長度。
+  if(!ds.D12) ds.D12=[];
+  if(!ds.N12) ds.N12=[];
   return ds;
 }
 function getRoles(dateStr,shift){
@@ -2144,11 +2144,11 @@ function generateScheduleAttempt(y,m,dates){
   for(const d of dates){
     const existing=state.schedule[d]||{};
     const roles=existing.roles||{D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
-    // D8/N8(12小時特殊班)為手動排列、不參與自動排班，故直接沿用既有指派、原樣帶入結果，
+    // D12/N12(12小時特殊班)為手動排列、不參與自動排班，故直接沿用既有指派、原樣帶入結果，
     // 不可被自動排班的產生過程覆蓋或遺失；isAssignedThatDay等忙碌檢查會讀到這裡的資料，
     // 讓一般D/E/N的排班自動避開這些已佔用12小時班的人。
     newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null),
-      D8:[...(existing.D8||[])], N8:[...(existing.N8||[])]};
+      D12:[...(existing.D12||[])], N12:[...(existing.N12||[])]};
   }
   const fullSched = new Proxy(newSched, {
     get(target, key, receiver){
@@ -2487,7 +2487,7 @@ function renderCalendar(){
       cell.appendChild(block);
     }
 
-    // 特殊12小時班(D8/N8)：手動排列，只有當天實際有人才顯示，不佔用空間干擾一般排班檢視。
+    // 特殊12小時班(D12/N12)：手動排列，只有當天實際有人才顯示，不佔用空間干擾一般排班檢視。
     for(const sh of SPECIAL_SHIFTS){
       const arr=ds[sh]||[];
       if(!arr.length) continue;
@@ -2544,7 +2544,7 @@ function openDayModal(dateStr){
   _dayDraft={
     roles:{D:[...ds.roles.D],E:[...ds.roles.E],N:[...ds.roles.N]},
     D:[...ds.D], E:[...ds.E], N:[...ds.N],
-    D8:[...ds.D8], N8:[...ds.N8],
+    D12:[...ds.D12], N12:[...ds.N12],
   };
   const[y,mo,d]=dateStr.split('-').map(Number);
   const dow=['一','二','三','四','五','六','日'][getDOW(dateStr)];
@@ -2582,8 +2582,8 @@ function _renderDayDraft(){
     });
     html+=`</div>`;
   }
-  // 特殊12小時班(D8/N8)：手動排列、不參與自動排班，格數不固定，全部可自由增減。
-  const specialCfg=[{shift:'D8',label:'D8 (12小時特班)'},{shift:'N8',label:'N8 (12小時特班)'}];
+  // 特殊12小時班(D12/N12)：手動排列、不參與自動排班，格數不固定，全部可自由增減。
+  const specialCfg=[{shift:'D12',label:'D12 (12小時特班)'},{shift:'N12',label:'N12 (12小時特班)'}];
   for(const c of specialCfg){
     const arr=ds[c.shift];
     html+=`<div class="day-shift-block" style="border-color:#f9a825">
@@ -2605,7 +2605,7 @@ function _renderDayDraft(){
   if(prs.length) html+=`<div style="margin-top:6px"><strong style="font-size:12px">📝 預假/預班：</strong><br>${prs.map(pr=>`<span class="pr-badge">${getDocName(pr.docId)}: ${prLabel(pr)}${pr.note?' ('+pr.note+')':''}</span> `).join('')}</div>`;
   document.getElementById('day-modal-body').innerHTML=html;
 }
-// 一人同一天不可能同時身兼一般班(D/E/N)與12小時特班(D8/N8)，兩邊互相排斥；
+// 一人同一天不可能同時身兼一般班(D/E/N)與12小時特班(D12/N12)，兩邊互相排斥；
 // 選人時自動把該人從「其餘所有班別」清掉，避免手動編輯時不小心把同一人重複排入。
 function _clearNurseFromOtherSlots(nurseId,keepShift){
   if(!nurseId) return;
@@ -2630,18 +2630,18 @@ function _draftRemoveExtra(shift,idx){
   _dayDraft[shift].splice(idx,1);
   _renderDayDraft();
 }
-// D8/N8與一般班(D/E/N)互斥(同一天只能選一種)：在編輯視窗草稿中即時反映此規則，
-// 讓管理者一加入D8/N8人員就立刻看到一般班區塊清空，不必等按確認才發現既有排班被清掉；
-// 反之若D8/N8被移除到完全沒人，一般班會立刻還原回目前的角色人數設定模板。
+// D12/N12與一般班(D/E/N)互斥(同一天只能選一種)：在編輯視窗草稿中即時反映此規則，
+// 讓管理者一加入D12/N12人員就立刻看到一般班區塊清空，不必等按確認才發現既有排班被清掉；
+// 反之若D12/N12被移除到完全沒人，一般班會立刻還原回目前的角色人數設定模板。
 function _syncDraftExclusivity(){
   const ds=_dayDraft; if(!ds) return;
-  const hasSpecial=(ds.D8&&ds.D8.some(Boolean))||(ds.N8&&ds.N8.some(Boolean));
+  const hasSpecial=(ds.D12&&ds.D12.some(Boolean))||(ds.N12&&ds.N12.some(Boolean));
   for(const sh of SHIFTS){
     if(hasSpecial){
       ds.roles[sh]=[];
       ds[sh]=[];
     } else if(ds.roles[sh].length===0){
-      // 只在「先前被D8/N8清空過」的情況下還原(避免管理者手動刪光一般班格子後被強制補回)
+      // 只在「先前被D12/N12清空過」的情況下還原(避免管理者手動刪光一般班格子後被強制補回)
       const template=getRoleTemplate(sh);
       ds.roles[sh]=[...template];
       ds[sh]=Array(template.length).fill(null);
@@ -2669,9 +2669,9 @@ function confirmDayModal(){
   const ds=ensureDay(_dayDraftDate);
   ds.roles={D:[..._dayDraft.roles.D],E:[..._dayDraft.roles.E],N:[..._dayDraft.roles.N]};
   ds.D=[..._dayDraft.D]; ds.E=[..._dayDraft.E]; ds.N=[..._dayDraft.N];
-  ds.D8=_dayDraft.D8.filter(Boolean); ds.N8=_dayDraft.N8.filter(Boolean);
+  ds.D12=_dayDraft.D12.filter(Boolean); ds.N12=_dayDraft.N12.filter(Boolean);
   const savedDate=_dayDraftDate;
-  syncDayRolesForSpecialShift(savedDate); // 依D8/N8是否存在，收斂/還原當天D/E/N的空缺格數
+  syncDayRolesForSpecialShift(savedDate); // 依D12/N12是否存在，收斂/還原當天D/E/N的空缺格數
   _dayDraft=null; _dayDraftDate=null;
   autoSave();
   closeModal('day-modal');
@@ -3213,7 +3213,7 @@ function setHourAdjust(nurseId,dateStr,hrs){
   if(!state.hourAdjust[dateStr]) state.hourAdjust[dateStr]={};
   state.hourAdjust[dateStr][nurseId]=hrs;
 }
-// 當天實際時數：有手動調整用調整值；否則D/E/N班8小時、D8/N8特殊12小時班為12小時、無班0小時。
+// 當天實際時數：有手動調整用調整值；否則D/E/N班8小時、D12/N12特殊12小時班為12小時、無班0小時。
 function hoursOnDate(nurseId,dateStr){
   const adj=getHourAdjust(nurseId,dateStr);
   if(adj!==null) return adj;
@@ -3353,7 +3353,7 @@ function isManualLocked(nurseId,dateStr){
 // 雙擊月班總表格子：切換鎖定狀態，唯一的鎖定/解除鎖定入口(輸入或刪除班別本身不會鎖定/解鎖，
 // 只會在「已鎖定」的格子上同步更新鎖定內容，詳見 updateMasterCell)。
 // 已鎖定→解除，讓下次自動排班可重新調整；未鎖定→依目前格子顯示的內容鎖定(D/E/N或OFF)。
-// D8/N8為手動特班，本身已不受自動排班影響，不適用此鎖定機制。
+// D12/N12為手動特班，本身已不受自動排班影響，不適用此鎖定機制。
 function unlockManualCell(nurseId,dateStr){
   if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
   pushUndo();
@@ -3367,7 +3367,7 @@ function unlockManualCell(nurseId,dateStr){
   }
   const sh=shiftOfNurseOnDate(nurseId,dateStr);
   if(sh&&SPECIAL_SHIFTS.includes(sh)){
-    showToast('D8/N8特班本身即手動排列，不適用此鎖定','warn');
+    showToast('D12/N12特班本身即手動排列，不適用此鎖定','warn');
     return;
   }
   if(sh&&SHIFTS.includes(sh)) setManualWorkPin(nurseId,dateStr,sh);
@@ -3377,13 +3377,13 @@ function unlockManualCell(nurseId,dateStr){
   renderCalendar();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
 }
-// D8/N8(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D8/N8時當天完全不用
+// D12/N12(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D12/N12時當天完全不用
 // 一般班——不只是收斂空缺格，連既有已指派的人都會一併清空(角色格數歸零)，並移除這些人
 // 在該日的手動鎖定(WORK_D/E/N)，避免殘留鎖定造成下次自動排班衝突或誤判。
-// 若當天已無D8/N8，則將格數還原回目前的角色人數設定模板(補回一般班的格子)。
+// 若當天已無D12/N12，則將格數還原回目前的角色人數設定模板(補回一般班的格子)。
 function syncDayRolesForSpecialShift(dateStr){
   const ds=state.schedule[dateStr]; if(!ds||!ds.roles) return;
-  const hasSpecial=(ds.D8&&ds.D8.length>0)||(ds.N8&&ds.N8.length>0);
+  const hasSpecial=(ds.D12&&ds.D12.length>0)||(ds.N12&&ds.N12.length>0);
   for(const sh of SHIFTS){
     if(!ds.roles[sh]) continue;
     if(hasSpecial){
@@ -3401,13 +3401,13 @@ function syncDayRolesForSpecialShift(dateStr){
   }
 }
 // 該日是否仍有一般班(D/E/N)空缺，供月班總表在日期上直接顯示提示(不必等自動排班的toast或
-// 統計報表才看得到)。有D8/N8的12小時特班日因角色格數已收斂為僅剩已指派人數，不會有空缺。
+// 統計報表才看得到)。有D12/N12的12小時特班日因角色格數已收斂為僅剩已指派人數，不會有空缺。
 function dateHasEmptySlot(dateStr){
   const ds=state.schedule[dateStr]; if(!ds) return false;
   return SHIFTS.some(sh=>(ds[sh]||[]).some(x=>!x));
 }
 // 月班總表手動編輯：
-//   輸入 D/E/N → 指派一般班別(留空代表OFF)；輸入 D8/N8 → 指派12小時特殊班(手動排列，
+//   輸入 D/E/N → 指派一般班別(留空代表OFF)；輸入 D12/N12 → 指派12小時特殊班(手動排列，
 //   不參與自動排班)；輸入數字(如6.5、0) → 只調整當天實際時數(用於部分請假被批修/整班請休
 //   等情境)，不影響班別指派本身。
 // 屬於手動指派，不做資格檢核(角色階級/連班天數等)，與日期格子編輯(day-modal)的行為一致。
@@ -3426,7 +3426,7 @@ function updateMasterCell(nurseId,dateStr,rawVal){
 
   const val=raw.toUpperCase();
   if(val&&!SHIFTS.includes(val)&&!SPECIAL_SHIFTS.includes(val)){
-    showToast('請輸入 D、E、N、D8、N8、時數數字(如6.5)，或留空(代表OFF)','warn');
+    showToast('請輸入 D、E、N、D12、N12、時數數字(如6.5)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
   }
@@ -3454,13 +3454,13 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     arr[idx]=nurseId;
     if(wasLocked) setManualWorkPin(nurseId,dateStr,val);
   } else if(val&&SPECIAL_SHIFTS.includes(val)){
-    ds[val].push(nurseId); // D8/N8無固定格數，直接附加(手動排列)
+    ds[val].push(nurseId); // D12/N12無固定格數，直接附加(手動排列)
     if(wasLocked) clearManualPin(nurseId,dateStr); // 改為特班，一般班鎖定不再適用
   } else {
     if(wasLocked) setManualOffPin(nurseId,dateStr);
   }
-  syncDayRolesForSpecialShift(dateStr); // 當天若有D8/N8(12小時特班)，一般班的空缺格數收斂/還原
-  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D8/N8 12h、無班0h)
+  syncDayRolesForSpecialShift(dateStr); // 當天若有D12/N12(12小時特班)，一般班的空缺格數收斂/還原
+  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D12/N12 12h、無班0h)
   autoSave();
   renderMasterGrid();
   renderCalendar();
@@ -3583,7 +3583,15 @@ function migrateDoctorPrefs(doctors){
 }
 function applyData(d){
   if(d.doctors) state.doctors=migrateDoctorPrefs(d.doctors);
-  if(d.schedule) state.schedule=d.schedule;
+  if(d.schedule){
+    state.schedule=d.schedule;
+    // 舊資料相容：D8/N8 代號已改名為 D12/N12(同樣是08:00-20:00/20:00-08:00的12小時特班)，
+    // 載入時把舊鍵名搬到新鍵名，避免先前已排的12小時特班資料消失。
+    for(const ds of Object.values(state.schedule)){
+      if(ds.D8){ ds.D12=[...(ds.D12||[]),...ds.D8]; delete ds.D8; }
+      if(ds.N8){ ds.N12=[...(ds.N12||[]),...ds.N8]; delete ds.N8; }
+    }
+  }
   state.hourAdjust=d.hourAdjust||{};
   state.dayNotes=d.dayNotes||{};
   state.preRequests=d.preRequests||{};
@@ -3602,7 +3610,7 @@ function applyData(d){
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
-  // 修正舊資料可能殘留的「D8/N8與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
+  // 修正舊資料可能殘留的「D12/N12與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
   // 之前存的資料可能兩種班別同一天並存)：載入時全月掃過一次，讓所有日期符合最新規則。
   for(const dateStr of Object.keys(state.schedule)) syncDayRolesForSpecialShift(dateStr);
 }
