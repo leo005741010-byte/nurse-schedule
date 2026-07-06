@@ -272,7 +272,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           <label style="font-size:12px;font-weight:700;color:#555;padding-top:3px">不在預假限制天數人員：</label>
           <div id="long-leave-list" style="display:flex;flex-wrap:wrap;gap:6px;flex:1"></div>
         </div>
-        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數，調降其自動排班公平性目標(不建立實際OFF日期)</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數，這是「當月休假總天數」的精確目標(已包含既有預假，例如填16天代表整月休假就是16天)，自動排班會把班數收斂到此目標，不建立實際OFF日期</div>
       </div>
       <h3 style="margin-bottom:8px">新增預假/預班</h3>
       <div class="pr-form">
@@ -1695,6 +1695,107 @@ function enforceMaxOffSenior(newSched, fullSched, dates){
     if(!moved) break;
   }
 }
+// 「不在預假限制天數人員」若填了當月休假天數，該數字是「當月休假總天數」的硬性目標(含既有
+// 預假)，不是 leaveAvailRatio 原本的軟性比例調降。例如林思廷填休16天，代表他整個月休假天數
+// 就是16天(不論其中有沒有既有預假)，班數收斂為「在職天數-16」。
+// 這些人本來就不列入 isFullMonthParticipant 的公平性分配池(見該函式)，所以需要獨立一輪
+// 收斂：班數過多就把非鎖定班次轉給其他適任者；班數不足則優先填補空缺，其次向他人要一班。
+// 放在其餘平衡步驟之後執行(此時大盤已收斂)，僅做1對1轉調，不製造空班、尊重所有鐵則，
+// 拒絕製造孤立單班；因會與一般人員互相轉調，可能些微影響一般人員的班數全距，屬必要取捨。
+function enforceLongLeaveExactDays(newSched, fullSched, dates){
+  const y=state.year, m=state.month;
+  const longLeaveNurses=state.doctors.filter(d=>d.type==='full'&&isLongLeaveExempt(d.id,y,m)&&getNurseLongLeaveDays(d.id,y,m)>0);
+  if(!longLeaveNurses.length) return;
+  const allParts=state.doctors.filter(d=>d.type==='full');
+  const homeOf=d=>getNurseShiftType(d.id,y,m);
+  for(const nurse of longLeaveNurses){
+    let empDays=0;
+    for(const d of dates) if(isEmployedOnDate(nurse.id,d)) empDays++;
+    const target=Math.max(0,empDays-getNurseLongLeaveDays(nurse.id,y,m));
+    for(let round=0;round<200;round++){
+      const cur=calcNurseShiftCount(nurse.id,newSched);
+      if(cur===target) break;
+      let moved=false;
+      if(cur>target){
+        // 班數過多：挑一個非鎖定的既有班次，轉給其他適任者承接
+        outerGive:
+        for(const dt of shuffle([...dates])){
+          const occ=findSlotOccupant(nurse.id,dt,newSched);
+          if(!occ) continue;
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue;
+          const recips=shuffle(allParts.filter(r=>r.id!==nurse.id&&!isAssignedThatDay(r.id,dt,newSched)&&roleAllowed(r.prefs.level,occ.role)));
+          for(const r of recips){
+            if(moveWouldIsolate(nurse.id,r.id,dt,newSched)) continue;
+            const arr=newSched[dt][occ.shift];
+            arr[occ.idx]=null;
+            const ok=homeOf(r)===occ.shift
+              ?(canWork(r.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(r.id,dt,occ.shift,occ.role,fullSched))
+              :canWorkSupport(r.id,dt,occ.shift,occ.role,fullSched);
+            if(ok){ arr[occ.idx]=r.id; moved=true; break outerGive; }
+            arr[occ.idx]=nurse.id;
+          }
+        }
+      } else {
+        // 班數不足：優先填補當月仍空缺的職位；沒有空缺則向他人要一個非鎖定班次(1對1轉調)。
+        // 會跳過使nurse自己「孤立」的日期(checkIsolation=true)。
+        moved=placeNurseOneDay(nurse,newSched,fullSched,dates,homeOf(nurse),true)!==null;
+        if(!moved){
+          // 單日新增(延伸既有排班)受連續上限卡關時，改嘗試「相鄰兩天一起新增」——這兩天
+          // 互為彼此的鄰居、天生不孤立，是全新的一段班(不延伸既有排班)，較不受連續上限卡關。
+          // 填第一天時暫不檢查孤立(checkIsolation=false，此時第二天還沒填，勢必"看似孤立")，
+          // 兩天都成功指派後，孤立問題自然因兩天互為鄰居而解決；若第二天失敗則還原第一天。
+          outerPair:
+          for(const dt of shuffle([...dates])){
+            const dt2=addDays(dt,1);
+            if(!dates.includes(dt2)) continue;
+            if(isAssignedThatDay(nurse.id,dt,newSched)||isAssignedThatDay(nurse.id,dt2,newSched)) continue;
+            const r1=placeNurseOneDay(nurse,newSched,fullSched,[dt],homeOf(nurse),false);
+            if(!r1) continue;
+            const r2=placeNurseOneDay(nurse,newSched,fullSched,[dt2],homeOf(nurse),false);
+            if(r2){ moved=true; break outerPair; }
+            // 第二天失敗，還原第一天
+            newSched[dt][r1.shift][r1.idx]=r1.stolenId;
+          }
+        }
+      }
+      if(!moved) break;
+    }
+  }
+}
+// 幫 nurse 在 candidateDates 中找一天可行的職位並直接指派(已就地修改 newSched)；
+// 優先填補空缺，其次向他人要一個非鎖定班次(對方另尋去處)。checkIsolation=true時，
+// 會跳過任何使nurse自己變成「孤立單班」的日期(用於延伸既有排班的單日新增)；
+// =false時略過此檢查(用於相鄰兩天一起新增，見呼叫端說明)。
+// 成功回傳 {date,shift,idx,stolenId}(stolenId為null代表填的是空缺，非搶班)，失敗回傳null。
+function placeNurseOneDay(nurse,newSched,fullSched,candidateDates,shift,checkIsolation){
+  const selfWouldIsolate=dt=>!isAssignedThatDay(nurse.id,addDays(dt,-1),newSched)&&!isAssignedThatDay(nurse.id,addDays(dt,1),newSched);
+  for(const dt of candidateDates){
+    if(isAssignedThatDay(nurse.id,dt,newSched)) continue;
+    if(checkIsolation&&selfWouldIsolate(dt)) continue;
+    const arr=newSched[dt][shift]; const roles=newSched[dt].roles[shift];
+    for(let i=0;i<arr.length;i++){
+      if(arr[i]) continue;
+      const ok=canWork(nurse.id,dt,shift,roles[i],fullSched)||canWorkForce(nurse.id,dt,shift,roles[i],fullSched);
+      if(ok){ arr[i]=nurse.id; return {date:dt,shift,idx:i,stolenId:null}; }
+    }
+    for(let i=0;i<arr.length;i++){
+      const occId=arr[i]; if(!occId) continue;
+      if(isWorkLocked(dt,shift,i)) continue;
+      if(!roleAllowed(nurse.prefs.level,roles[i])) continue;
+      // checkIsolation=true時用moveWouldIsolate完整檢查(含nurse自己)；=false時(相鄰兩天
+      // 新增中的第一天)只檢查「原班主人(occId)」是否會孤立，不檢查nurse(此時第二天還沒填，
+      // 勢必"看似孤立"，但兩天都成功後會因互為鄰居而自然解決)。
+      const giverIsolate=isAssignedThatDay(occId,addDays(dt,-1),newSched)&&!isAssignedThatDay(occId,addDays(dt,-2),newSched)
+        ||isAssignedThatDay(occId,addDays(dt,1),newSched)&&!isAssignedThatDay(occId,addDays(dt,2),newSched);
+      if(checkIsolation?moveWouldIsolate(occId,nurse.id,dt,newSched):giverIsolate) continue;
+      arr[i]=null;
+      const ok=canWork(nurse.id,dt,shift,roles[i],fullSched)||canWorkForce(nurse.id,dt,shift,roles[i],fullSched);
+      if(ok){ arr[i]=nurse.id; return {date:dt,shift,idx:i,stolenId:occId}; }
+      arr[i]=occId;
+    }
+  }
+  return null;
+}
 // 消除孤立單班(OFF-上班-OFF，只上1天)。作法：把孤立那天的班次，轉給「前一天或後一天有上班」
 // 的人承接——接手者因此把班接成連續(不孤立)，孤立者則少掉那個落單的班(該天改休)。
 // 純轉調既有職位、不製造空班、尊重所有鐵則，且移轉不得使任何人跳出合法班數帶[mn0,mx0]
@@ -2078,6 +2179,10 @@ function generateScheduleAttempt(y,m,dates){
   fixIsolatedShifts(newSched, fullSched, dates);
   enforceSpreadLimit(newSched, fullSched, dates);
 
+  // 「不在預假限制天數人員」若填了休假天數，收斂其班數至精確目標(在職天數-休假天數)，
+  // 放在一般公平性收斂之後執行，避免干擾一般人員的班數收斂過程。
+  enforceLongLeaveExactDays(newSched, fullSched, dates);
+
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
@@ -2103,11 +2208,22 @@ function scheduleQuality(newSched,y,m){
     // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
     maxOffNotSenior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mn&&!isSenior(d.id)).length;
   }
-  return {empty,isolated,maxOffNotSenior,spread};
+  // 「不在預假限制天數人員」與其精確休假天數目標的總誤差(絕對值加總)，越小越好(0＝全部精準命中)。
+  let longLeaveMiss=0;
+  for(const doc of state.doctors){
+    if(doc.type!=='full'||!isLongLeaveExempt(doc.id,y,m)) continue;
+    const leaveDays=getNurseLongLeaveDays(doc.id,y,m);
+    if(!leaveDays) continue;
+    let empDays=0; for(const d of dates) if(isEmployedOnDate(doc.id,d)) empDays++;
+    const target=Math.max(0,empDays-leaveDays);
+    longLeaveMiss+=Math.abs(calcNurseShiftCount(doc.id,newSched)-target);
+  }
+  return {empty,longLeaveMiss,isolated,maxOffNotSenior,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
   if(q.empty!==best.empty) return q.empty<best.empty;
+  if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
   if(q.maxOffNotSenior!==best.maxOffNotSenior) return q.maxOffNotSenior<best.maxOffNotSenior;
   return q.spread<best.spread;
@@ -2136,15 +2252,21 @@ function autoSchedule(){
     const cand=generateScheduleAttempt(y,m,dates);
     const q=scheduleQuality(cand,y,m);
     if(isQualityBetter(q,bestQ)){ best=cand; bestQ=q; }
-    // 達到理想(零空班、無孤立單班、最多假者為資深、班數全距<=1)即提早停止
-    if(bestQ.empty===0&&bestQ.isolated===0&&bestQ.maxOffNotSenior===0&&bestQ.spread<=1) break;
+    // 達到理想(零空班、長假天數精準命中、無孤立單班、最多假者為資深、班數全距<=1)即提早停止
+    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.maxOffNotSenior===0&&bestQ.spread<=1) break;
   }
 
   Object.assign(state.schedule, best);
   autoSave();
   renderCalendar();
   switchTab('master');
-  showToast(bestQ.empty>0?`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最佳解)，維持空班。`:'✅ 自動排班完成，已全數排滿！',bestQ.empty>0?'warn':'ok');
+  if(bestQ.empty>0){
+    showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最佳解)，維持空班。`,'warn');
+  } else if(bestQ.longLeaveMiss>0){
+    showToast(`排班完成，但「不在預假限制天數人員」中有人受限於連班上限/孤立單班等鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最接近解)。`,'warn');
+  } else {
+    showToast('✅ 自動排班完成，已全數排滿！','ok');
+  }
 }
 
 // ============================================================
@@ -3019,18 +3141,36 @@ function setManualOffPin(nurseId,dateStr){
 function isManualWorkPin(nurseId,dateStr,shift){
   return (state.preRequests[dateStr]||[]).some(pr=>pr.docId===nurseId&&pr.type==='WORK_'+shift);
 }
-// 雙擊月班總表格子：解除該人於該日的手動鎖定(WORK_D/E/N或OFF皆可)，讓下次自動排班
-// 可以重新調整這一格；解鎖後畫面上的班別文字暫時不變，實際結果要等下次按「自動排班」才更新。
+// 該人於該日是否已手動鎖定(WORK_D/E/N或OFF任一種)。
+function isManualLocked(nurseId,dateStr){
+  return (state.preRequests[dateStr]||[]).some(pr=>pr.docId===nurseId&&(pr.type.startsWith('WORK_')||pr.type==='OFF'));
+}
+// 雙擊月班總表格子：切換鎖定狀態，唯一的鎖定/解除鎖定入口(輸入或刪除班別本身不會鎖定/解鎖，
+// 只會在「已鎖定」的格子上同步更新鎖定內容，詳見 updateMasterCell)。
+// 已鎖定→解除，讓下次自動排班可重新調整；未鎖定→依目前格子顯示的內容鎖定(D/E/N或OFF)。
+// D8/N8為手動特班，本身已不受自動排班影響，不適用此鎖定機制。
 function unlockManualCell(nurseId,dateStr){
   if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
-  const had=(state.preRequests[dateStr]||[]).some(pr=>pr.docId===nurseId&&(pr.type.startsWith('WORK_')||pr.type==='OFF'));
-  if(!had) return;
   pushUndo();
-  clearManualPin(nurseId,dateStr);
+  if(isManualLocked(nurseId,dateStr)){
+    clearManualPin(nurseId,dateStr);
+    autoSave();
+    renderMasterGrid();
+    renderCalendar();
+    showToast(`✅ 已解除手動鎖定，下次自動排班可調整此格`);
+    return;
+  }
+  const sh=shiftOfNurseOnDate(nurseId,dateStr);
+  if(sh&&SPECIAL_SHIFTS.includes(sh)){
+    showToast('D8/N8特班本身即手動排列，不適用此鎖定','warn');
+    return;
+  }
+  if(sh&&SHIFTS.includes(sh)) setManualWorkPin(nurseId,dateStr,sh);
+  else setManualOffPin(nurseId,dateStr);
   autoSave();
   renderMasterGrid();
   renderCalendar();
-  showToast(`✅ 已解除手動鎖定，下次自動排班可調整此格`);
+  showToast(`🔒 已鎖定此格，自動排班不會更改`);
 }
 // 當天若有D8/N8(12小時特殊班)，代表當天不是3班制：一般班(D/E/N)未指派的空缺格收斂消除，
 // 避免月班總表/排班表出現不必要的「空缺」警示；已指派的人維持不動(不自動清除既有排班)。
@@ -3085,6 +3225,9 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     renderMasterGrid();
     return;
   }
+  // 鎖定/解除鎖定唯一入口是雙擊(unlockManualCell)；這裡輸入/刪除本身「不會」新增鎖定，
+  // 但若這一格「原本就已鎖定」，則維持鎖定並同步更新為新輸入的內容，避免鎖定內容與畫面顯示不一致。
+  const wasLocked=isManualLocked(nurseId,dateStr);
   pushUndo();
   const ds=ensureDay(dateStr);
   for(const sh of SHIFTS){
@@ -3104,15 +3247,12 @@ function updateMasterCell(nurseId,dateStr,rawVal){
       idx=arr.length-1;
     }
     arr[idx]=nurseId;
-    // 月班總表手動輸入的一般班別視同「預班」固定下來，之後按自動排班不會被覆蓋/搬動，
-    // 並讓月班總表可依此標示「這是手動輸入」(setManualWorkPin 見下方定義)。
-    setManualWorkPin(nurseId,dateStr,val);
+    if(wasLocked) setManualWorkPin(nurseId,dateStr,val);
   } else if(val&&SPECIAL_SHIFTS.includes(val)){
     ds[val].push(nurseId); // D8/N8無固定格數，直接附加(手動排列)
-    clearManualPin(nurseId,dateStr); // D8/N8本身即手動、不經WORK_/OFF鎖定機制
+    if(wasLocked) clearManualPin(nurseId,dateStr); // 改為特班，一般班鎖定不再適用
   } else {
-    // 手動把班別刪掉(留空)也視同手動決定，鎖定為OFF，避免自動排班又把這人排回來。
-    setManualOffPin(nurseId,dateStr);
+    if(wasLocked) setManualOffPin(nurseId,dateStr);
   }
   syncDayRolesForSpecialShift(dateStr); // 當天若有D8/N8(12小時特班)，一般班的空缺格數收斂/還原
   setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D8/N8 12h、無班0h)
