@@ -1729,7 +1729,10 @@ function enforceMaxOffSenior(newSched, fullSched, dates){
 // 不違反鐵則、拒絕製造孤立單班。(資淺若因此升到比原最多更高也可接受——資淺本就該上最多班。)
 // 與 enforceMaxOffSenior 互為鏡像(該函式顧最少班數/最多假的一端須為資深)，兩者方向一致、
 // 互相加強收斂，不會互相牴觸。
-function enforceMaxShiftJunior(newSched, fullSched, dates){
+// loosen(預設0)：允許資淺收方的班數帶上限往上放寬 loosen 級(mx0-1+loosen)，用於「資深仍卡在
+// 最多班位置、但所有資淺都已在帶頂而無法承接」的僵局——放寬後資淺可多接、把資深擠離最多班位。
+// 為守住全距<=3 的鐵則，收方接班後與當下最少班數者的差距仍硬性限制在 <=3。
+function enforceMaxShiftJunior(newSched, fullSched, dates, loosen=0){
   const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
   if(parts.length<2) return;
   if(!parts.some(d=>!isSenior(d.id))) return; // 沒有資淺人員就無從滿足，略過
@@ -1737,14 +1740,16 @@ function enforceMaxShiftJunior(newSched, fullSched, dates){
   const c0=parts.map(d=>calcNurseShiftCount(d.id,newSched));
   const mn0=Math.min(...c0), mx0=Math.max(...c0);
   if(mn0===mx0) return; // 全員相同，無所謂最多班數者是誰
+  const takerCap=mx0-1+loosen; // 資淺收方接班前允許的班數上限
   for(let round=0;round<300;round++){
     const counts={};
     for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    const gmin=Math.min(...parts.map(d=>counts[d.id])); // 守住全距<=3用
     const mx=Math.max(...parts.map(d=>counts[d.id]));
     const seniorsAtMax=parts.filter(d=>counts[d.id]===mx&&isSenior(d.id));
     if(!seniorsAtMax.length) break; // 最多班數者皆資淺，達標
-    // 資淺收方：班數需 <= mx0-1(多接1班後仍不超過帶頂 mx0)，越接近帶頂越優先(較少變動)
-    const juniorTakers=parts.filter(d=>!isSenior(d.id)&&counts[d.id]<=mx0-1).sort((a,b)=>counts[b.id]-counts[a.id]);
+    // 資淺收方：班數需 <= takerCap(多接1班後不超過放寬後的帶頂)，越接近帶頂越優先(較少變動)
+    const juniorTakers=parts.filter(d=>!isSenior(d.id)&&counts[d.id]<=takerCap).sort((a,b)=>counts[b.id]-counts[a.id]);
     if(!juniorTakers.length) break;
     let moved=false;
     for(const s of seniorsAtMax){
@@ -1752,7 +1757,8 @@ function enforceMaxShiftJunior(newSched, fullSched, dates){
       let done=false;
       for(const j of juniorTakers){
         if(done) break;
-        if(counts[j.id]>mx0-1) continue;
+        if(counts[j.id]>takerCap) continue;
+        if(counts[j.id]+1-gmin>3) continue; // 收方接班後全距不得超過3(鐵則)
         for(const dt of shuffle([...dates])){
           const occ=findSlotOccupant(s.id,dt,newSched);
           if(!occ) continue;
@@ -2361,6 +2367,11 @@ function generateScheduleAttempt(y,m,dates){
   // 消掉孤立單班；此後不再跑會重新收緊全距的步驟，避免又把孤立單班救回來。
   fixIsolatedShifts(newSched, fullSched, dates, 1);
 
+  // 最終年資保底(放在最後、連孤立單班處理之後，避免被後續步驟又把資深推回最多班位置)：
+  // 使用者最在意「上最多班的絕不可以是資深」。允許放寬帶頂1級(全距仍硬性<=3)讓資淺多接，
+  // 把仍卡在最多班的資深擠離該位置。因帶 moveWouldIsolate 防護，不會製造新的孤立單班。
+  enforceMaxShiftJunior(newSched, fullSched, dates, 1);
+
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
@@ -2424,13 +2435,17 @@ function isQualityBetter(q,best){
   if(q.empty!==best.empty) return q.empty<best.empty;
   if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
-  if(q.seniorityViolations!==best.seniorityViolations) return q.seniorityViolations<best.seniorityViolations;
-  // 兩端鐵則相同時，再比整體「資深多假、資淺少假」的完整度(顛倒配對越少越好)，
-  // 排在班數全距之前——使用者明確要求優先讓資深假多、資淺假少。
+  // 使用者最在意的「至少」硬底線：當月上最多班(放假最少)者絕不可以是資深。獨立成最高優先的
+  // 年資判準(不再與 maxOffNotSenior 加總後比較)，避免「有資深上最多班但資淺沒放最多假」的排法
+  // 因總違反數較小而被誤選。務必先把這一項壓到最低，其它年資考量才往後排。
+  if(q.maxShiftNotJunior!==best.maxShiftNotJunior) return q.maxShiftNotJunior<best.maxShiftNotJunior;
+  // 其次：放最多假者應為資深(maxOffNotSenior 越少越好)。
+  if(q.maxOffNotSenior!==best.maxOffNotSenior) return q.maxOffNotSenior<best.maxOffNotSenior;
+  // 再比整體「資深多假、資淺少假」的完整度(顛倒配對越少越好)，排在班數全距之前。
   if(q.seniorityInversions!==best.seniorityInversions) return q.seniorityInversions<best.seniorityInversions;
   return q.spread<best.spread;
 }
-const AUTO_SCHEDULE_ATTEMPTS=8;
+const AUTO_SCHEDULE_ATTEMPTS=16;
 function autoSchedule(){
   if(isCurrentMonthLocked()){
     const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
