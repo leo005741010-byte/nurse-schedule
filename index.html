@@ -602,6 +602,18 @@ function sortedRoster(y,m){
   groups.D.sort(byLevel); groups.E.sort(byLevel); groups.N.sort(byLevel); groups.other.sort(byLevel);
   return [...head,...groups.D,...groups.E,...groups.N,...groups.other,...support.sort(byLevel)];
 }
+// 月班總表點選日期篩選時，排序依「該日實際上的班別」(而非整月的當月班別)分組排列，
+// 因跨班別支援的人當天實際上的班可能跟他整月的當月班別不同，若仍照整月分組會讓
+// 同一天同班別的人排序看起來錯亂。順序：D→D8→E→N8→N，組內再依階級 L→T→A2→B。
+const SHIFT_SORT_ORDER={D:0,D8:1,E:2,N8:3,N:4};
+function sortRosterForDate(list,dateStr){
+  return [...list].sort((a,b)=>{
+    const oa=SHIFT_SORT_ORDER[shiftOfNurseOnDate(a.id,dateStr)]??9;
+    const ob=SHIFT_SORT_ORDER[shiftOfNurseOnDate(b.id,dateStr)]??9;
+    if(oa!==ob) return oa-ob;
+    return (LEVEL_ORDER[a.prefs&&a.prefs.level]??9)-(LEVEL_ORDER[b.prefs&&b.prefs.level]??9);
+  });
+}
 let state = {
   year: new Date().getFullYear(),
   month: new Date().getMonth(),
@@ -3252,7 +3264,7 @@ function renderMasterGrid(){
   // 點選日期時，人名列只顯示該日有上班的人(篩選)，方便一眼看出當天在班名單；
   // 再點一次(或改點護理師)取消篩選、還原顯示全部人員。
   const roster=sortedRoster(y,m);
-  const visibleRoster=_mgSelDate?roster.filter(doc=>shiftOfNurseOnDate(doc.id,_mgSelDate)):roster;
+  const visibleRoster=_mgSelDate?sortRosterForDate(roster.filter(doc=>shiftOfNurseOnDate(doc.id,_mgSelDate)),_mgSelDate):roster;
   const finalRoster=visibleRoster.length?visibleRoster:roster;
   const rows=finalRoster.map(doc=>{
     const rowSel=_mgSelNurse===doc.id;
