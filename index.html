@@ -2618,9 +2618,28 @@ function _draftRemoveExtra(shift,idx){
   _dayDraft[shift].splice(idx,1);
   _renderDayDraft();
 }
+// D8/N8與一般班(D/E/N)互斥(同一天只能選一種)：在編輯視窗草稿中即時反映此規則，
+// 讓管理者一加入D8/N8人員就立刻看到一般班區塊清空，不必等按確認才發現既有排班被清掉；
+// 反之若D8/N8被移除到完全沒人，一般班會立刻還原回目前的角色人數設定模板。
+function _syncDraftExclusivity(){
+  const ds=_dayDraft; if(!ds) return;
+  const hasSpecial=(ds.D8&&ds.D8.some(Boolean))||(ds.N8&&ds.N8.some(Boolean));
+  for(const sh of SHIFTS){
+    if(hasSpecial){
+      ds.roles[sh]=[];
+      ds[sh]=[];
+    } else if(ds.roles[sh].length===0){
+      // 只在「先前被D8/N8清空過」的情況下還原(避免管理者手動刪光一般班格子後被強制補回)
+      const template=getRoleTemplate(sh);
+      ds.roles[sh]=[...template];
+      ds[sh]=Array(template.length).fill(null);
+    }
+  }
+}
 function _draftSpecialSlot(shift,idx,val){
   _dayDraft[shift][idx]=val||null;
   _clearNurseFromOtherSlots(val,shift);
+  _syncDraftExclusivity();
   _renderDayDraft();
 }
 function _draftAddSpecial(shift){
@@ -2629,6 +2648,7 @@ function _draftAddSpecial(shift){
 }
 function _draftRemoveSpecial(shift,idx){
   _dayDraft[shift].splice(idx,1);
+  _syncDraftExclusivity();
   _renderDayDraft();
 }
 function confirmDayModal(){
@@ -3345,19 +3365,19 @@ function unlockManualCell(nurseId,dateStr){
   renderCalendar();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
 }
-// 當天若有D8/N8(12小時特殊班)，代表當天不是3班制：一般班(D/E/N)未指派的空缺格收斂消除，
-// 避免月班總表/排班表出現不必要的「空缺」警示；已指派的人維持不動(不自動清除既有排班)。
-// 若當天已無D8/N8，則將格數還原回目前的角色人數設定模板(補回被收斂掉的空格)。
+// D8/N8(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D8/N8時當天完全不用
+// 一般班——不只是收斂空缺格，連既有已指派的人都會一併清空(角色格數歸零)，並移除這些人
+// 在該日的手動鎖定(WORK_D/E/N)，避免殘留鎖定造成下次自動排班衝突或誤判。
+// 若當天已無D8/N8，則將格數還原回目前的角色人數設定模板(補回一般班的格子)。
 function syncDayRolesForSpecialShift(dateStr){
   const ds=state.schedule[dateStr]; if(!ds||!ds.roles) return;
   const hasSpecial=(ds.D8&&ds.D8.length>0)||(ds.N8&&ds.N8.length>0);
   for(const sh of SHIFTS){
     if(!ds.roles[sh]) continue;
     if(hasSpecial){
-      const keepIdx=[];
-      (ds[sh]||[]).forEach((nid,i)=>{ if(nid) keepIdx.push(i); });
-      ds.roles[sh]=keepIdx.map(i=>ds.roles[sh][i]);
-      ds[sh]=keepIdx.map(i=>ds[sh][i]);
+      for(const nid of (ds[sh]||[])){ if(nid) clearManualPin(nid,dateStr); }
+      ds.roles[sh]=[];
+      ds[sh]=[];
     } else {
       const template=getRoleTemplate(sh);
       if(ds.roles[sh].length<template.length){
@@ -3570,6 +3590,9 @@ function applyData(d){
   state.avoidPairs=d.avoidPairs||[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
+  // 修正舊資料可能殘留的「D8/N8與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
+  // 之前存的資料可能兩種班別同一天並存)：載入時全月掃過一次，讓所有日期符合最新規則。
+  for(const dateStr of Object.keys(state.schedule)) syncDayRolesForSpecialShift(dateStr);
 }
 // _lastLocalTs 用來判斷雲端傳回的資料是否比本機目前的還新，避免「重新整理時，
 // 上一次尚未寫入雲端完成的存檔被雲端舊資料覆蓋，導致剛剛的修改消失」的競速問題。
