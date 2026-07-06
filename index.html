@@ -3424,9 +3424,26 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     return;
   }
 
-  const val=raw.toUpperCase();
+  // 班別+時數合併輸入(如 D2、E0)：部分時數被批修請假時常用，指派該班別的同時直接把
+  // 當天實際時數改為批修後的時數(0～7.5，間隔0.5)，不必再分兩步驟輸入。D12/N12是
+  // 特殊班代號本身帶數字，排除在外、走原本的班別指派邏輯。
+  let forcedHour=null;
+  let val=raw.toUpperCase();
+  if(!SPECIAL_SHIFTS.includes(val)){
+    const comboMatch=val.match(/^([DEN])(\d+(?:\.\d+)?)$/);
+    if(comboMatch){
+      const hourVal=parseFloat(comboMatch[2]);
+      if(hourVal<0||hourVal>7.5||Math.round(hourVal*2)!==hourVal*2){
+        showToast('批修時數需為0～7.5之間、0.5為間隔(如2、3.5、7.5)','warn');
+        renderMasterGrid();
+        return;
+      }
+      val=comboMatch[1];
+      forcedHour=hourVal;
+    }
+  }
   if(val&&!SHIFTS.includes(val)&&!SPECIAL_SHIFTS.includes(val)){
-    showToast('請輸入 D、E、N、D12、N12、時數數字(如6.5)，或留空(代表OFF)','warn');
+    showToast('請輸入 D、E、N、D12、N12、時數數字(如6.5)、班別+批修時數(如D2、E0)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
   }
@@ -3460,11 +3477,11 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     if(wasLocked) setManualOffPin(nurseId,dateStr);
   }
   syncDayRolesForSpecialShift(dateStr); // 當天若有D12/N12(12小時特班)，一般班的空缺格數收斂/還原
-  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D12/N12 12h、無班0h)
+  setHourAdjust(nurseId,dateStr,forcedHour); // 重新指派/取消班別時回到預設時數；若為班別+批修時數合併輸入，則採用批修後的時數
   autoSave();
   renderMasterGrid();
   renderCalendar();
-  showToast(`✅ ${dateStr} 已更新`);
+  showToast(forcedHour!==null?`✅ ${dateStr} 已指派${val}班，時數批修為${forcedHour}小時`:`✅ ${dateStr} 已更新`);
 }
 
 // ============================================================
