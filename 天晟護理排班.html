@@ -330,7 +330,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <thead>
           <tr>
             <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th>
-            <th>假日班數</th><th>擔任組長次數</th><th>轉班次(D↔N)</th><th>最長連班</th>
+            <th>假日班數</th><th>轉班次(D↔N)</th><th>最長連班</th>
           </tr>
         </thead>
         <tbody id="stats-tbody"></tbody>
@@ -1071,16 +1071,6 @@ function calcNurseHolCount(nurseId, sched){
   for(const[d,ds] of Object.entries(sched)){
     if(!isHoliday(d)) continue;
     for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) n++;
-  }
-  return n;
-}
-function calcNurseLeadCount(nurseId, sched){
-  let n=0;
-  for(const[d,ds] of Object.entries(sched)){
-    for(const sh of SHIFTS){
-      const roles=getRoles(d,sh);
-      (ds[sh]||[]).forEach((nid,i)=>{ if(nid===nurseId&&roles[i]==='組長') n++; });
-    }
   }
   return n;
 }
@@ -2827,18 +2817,16 @@ function renderStats(){
   document.getElementById('stats-month').textContent=`${_statsYear}年${_statsMonth+1}月`;
   const dates=monthDates(_statsYear,_statsMonth);
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,lead:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
     for(const shift of SHIFTS){
-      const roles=getRoles(dateStr,shift);
       (ds[shift]||[]).forEach((nid,i)=>{
         if(!nid||!st[nid]) return;
         const s=st[nid];
         s[shift]++;
         if(hol) s.hol++;
-        if(roles[i]==='組長') s.lead++;
         if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
         s.lastShift=shift;
       });
@@ -2860,7 +2848,7 @@ function renderStats(){
       <td style="text-align:left"><span class="color-dot" style="background:${doc.color};vertical-align:middle;margin-right:4px"></span>${doc.name}</td>
       <td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
       <td><strong>${total}</strong></td><td>${hrs}h</td>
-      <td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
+      <td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
     </tr>`;
   }).join('');
 
@@ -2986,14 +2974,15 @@ function renderMasterGrid(){
       const offReq=!sh&&(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       const adj=getHourAdjust(doc.id,d);
       const glow=(rowSel&&sh)||(colSel&&sh);
-      // 手動輸入(WORK_D/E/N預班鎖定)以外框+右上角圓點標示，與自動排班產生的結果做視覺區分。
-      const isManual=sh&&SHIFTS.includes(sh)&&isManualWorkPin(doc.id,d,sh);
+      // 手動鎖定(WORK_D/E/N預班或OFF)以外框+右上角✋標示，與自動排班產生的結果做視覺區分；
+      // 雙擊格子可解除鎖定(unlockManualCell)，讓下次自動排班可重新調整這一格。
+      const isManual=sh&&SHIFTS.includes(sh)?isManualWorkPin(doc.id,d,sh):(!sh&&offReq);
       const cellClass=['dt',sh?`mg-${sh}`:(offReq?'mg-OFF':''),wknd?'wknd-col':'',colSel?'mg-col-active':'',glow?'mg-glow':'',isManual?'mg-manual':''].filter(Boolean).join(' ');
-      const manualTitle=isManual?'手動輸入(自動排班不會更改)；':'';
+      const manualTitle=isManual?'手動鎖定(自動排班不會更改；雙擊解除鎖定)；':'';
       return `<td class="${cellClass}" style="padding:0;position:relative">
         <input type="text" maxlength="5" value="${sh||''}" placeholder="${offReq?'OFF':''}"
           style="width:100%;min-width:32px;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:2px 0"
-          onchange="updateMasterCell('${doc.id}','${d}',this.value)" title="${manualTitle}輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}${isManual?`<span style="position:absolute;top:1px;right:1px;font-size:7px;line-height:1;color:#6a1b9a">✋</span>`:''}
+          onchange="updateMasterCell('${doc.id}','${d}',this.value)" ondblclick="unlockManualCell('${doc.id}','${d}')" title="${manualTitle}輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}${isManual?`<span style="position:absolute;top:1px;right:1px;font-size:7px;line-height:1;color:#6a1b9a">✋</span>`:''}
       </td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
@@ -3003,22 +2992,45 @@ function renderMasterGrid(){
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
 }
+// 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
+function clearManualPin(nurseId,dateStr){
+  if(!state.preRequests[dateStr]) return;
+  state.preRequests[dateStr]=state.preRequests[dateStr].filter(pr=>!(pr.docId===nurseId&&(pr.type.startsWith('WORK_')||pr.type==='OFF')));
+  if(!state.preRequests[dateStr].length) delete state.preRequests[dateStr];
+}
 // 月班總表手動輸入的一般班別(D/E/N)視同「預班」固定下來：改用WORK_D/E/N預請求鎖定，
 // 讓自動排班每次重新產生整月班表時，仍會把這個人排回同一個班別、且鎖定不被搬動/覆蓋
-// (機制與「預假/預班」分頁既有的預上班完全共用)。shift傳null代表移除鎖定(改班/清空/改為特班)。
+// (機制與「預假/預班」分頁既有的預上班完全共用)。shift傳null代表僅移除鎖定(改為特班)。
 function setManualWorkPin(nurseId,dateStr,shift){
-  if(state.preRequests[dateStr]){
-    state.preRequests[dateStr]=state.preRequests[dateStr].filter(pr=>!(pr.docId===nurseId&&pr.type.startsWith('WORK_')));
-    if(!state.preRequests[dateStr].length) delete state.preRequests[dateStr];
-  }
+  clearManualPin(nurseId,dateStr);
   if(shift){
     if(!state.preRequests[dateStr]) state.preRequests[dateStr]=[];
     state.preRequests[dateStr].push({id:'pr_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),docId:nurseId,type:'WORK_'+shift,note:'月班總表手動輸入'});
   }
 }
+// 月班總表手動把班別刪掉(留空)，視同手動鎖定「這天必須OFF」，自動排班不會再把這人排進這天
+// (與WORK_D/E/N相同精神：手動改動一律固定下來，直到使用者雙擊解鎖或重新輸入其他班別)。
+function setManualOffPin(nurseId,dateStr){
+  clearManualPin(nurseId,dateStr);
+  if(!state.preRequests[dateStr]) state.preRequests[dateStr]=[];
+  state.preRequests[dateStr].push({id:'pr_manual_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),docId:nurseId,type:'OFF',note:'月班總表手動刪除班別'});
+}
 // 該人於該日、該班別是否為手動輸入(供月班總表以不同樣式呈現，與自動排班產生的結果區分)。
 function isManualWorkPin(nurseId,dateStr,shift){
   return (state.preRequests[dateStr]||[]).some(pr=>pr.docId===nurseId&&pr.type==='WORK_'+shift);
+}
+// 雙擊月班總表格子：解除該人於該日的手動鎖定(WORK_D/E/N或OFF皆可)，讓下次自動排班
+// 可以重新調整這一格；解鎖後畫面上的班別文字暫時不變，實際結果要等下次按「自動排班」才更新。
+function unlockManualCell(nurseId,dateStr){
+  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
+  const had=(state.preRequests[dateStr]||[]).some(pr=>pr.docId===nurseId&&(pr.type.startsWith('WORK_')||pr.type==='OFF'));
+  if(!had) return;
+  pushUndo();
+  clearManualPin(nurseId,dateStr);
+  autoSave();
+  renderMasterGrid();
+  renderCalendar();
+  showToast(`✅ 已解除手動鎖定，下次自動排班可調整此格`);
 }
 // 當天若有D8/N8(12小時特殊班)，代表當天不是3班制：一般班(D/E/N)未指派的空缺格收斂消除，
 // 避免月班總表/排班表出現不必要的「空缺」警示；已指派的人維持不動(不自動清除既有排班)。
@@ -3097,9 +3109,10 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     setManualWorkPin(nurseId,dateStr,val);
   } else if(val&&SPECIAL_SHIFTS.includes(val)){
     ds[val].push(nurseId); // D8/N8無固定格數，直接附加(手動排列)
-    setManualWorkPin(nurseId,dateStr,null);
+    clearManualPin(nurseId,dateStr); // D8/N8本身即手動、不經WORK_/OFF鎖定機制
   } else {
-    setManualWorkPin(nurseId,dateStr,null);
+    // 手動把班別刪掉(留空)也視同手動決定，鎖定為OFF，避免自動排班又把這人排回來。
+    setManualOffPin(nurseId,dateStr);
   }
   syncDayRolesForSpecialShift(dateStr); // 當天若有D8/N8(12小時特班)，一般班的空缺格數收斂/還原
   setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D8/N8 12h、無班0h)
@@ -3561,16 +3574,14 @@ function generatePDF(){
 
   // --- 統計報表 ---
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,lead:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
     for(const shift of SHIFTS){
-      const roles=getRoles(dateStr,shift);
       (ds[shift]||[]).forEach((nid,i)=>{
         if(!nid||!st[nid]) return;
         const s=st[nid]; s[shift]++; if(hol) s.hol++;
-        if(roles[i]==='組長') s.lead++;
         if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
         s.lastShift=shift;
       });
@@ -3588,7 +3599,7 @@ function generatePDF(){
     const s=st[doc.id]; const total=s.D+s.E+s.N;
     const hrs=calcNurseTotalHours(doc.id,dates);
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
-      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.lead||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
+      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
   }).join('');
 
   const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
@@ -3644,7 +3655,7 @@ function generatePDF(){
   </div>
   <div class="pb">
   <h2>三、統計報表</h2>
-  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>組長次數</th><th>轉班次</th><th>最長連班</th></tr></thead>
+  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th></tr></thead>
   <tbody>${statsRows}</tbody></table>
   </div>
   <div class="pb">
