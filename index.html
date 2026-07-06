@@ -3018,6 +3018,21 @@ function roleOfNurseOnDate(nurseId,dateStr,shift){
   if(idx<0) return null;
   return (ds.roles[shift]&&ds.roles[shift][idx])||null;
 }
+// 上個月月底排班簡碼(顯示於月班總表人名旁，方便確認換月轉班狀態)：
+// 上個月最後一天休假 → 顯示"OFF"；有上班則往前數連續上班天數(不論班別是否一致)，
+// 搭配「最後一天」的班別，格式如"4D"(連4天、最後一天D班)、"3N"(連3天、最後一天N班)。
+function prevMonthEndCode(nurseId,y,m){
+  let py=y, pm=m-1; if(pm<0){pm=11;py--;}
+  const lastDate=fmtDate(py,pm,daysInMonth(py,pm));
+  if(!isAssignedThatDay(nurseId,lastDate,state.schedule)) return 'OFF';
+  const lastShift=shiftOfNurseOnDate(nurseId,lastDate);
+  let count=0, cur=lastDate;
+  for(let i=0;i<62;i++){
+    if(isAssignedThatDay(nurseId,cur,state.schedule)){ count++; cur=addDays(cur,-1); }
+    else break;
+  }
+  return `${count}${lastShift}`;
+}
 // 每日實際時數手動調整(部分請假/整班請休等，與班別指派互相獨立)。
 // 未調整時回傳 null，由呼叫端自行決定預設時數(有班8小時、無班0小時)。
 function getHourAdjust(nurseId,dateStr){
@@ -3082,7 +3097,12 @@ function renderMasterGrid(){
   }).join('');
   const noteRow=`<tr class="mg-note-row"><td class="nm" style="color:#888">備註</td>${noteCells}<td></td><td></td><td></td><td></td></tr>`;
 
-  const rows=sortedRoster(y,m).map(doc=>{
+  // 點選日期時，人名列只顯示該日有上班的人(篩選)，方便一眼看出當天在班名單；
+  // 再點一次(或改點護理師)取消篩選、還原顯示全部人員。
+  const roster=sortedRoster(y,m);
+  const visibleRoster=_mgSelDate?roster.filter(doc=>shiftOfNurseOnDate(doc.id,_mgSelDate)):roster;
+  const finalRoster=visibleRoster.length?visibleRoster:roster;
+  const rows=finalRoster.map(doc=>{
     const rowSel=_mgSelNurse===doc.id;
     const nurseWorkedSelDate=_mgSelDate&&doc.type==='full'&&shiftOfNurseOnDate(doc.id,_mgSelDate);
 
@@ -3126,7 +3146,12 @@ function renderMasterGrid(){
     const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
     const nmClass=`nm${nurseWorkedSelDate?' mg-glow':''}`;
     const nmTitle=rowSel?'再次點擊還原顯示全部日期':'點擊只顯示此人有上班的日期';
-    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
+    const prevCode=doc.type==='full'?prevMonthEndCode(doc.id,y,m):'';
+    let prevTitle='';
+    if(prevCode==='OFF') prevTitle='上個月月底排班：最後一天休假';
+    else if(prevCode){ const mch=prevCode.match(/^(\d+)(\D+)$/); if(mch) prevTitle=`上個月月底排班：最後連${mch[1]}天上班，最後一天為${mch[2]}班`; }
+    const prevBadge=prevCode?`<span style="font-size:9px;color:#888;font-weight:400;margin-left:4px" title="${prevTitle}">[${prevCode}]</span>`:'';
+    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
 }
