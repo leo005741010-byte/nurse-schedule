@@ -191,13 +191,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div id="tab-schedule" class="tab-pane">
     <div id="cal-header">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <span style="font-size:11px">
-          <span class="slot-tag tag-D" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">D</span>08:00-16:00 (組長/檢傷/重症/留觀×2/流動)
-          &nbsp;
-          <span class="slot-tag tag-E" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">E</span>16:00-24:00 (組長/檢傷/重症/留觀×2/流動)
-          &nbsp;
-          <span class="slot-tag tag-N" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">N</span>00:00-08:00次日 (組長/檢傷/留觀×2)
-        </span>
+        <span id="shift-role-desc" style="font-size:11px"></span>
+        <button class="action-btn" style="background:#455a64;color:#fff;font-size:11px" onclick="openRoleCountModal()">🧩 角色人數設定</button>
         <div class="split-control">
           <label>最少休息時數：</label>
           <select id="min-rest" onchange="pushUndo();state.minRestHours=parseInt(this.value);autoSave();">
@@ -356,6 +351,23 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   </div>
 </div>
 
+<!-- ======= ROLE COUNT MODAL ======= -->
+<div id="role-count-modal" class="modal-overlay">
+  <div class="modal" style="max-width:420px">
+    <h2>🧩 角色人數設定</h2>
+    <p style="font-size:12px;color:#888;margin-bottom:10px">設定各班別每個角色的人數，預設值取自目前設定；只影響「之後新產生」的日期(如換月份、清空重排)，不會更動本月已存在的班表資料。</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr><th style="text-align:left;padding:4px">角色</th><th>D班</th><th>E班</th><th>N班</th></tr></thead>
+      <tbody id="role-count-tbody"></tbody>
+      <tfoot><tr style="font-weight:700"><td style="padding:4px">合計</td><td id="role-count-total-D" style="text-align:center">-</td><td id="role-count-total-E" style="text-align:center">-</td><td id="role-count-total-N" style="text-align:center">-</td></tr></tfoot>
+    </table>
+    <div class="modal-actions">
+      <button class="action-btn btn-green" onclick="saveRoleCountModal()" style="padding:6px 22px">✔ 儲存</button>
+      <button class="btn-secondary" onclick="closeModal('role-count-modal')">✕ 取消</button>
+    </div>
+  </div>
+</div>
+
 <!-- ======= NURSE MODAL ======= -->
 <div id="nurse-modal" class="modal-overlay">
   <div class="modal">
@@ -422,6 +434,78 @@ const ROLES = {
   N:['組長','檢傷','留觀','留觀'],
 };
 const ROLE_ABBR = {組長:'組',檢傷:'檢',重症:'重',留觀:'留',流動:'流',支援:'援'};
+// 各班別每種角色的預設人數(供使用者於「角色人數設定」自訂調整，初始值取自 ROLES 現行結構)。
+const ROLE_ORDER=['組長','檢傷','重症','留觀','流動'];
+function defaultRoleCounts(){
+  const cnt={};
+  for(const sh of ['D','E','N']){
+    cnt[sh]={};
+    for(const r of ROLE_ORDER) cnt[sh][r]=0;
+    for(const r of ROLES[sh]) cnt[sh][r]++;
+  }
+  return cnt;
+}
+// 角色人數物件(如{組長:1,檢傷:1,重症:1,留觀:2,流動:1}) → 展開成角色陣列(如['組長','檢傷','重症','留觀','留觀','流動'])
+function roleCountsToArray(counts){
+  const arr=[];
+  for(const r of ROLE_ORDER){ const n=counts&&counts[r]||0; for(let i=0;i<n;i++) arr.push(r); }
+  return arr;
+}
+// 目前設定的角色人數模板(未自訂時退回 ROLES 現行結構)，供新產生的日期(尚無自訂roles時)使用。
+// 只影響「之後新建立」的日期，不會回頭更動已存在班表的既有角色配置(尊重現有排班資料)。
+function getRoleTemplate(shift){
+  const counts=state.roleCounts&&state.roleCounts[shift];
+  return counts?roleCountsToArray(counts):[...ROLES[shift]];
+}
+// 排班表頁首的D/E/N角色文字說明，隨「角色人數設定」動態產生(不再寫死)。
+function shiftRoleSummary(shift){
+  const counts=state.roleCounts&&state.roleCounts[shift];
+  if(!counts) return getRoleTemplate(shift).join('/');
+  return ROLE_ORDER.filter(r=>counts[r]>0).map(r=>counts[r]>1?`${r}×${counts[r]}`:r).join('/');
+}
+function renderShiftRoleDesc(){
+  const el=document.getElementById('shift-role-desc'); if(!el) return;
+  el.innerHTML=
+    `<span class="slot-tag tag-D" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">D</span>08:00-16:00 (${shiftRoleSummary('D')})&nbsp;`+
+    `<span class="slot-tag tag-E" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">E</span>16:00-24:00 (${shiftRoleSummary('E')})&nbsp;`+
+    `<span class="slot-tag tag-N" style="display:inline-flex;width:auto;padding:1px 5px;margin-right:2px">N</span>00:00-08:00次日 (${shiftRoleSummary('N')})`;
+}
+function openRoleCountModal(){
+  const tbody=document.getElementById('role-count-tbody');
+  const c=state.roleCounts||defaultRoleCounts();
+  tbody.innerHTML=ROLE_ORDER.map(r=>
+    `<tr><td style="padding:4px">${r}</td>`+
+    ['D','E','N'].map(sh=>`<td style="text-align:center"><input type="number" min="0" style="width:50px" class="rc-input" data-shift="${sh}" data-role="${r}" value="${(c[sh]&&c[sh][r])||0}" onchange="updateRoleCountModalTotals()"></td>`).join('')+
+    `</tr>`
+  ).join('');
+  updateRoleCountModalTotals();
+  document.getElementById('role-count-modal').classList.add('show');
+}
+function updateRoleCountModalTotals(){
+  for(const sh of ['D','E','N']){
+    let sum=0;
+    document.querySelectorAll(`.rc-input[data-shift="${sh}"]`).forEach(inp=>sum+=parseInt(inp.value)||0);
+    document.getElementById('role-count-total-'+sh).textContent=sum;
+  }
+}
+function saveRoleCountModal(){
+  const newCounts={D:{},E:{},N:{}};
+  for(const r of ROLE_ORDER){ newCounts.D[r]=0; newCounts.E[r]=0; newCounts.N[r]=0; }
+  document.querySelectorAll('.rc-input').forEach(inp=>{
+    newCounts[inp.dataset.shift][inp.dataset.role]=Math.max(0,parseInt(inp.value)||0);
+  });
+  const anyPositive=sh=>ROLE_ORDER.some(r=>newCounts[sh][r]>0);
+  if(!anyPositive('D')||!anyPositive('E')||!anyPositive('N')){
+    showToast('❌ 每個班別至少需要1個角色人數','warn');
+    return;
+  }
+  pushUndo();
+  state.roleCounts=newCounts;
+  autoSave();
+  renderShiftRoleDesc();
+  closeModal('role-count-modal');
+  showToast('✅ 角色人數設定已儲存(下次換月/清空後的日期生效)');
+}
 const LEVEL_CAP = {
   L:['組長','檢傷','重症','留觀','流動','支援'],
   T:['檢傷','重症','留觀','流動','支援'],
@@ -520,6 +604,7 @@ let state = {
   month: new Date().getMonth(),
   holidays: new Set(),
   minRestHours: 16,
+  roleCounts: defaultRoleCounts(),
   schedule: {},
   hourAdjust: {},
   dayNotes: {},
@@ -574,7 +659,7 @@ let _redoStack = [];
 function snapshotUndoable(){
   return JSON.stringify({
     schedule:state.schedule, hourAdjust:state.hourAdjust, dayNotes:state.dayNotes, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
-    doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours,
+    doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours, roleCounts:state.roleCounts,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
     longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs
@@ -584,6 +669,7 @@ function restoreUndoable(snap){
   state.schedule=snap.schedule; state.hourAdjust=snap.hourAdjust||{}; state.dayNotes=snap.dayNotes||{}; state.preRequests=snap.preRequests;
   state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
   state.holidays=new Set(snap.holidays||[]); state.minRestHours=snap.minRestHours??state.minRestHours;
+  state.roleCounts=snap.roleCounts||defaultRoleCounts();
   state.workDateRange=snap.workDateRange||{}; state.maxConsecByShift=snap.maxConsecByShift||state.maxConsecByShift;
   state.maxOffDays=snap.maxOffDays??null; state.maxOffHolidayDays=snap.maxOffHolidayDays??null;
   state.longLeaveExempt=snap.longLeaveExempt||{}; state.longLeaveDays=snap.longLeaveDays||{};
@@ -724,7 +810,7 @@ function getShiftEndTime(shift,date){ const{e}=shiftRange(shift); return e<=24?{
 function ensureDay(dateStr){
   if(!state.schedule[dateStr]) state.schedule[dateStr]={};
   const ds=state.schedule[dateStr];
-  if(!ds.roles) ds.roles={D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+  if(!ds.roles) ds.roles={D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
   for(const sh of SHIFTS){
     if(!ds[sh]||ds[sh].length!==ds.roles[sh].length){
       const old=ds[sh]||[];
@@ -735,7 +821,7 @@ function ensureDay(dateStr){
 }
 function getRoles(dateStr,shift){
   const ds=state.schedule[dateStr];
-  return (ds&&ds.roles&&ds.roles[shift])||ROLES[shift];
+  return (ds&&ds.roles&&ds.roles[shift])||getRoleTemplate(shift);
 }
 
 // ============================================================
@@ -1831,7 +1917,7 @@ function generateScheduleAttempt(y,m,dates){
   const newSched={};
   for(const d of dates){
     const existing=state.schedule[d]||{};
-    const roles=existing.roles||{D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+    const roles=existing.roles||{D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
     newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null)};
   }
   const fullSched = new Proxy(newSched, {
@@ -2060,6 +2146,7 @@ function renderCalendar(){
   document.getElementById('max-consec-D').value=state.maxConsecByShift.D??5;
   document.getElementById('max-consec-E').value=state.maxConsecByShift.E??5;
   document.getElementById('max-consec-N').value=state.maxConsecByShift.N??4;
+  renderShiftRoleDesc();
 
   document.getElementById('doc-legend').innerHTML=
     `<span class="legend-item" onclick="toggleDocFilter(null)" style="padding:2px 7px;border-radius:10px;border:1px solid ${!_filterDocId?'#0d5c4a':'#ccc'};background:${!_filterDocId?'#e6f5f1':'transparent'};color:${!_filterDocId?'#0d5c4a':'#999'};font-weight:${!_filterDocId?'700':'400'}">全部</span>`+
@@ -2931,8 +3018,10 @@ function clearSchedule(){
   if(!confirm('確定清空本月排班？')) return;
   pushUndo();
   const dates=monthDates(state.year,state.month);
+  // 清空時角色配置一併重設回目前設定的模板(移除累積的支援格)，讓清空後的月份
+  // 乾淨對應目前的角色人數設定，不沿用該月先前可能已膨脹的支援格數。
   for(const d of dates){
-    const roles=(state.schedule[d]&&state.schedule[d].roles)||{D:[...ROLES.D],E:[...ROLES.E],N:[...ROLES.N]};
+    const roles={D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
     state.schedule[d]={roles,D:Array(roles.D.length).fill(null),E:Array(roles.E.length).fill(null),N:Array(roles.N.length).fill(null)};
     delete state.hourAdjust[d];
   }
@@ -2953,6 +3042,7 @@ function serializeState(){
     doctors:state.doctors,schedule:state.schedule,hourAdjust:state.hourAdjust||{},dayNotes:state.dayNotes||{},preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
     minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
+    roleCounts:state.roleCounts||defaultRoleCounts(),
     workDateRange:state.workDateRange||{},
     maxConsecByShift:state.maxConsecByShift||{D:6,E:6,N:5},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
@@ -2990,6 +3080,7 @@ function applyData(d){
   if(d.year!=null) state.year=d.year;
   if(d.month!=null) state.month=d.month;
   state.minRestHours=d.minRestHours||16;
+  state.roleCounts=d.roleCounts||defaultRoleCounts();
   state.monthlyShiftType=d.monthlyShiftType||{};
   state.workDateRange=d.workDateRange||{};
   state.maxConsecByShift=d.maxConsecByShift||{D:6,E:6,N:5};
@@ -3104,8 +3195,8 @@ function exportCSV(){
   const dates=monthDates(state.year,state.month);
   const DOW=['一','二','三','四','五','六','日'];
   const header=['日期','星期','假日'];
-  for(const sh of ['D','E']) for(const r of ROLES[sh]) header.push(sh+r);
-  for(const r of ROLES.N) header.push('N'+r);
+  for(const sh of ['D','E']) for(const r of getRoleTemplate(sh)) header.push(sh+r);
+  for(const r of getRoleTemplate('N')) header.push('N'+r);
   const rows=[header];
   for(const d of dates){
     const ds=state.schedule[d]||{};
@@ -3204,8 +3295,8 @@ async function exportExcel(){
   // ---- 分頁2：排班表 ----
   const ws2=wb.addWorksheet(`排班表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',ySplit:1}]});
   const roleHeader2=['日期','星期','假日'];
-  for(const sh of ['D','E']) for(const r of ROLES[sh]) roleHeader2.push(sh+r);
-  for(const r of ROLES.N) roleHeader2.push('N'+r);
+  for(const sh of ['D','E']) for(const r of getRoleTemplate(sh)) roleHeader2.push(sh+r);
+  for(const r of getRoleTemplate('N')) roleHeader2.push('N'+r);
   const hRow2=ws2.addRow(roleHeader2);
   hRow2.eachCell(cell=>{ cell.font={bold:true}; cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders; cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}}; });
   ws2.getColumn(1).width=12; ws2.getColumn(2).width=6; ws2.getColumn(3).width=6;
