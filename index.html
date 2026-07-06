@@ -3386,6 +3386,7 @@ function unlockManualCell(nurseId,dateStr){
     autoSave();
     renderMasterGrid();
     renderCalendar();
+    renderPRList();
     showToast(`✅ 已解除手動鎖定，下次自動排班可調整此格`);
     return;
   }
@@ -3399,6 +3400,7 @@ function unlockManualCell(nurseId,dateStr){
   autoSave();
   renderMasterGrid();
   renderCalendar();
+  renderPRList();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
 }
 // D12/N12(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D12/N12時當天完全不用
@@ -3505,6 +3507,7 @@ function updateMasterCell(nurseId,dateStr,rawVal){
   autoSave();
   renderMasterGrid();
   renderCalendar();
+  renderPRList();
   showToast(forcedHour!==null?`✅ ${dateStr} 已指派${val}班，時數批修為${forcedHour}小時`:`✅ ${dateStr} 已更新`);
 }
 
