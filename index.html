@@ -219,9 +219,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 月班總表 ======= -->
   <div id="tab-master" class="tab-pane active">
     <div class="stats-wrap">
-      <div style="margin-bottom:6px">
-        <button id="btn-toggle-all-locks" class="action-btn" style="background:#6a1b9a;color:#fff;font-size:11px" onclick="toggleAllLocks()" title="切換：解除/恢復本月所有鎖定(含雙擊產生的手動鎖定，以及預假/預班分頁的請求)">🔒 解除所有鎖定</button>
-      </div>
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
     </div>
   </div>
@@ -3321,7 +3318,6 @@ function renderMasterGrid(){
     return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
-  updateLockToggleButtons();
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
@@ -3380,39 +3376,6 @@ function unlockManualCell(nurseId,dateStr){
   renderMasterGrid();
   renderCalendar();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
-}
-// 「解除所有鎖定」為切換按鈕：不分手動鎖定(雙擊格子產生)或預假/預班分頁的請求，
-// 本月所有preRequests一律清除(暫存到記憶體，不進undo堆疊)；再按一次原樣全部恢復。
-let _clearedAllLocksBackup=null;
-function toggleAllLocks(){
-  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
-  if(_clearedAllLocksBackup){
-    for(const {date,items} of _clearedAllLocksBackup){
-      state.preRequests[date]=items;
-    }
-    const cnt=_clearedAllLocksBackup.reduce((s,x)=>s+x.items.length,0);
-    _clearedAllLocksBackup=null;
-    autoSave(); renderMasterGrid(); renderCalendar();
-    showToast(`✅ 已恢復 ${cnt} 筆鎖定`);
-    return;
-  }
-  const dates=monthDates(state.year,state.month);
-  const backup=[];
-  for(const d of dates){
-    const prs=state.preRequests[d];
-    if(prs&&prs.length) backup.push({date:d,items:prs});
-  }
-  const cnt=backup.reduce((s,x)=>s+x.items.length,0);
-  if(!cnt){ showToast('本月沒有鎖定','warn'); return; }
-  if(!confirm(`確定要解除本月共 ${cnt} 筆鎖定嗎？(再按一次可恢復)`)) return;
-  for(const {date} of backup) delete state.preRequests[date];
-  _clearedAllLocksBackup=backup;
-  autoSave(); renderMasterGrid(); renderCalendar();
-  showToast(`✅ 已解除本月共 ${cnt} 筆鎖定`);
-}
-function updateLockToggleButtons(){
-  const btn=document.getElementById('btn-toggle-all-locks');
-  if(btn) btn.textContent=_clearedAllLocksBackup?'🔓 恢復所有鎖定':'🔒 解除所有鎖定';
 }
 // D12/N12(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D12/N12時當天完全不用
 // 一般班——不只是收斂空缺格，連既有已指派的人都會一併清空(角色格數歸零)，並移除這些人
