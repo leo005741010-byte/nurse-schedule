@@ -279,7 +279,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <div class="pr-form">
         <div><div>護理師</div><select id="pr-doc"></select></div>
         <div>
-          <div style="margin-bottom:4px">選取日期（點選單日或拖曳選範圍）</div>
+          <div style="margin-bottom:4px">選取日期（可複選多個不連續日期，或拖曳選一段範圍）</div>
           <div class="pr-cal-wrap">
             <div class="pr-cal-nav">
               <button onclick="prCalPrev()">&#9664;</button>
@@ -287,7 +287,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
               <button onclick="prCalNext()">&#9654;</button>
             </div>
             <div id="pr-cal-grid" class="pr-cal-grid"></div>
-            <div class="pr-cal-hint">點選單日；或按住拖曳選多日</div>
+            <div class="pr-cal-hint">點選可複選多天(再點一次取消該天)；按住拖曳可整段加入選取</div>
             <div class="pr-cal-selected" id="pr-cal-selected">尚未選取日期</div>
           </div>
         </div>
@@ -2844,17 +2844,17 @@ function prShortLabel(pr){
   return map[pr.type]||pr.type;
 }
 
-// ---- 拖曳選取日期的迷你月曆 ----
+// ---- 單點擊(可複選多個不連續日期)+拖曳(整段加入選取)的迷你月曆 ----
 let _prCalYear=new Date().getFullYear();
 let _prCalMonth=new Date().getMonth();
-let _prRangeStart=null, _prRangeEnd=null;
-let _prDragging=false;
+let _prSelectedDates=new Set(); // 已確定選取的日期(不需連續)
+let _prDragStart=null, _prDragCurrent=null, _prDragging=false;
 function prCalPrev(){ _prCalMonth--; if(_prCalMonth<0){_prCalMonth=11;_prCalYear--;} renderPRCalGrid(); }
 function prCalNext(){ _prCalMonth++; if(_prCalMonth>11){_prCalMonth=0;_prCalYear++;} renderPRCalGrid(); }
-function prRangeLoHi(){
-  if(!_prRangeStart) return null;
-  const lo=_prRangeStart<_prRangeEnd?_prRangeStart:_prRangeEnd;
-  const hi=_prRangeStart<_prRangeEnd?_prRangeEnd:_prRangeStart;
+function _prDragRangeLoHi(){
+  if(!_prDragStart) return null;
+  const lo=_prDragStart<_prDragCurrent?_prDragStart:_prDragCurrent;
+  const hi=_prDragStart<_prDragCurrent?_prDragCurrent:_prDragStart;
   return {lo,hi};
 }
 function renderPRCalGrid(){
@@ -2875,35 +2875,62 @@ function renderPRCalGrid(){
   const numDays=daysInMonth(_prCalYear,_prCalMonth);
   const now=new Date();
   const todayStr=fmtDate(now.getFullYear(),now.getMonth(),now.getDate());
-  const range=prRangeLoHi();
+  const dragRange=_prDragRangeLoHi();
   for(let d=1; d<=numDays; d++){
     const dateStr=fmtDate(_prCalYear,_prCalMonth,d);
     const dow=getDOW(dateStr);
     const cell=document.createElement('div');
     let cls='pr-cal-cell'+(dow>=5?' wknd':'')+(dateStr===todayStr?' today':'');
-    if(range){
-      if(dateStr===range.lo&&dateStr===range.hi) cls+=' range-single';
-      else if(dateStr===range.lo) cls+=' range-start';
-      else if(dateStr===range.hi) cls+=' range-end';
-      else if(dateStr>range.lo&&dateStr<range.hi) cls+=' in-range';
+    // 拖曳中的範圍預覽(游標移過的一段)，優先於已確定選取的樣式顯示，讓使用者看得出正在拖曳哪一段；
+    // 放開滑鼠後才會真正併入_prSelectedDates(見mouseup)。
+    if(dragRange&&dateStr>=dragRange.lo&&dateStr<=dragRange.hi){
+      if(dragRange.lo===dragRange.hi) cls+=' range-single';
+      else if(dateStr===dragRange.lo) cls+=' range-start';
+      else if(dateStr===dragRange.hi) cls+=' range-end';
+      else cls+=' in-range';
+    } else if(_prSelectedDates.has(dateStr)){
+      cls+=' range-single';
     }
     cell.className=cls;
     cell.textContent=d;
-    cell.addEventListener('mousedown',e=>{ e.preventDefault(); _prDragging=true; _prRangeStart=dateStr; _prRangeEnd=dateStr; renderPRCalGrid(); });
-    cell.addEventListener('mouseenter',()=>{ if(_prDragging){ _prRangeEnd=dateStr; renderPRCalGrid(); } });
+    cell.addEventListener('mousedown',e=>{ e.preventDefault(); _prDragging=true; _prDragStart=dateStr; _prDragCurrent=dateStr; renderPRCalGrid(); });
+    cell.addEventListener('mouseenter',()=>{ if(_prDragging){ _prDragCurrent=dateStr; renderPRCalGrid(); } });
     grid.appendChild(cell);
   }
   updatePRCalSelected();
 }
-window.addEventListener('mouseup',()=>{ _prDragging=false; });
+window.addEventListener('mouseup',()=>{
+  if(!_prDragging) return;
+  _prDragging=false;
+  const range=_prDragRangeLoHi();
+  if(range){
+    if(range.lo===range.hi){
+      // 單純點擊(沒有拖曳移動)：切換這一天的選取狀態，可加入也可移除，方便複選不連續日期。
+      if(_prSelectedDates.has(range.lo)) _prSelectedDates.delete(range.lo);
+      else _prSelectedDates.add(range.lo);
+    } else {
+      // 拖曳選了一段範圍：整段併入已選取集合(不影響其他已選的不連續日期)。
+      let cur=range.lo;
+      while(cur<=range.hi){ _prSelectedDates.add(cur); cur=addDays(cur,1); }
+    }
+  }
+  _prDragStart=null; _prDragCurrent=null;
+  renderPRCalGrid();
+});
 function updatePRCalSelected(){
   const el=document.getElementById('pr-cal-selected');
   if(!el) return;
-  const range=prRangeLoHi();
-  if(!range){ el.textContent='尚未選取日期'; return; }
-  if(range.lo===range.hi){ el.textContent=`已選取：${range.lo}（1天）`; return; }
-  const days=Math.round((new Date(range.hi)-new Date(range.lo))/86400000)+1;
-  el.textContent=`已選取：${range.lo} ～ ${range.hi}（共${days}天）`;
+  if(!_prSelectedDates.size){ el.textContent='尚未選取日期'; return; }
+  const sorted=[..._prSelectedDates].sort();
+  const parts=[];
+  let rs=null,re=null;
+  for(const d of sorted){
+    if(!rs){ rs=d; re=d; }
+    else if(addDays(re,1)===d){ re=d; }
+    else { parts.push(rs===re?rs:`${rs}～${re}`); rs=d; re=d; }
+  }
+  if(rs) parts.push(rs===re?rs:`${rs}～${re}`);
+  el.textContent=`已選取：${parts.join('、')}（共${sorted.length}天）`;
 }
 
 function countExistingOffDates(nurseId,y,m){
@@ -2972,26 +2999,23 @@ function renderLongLeaveList(){
 function addPR(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定','warn');return;}
   const docId=document.getElementById('pr-doc').value;
-  const range=prRangeLoHi();
+  const dates=[..._prSelectedDates].sort();
   const type=document.getElementById('pr-type').value;
   const note=document.getElementById('pr-note').value.trim();
-  if(!docId||!range){showToast('請選擇護理師與日期','warn');return;}
-  const start=range.lo, end=range.hi;
+  if(!docId||!dates.length){showToast('請選擇護理師與日期','warn');return;}
   // 每人每月最多預假天數檢核（僅限OFF類型；預上班(排D/E/N班)不受此限）
   if(type==='OFF'&&(state.maxOffDays!=null||state.maxOffHolidayDays!=null)){
     const byMonth={};
-    let cur=start;
-    while(cur<=end){
+    for(const cur of dates){
       const{y,m}=ymFromDate(cur);
       const mk=monthKey(y,m);
       if(!byMonth[mk]) byMonth[mk]={y,m,dates:new Set()};
       byMonth[mk].dates.add(cur);
-      cur=addDays(cur,1);
     }
-    for(const{y,m,dates} of Object.values(byMonth)){
+    for(const{y,m,dates:dset} of Object.values(byMonth)){
       if(isLongLeaveExempt(docId,y,m)) continue;
       const existing=countExistingOffDates(docId,y,m);
-      const merged=new Set([...existing,...dates]);
+      const merged=new Set([...existing,...dset]);
       if(state.maxOffDays!=null&&merged.size>state.maxOffDays){
         showToast(`❌ ${getDocName(docId)} 於${y}年${m+1}月預假將達${merged.size}天，超過上限${state.maxOffDays}天，無法新增`,'warn');
         return;
@@ -3006,13 +3030,13 @@ function addPR(){
     }
   }
   pushUndo();
-  let cur=start, cnt=0;
-  while(cur<=end&&cnt<366){
+  let cnt=0;
+  for(const cur of dates){
     if(!state.preRequests[cur]) state.preRequests[cur]=[];
     state.preRequests[cur].push({id:'pr_'+Date.now()+'_'+cnt,docId,type,note});
-    cur=addDays(cur,1); cnt++;
+    cnt++;
   }
-  _prRangeStart=null; _prRangeEnd=null;
+  _prSelectedDates.clear();
   autoSave(); renderPRList(); renderCalendar(); renderPRCalGrid(); renderMasterGrid();
   showToast('✅ 已新增');
 }
