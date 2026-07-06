@@ -219,8 +219,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 月班總表 ======= -->
   <div id="tab-master" class="tab-pane active">
     <div class="stats-wrap">
-      <div style="margin-bottom:6px">
-        <button class="action-btn" style="background:#6a1b9a;color:#fff;font-size:11px" onclick="clearAllManualLocks()" title="解除本月所有雙擊產生的✋手動鎖定，不影響預假/預班分頁的請求">🔓 解除本月所有手動鎖定</button>
+      <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap">
+        <button id="btn-toggle-manual-lock" class="action-btn" style="background:#6a1b9a;color:#fff;font-size:11px" onclick="toggleAllManualLocks()" title="切換：解除/恢復本月所有雙擊產生的✋手動鎖定，不影響預假/預班分頁的請求">🔓 解除所有手動鎖定</button>
+        <button id="btn-toggle-prereq-lock" class="action-btn" style="background:#00695c;color:#fff;font-size:11px" onclick="toggleAllPreReqLocks()" title="切換：解除/恢復本月所有預假/預班分頁建立的請求">🔓 解除所有預班鎖定</button>
       </div>
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
     </div>
@@ -3321,6 +3322,7 @@ function renderMasterGrid(){
     return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
+  updateLockToggleButtons();
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
@@ -3380,32 +3382,79 @@ function unlockManualCell(nurseId,dateStr){
   renderCalendar();
   showToast(`🔒 已鎖定此格，自動排班不會更改`);
 }
-// 一鍵解除本月所有「月班總表手動鎖定」(雙擊格子產生的✋鎖定，id前綴為pr_manual_)；
-// 不影響「預假/預班」分頁建立的真正預假/預班請求(id前綴為pr_但沒有manual)，
-// 避免誤刪護理師實際的請假/預班紀錄。
-function clearAllManualLocks(){
+// 「解除所有手動鎖定」／「解除所有預班鎖定」都是切換按鈕：
+// 第一次按＝清除本月對應的preRequests(暫存到記憶體，不進undo堆疊)；再按一次＝原樣恢復。
+// 手動鎖定＝月班總表雙擊格子產生的✋鎖定(id前綴pr_manual_)；
+// 預班鎖定＝「預假/預班」分頁建立的真正請求(id前綴pr_但沒有manual)。兩者互不影響。
+let _clearedManualBackup=null;
+let _clearedPreReqBackup=null;
+function toggleAllManualLocks(){
   if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
-  const y=state.year, m=state.month;
-  const dates=monthDates(y,m);
-  let cnt=0;
+  const matchFn=pr=>pr.id&&pr.id.startsWith('pr_manual_');
+  if(_clearedManualBackup){
+    const cnt=_restoreLockBackup(_clearedManualBackup);
+    _clearedManualBackup=null;
+    autoSave(); renderMasterGrid(); renderCalendar();
+    showToast(`✅ 已恢復 ${cnt} 筆手動鎖定`);
+    return;
+  }
+  const {backup,cnt}=_collectLockBackup(matchFn);
+  if(!cnt){ showToast('本月沒有手動鎖定','warn'); return; }
+  if(!confirm(`確定要解除本月共 ${cnt} 筆手動鎖定嗎？(再按一次可恢復)`)) return;
+  _applyLockBackup(backup,matchFn);
+  _clearedManualBackup=backup;
+  autoSave(); renderMasterGrid(); renderCalendar();
+  showToast(`✅ 已解除本月共 ${cnt} 筆手動鎖定`);
+}
+function toggleAllPreReqLocks(){
+  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定','warn'); return; }
+  const matchFn=pr=>!(pr.id&&pr.id.startsWith('pr_manual_'));
+  if(_clearedPreReqBackup){
+    const cnt=_restoreLockBackup(_clearedPreReqBackup);
+    _clearedPreReqBackup=null;
+    autoSave(); renderMasterGrid(); renderCalendar();
+    showToast(`✅ 已恢復 ${cnt} 筆預班鎖定`);
+    return;
+  }
+  const {backup,cnt}=_collectLockBackup(matchFn);
+  if(!cnt){ showToast('本月沒有預班鎖定','warn'); return; }
+  if(!confirm(`確定要解除本月共 ${cnt} 筆預班鎖定嗎？(再按一次可恢復)`)) return;
+  _applyLockBackup(backup,matchFn);
+  _clearedPreReqBackup=backup;
+  autoSave(); renderMasterGrid(); renderCalendar();
+  showToast(`✅ 已解除本月共 ${cnt} 筆預班鎖定`);
+}
+function _collectLockBackup(matchFn){
+  const dates=monthDates(state.year,state.month);
+  const backup=[];
   for(const d of dates){
     const prs=state.preRequests[d];
     if(!prs) continue;
-    cnt+=prs.filter(pr=>pr.id&&pr.id.startsWith('pr_manual_')).length;
+    const matched=prs.filter(matchFn);
+    if(matched.length) backup.push({date:d,items:matched});
   }
-  if(!cnt){ showToast('本月沒有手動鎖定的格子','warn'); return; }
-  if(!confirm(`確定要解除本月共 ${cnt} 格的手動鎖定嗎？(不影響預假/預班分頁的請求)`)) return;
-  pushUndo();
-  for(const d of dates){
-    const prs=state.preRequests[d];
+  return {backup,cnt:backup.reduce((s,x)=>s+x.items.length,0)};
+}
+function _applyLockBackup(backup,matchFn){
+  for(const {date} of backup){
+    const prs=state.preRequests[date];
     if(!prs) continue;
-    const kept=prs.filter(pr=>!(pr.id&&pr.id.startsWith('pr_manual_')));
-    if(kept.length) state.preRequests[d]=kept; else delete state.preRequests[d];
+    const kept=prs.filter(pr=>!matchFn(pr));
+    if(kept.length) state.preRequests[date]=kept; else delete state.preRequests[date];
   }
-  autoSave();
-  renderMasterGrid();
-  renderCalendar();
-  showToast(`✅ 已解除本月共 ${cnt} 格手動鎖定`);
+}
+function _restoreLockBackup(backup){
+  for(const {date,items} of backup){
+    if(!state.preRequests[date]) state.preRequests[date]=[];
+    state.preRequests[date].push(...items);
+  }
+  return backup.reduce((s,x)=>s+x.items.length,0);
+}
+function updateLockToggleButtons(){
+  const btnManual=document.getElementById('btn-toggle-manual-lock');
+  if(btnManual) btnManual.textContent=_clearedManualBackup?'🔒 恢復所有手動鎖定':'🔓 解除所有手動鎖定';
+  const btnPreReq=document.getElementById('btn-toggle-prereq-lock');
+  if(btnPreReq) btnPreReq.textContent=_clearedPreReqBackup?'🔒 恢復所有預班鎖定':'🔓 解除所有預班鎖定';
 }
 // D12/N12(12小時特殊班)與一般班(D/E/N)互斥，同一天只能選一種排：有D12/N12時當天完全不用
 // 一般班——不只是收斂空缺格，連既有已指派的人都會一併清空(角色格數歸零)，並移除這些人
