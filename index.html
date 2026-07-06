@@ -988,22 +988,37 @@ function violatesDtoNOrder(nurseId,date,shift,sched){
   if(!isDtoNTransition(nurseId,date)) return false;
   return hasDOnOrAfterInMonth(nurseId,date,sched);
 }
-// 孤立單班：某人在 date 上班，但前一天與後一天都休假(OFF-上班-OFF，只上1天)。
-// 使用者要求不可出現。以 fullSched 判斷相鄰日(跨月連續性也正確)。
+// 相鄰日的班別狀態(用於孤立單班判斷)：
+//   'work'   = 該日該人上班
+//   'off'    = 該日該人「確認」休假(該日在排班範圍內、且未被指派)
+//   'unknown'= 該日不在排班範圍(相鄰月份尚未排班)，無法確認是否休假
+// 邊界寬待：月底(下個月尚未排班)或月初(上個月尚未排班)的相鄰日回傳 unknown，
+// 孤立判斷因此「不算孤立」——因為當月月底/月初的班次可能延續到尚未排班的相鄰月份，
+// 不該把「月底最後一天上班、前一天休假」誤判為孤立單班(使用者要求：月底上班不算孤立)。
+// 相鄰月份「已排班」時仍會正確跨月判斷(讀 sched 本身或已提交的 state.schedule)。
+function _neighborShiftState(nurseId,dateStr,sched){
+  if(dateStr in sched) return isAssignedThatDay(nurseId,dateStr,sched)?'work':'off';
+  if(state.schedule[dateStr]) return isAssignedThatDay(nurseId,dateStr,state.schedule)?'work':'off';
+  return 'unknown';
+}
+// 孤立單班：某人在 date 上班，但前一天與後一天都「確認」休假(OFF-上班-OFF，只上1天)。
+// 使用者要求不可出現，但月份邊界(相鄰月份尚未排班)不算孤立(見 _neighborShiftState)。
 function isIsolatedWorkDay(nurseId,date,sched){
   if(!isAssignedThatDay(nurseId,date,sched)) return false;
-  return !isAssignedThatDay(nurseId,addDays(date,-1),sched)
-       &&!isAssignedThatDay(nurseId,addDays(date,1),sched);
+  const prev=_neighborShiftState(nurseId,addDays(date,-1),sched);
+  const next=_neighborShiftState(nurseId,addDays(date,1),sched);
+  return prev==='off'&&next==='off';
 }
 // 判斷「把 giver 於 date 的班次轉給 taker」這個1對1移轉是否會製造孤立單班。
 // 用移轉前的 sched 推理：giver 於 date 變成休假、taker 於 date 變成上班。
+// 同樣採用邊界寬待：相鄰月份尚未排班的日子不會被當成「確認休假」而誤擋移轉。
 function moveWouldIsolate(giverId,takerId,date,sched){
   const prev=addDays(date,-1), next=addDays(date,1);
-  // taker 於 date 上班後，若前後兩天皆休 → taker 變孤立單班
-  if(!isAssignedThatDay(takerId,prev,sched)&&!isAssignedThatDay(takerId,next,sched)) return true;
-  // giver 於 date 休假後，其相鄰的上班日可能變孤立
-  if(isAssignedThatDay(giverId,prev,sched)&&!isAssignedThatDay(giverId,addDays(date,-2),sched)) return true;
-  if(isAssignedThatDay(giverId,next,sched)&&!isAssignedThatDay(giverId,addDays(date,2),sched)) return true;
+  // taker 於 date 上班後，若前後兩天皆「確認休假」→ taker 變孤立單班
+  if(_neighborShiftState(takerId,prev,sched)==='off'&&_neighborShiftState(takerId,next,sched)==='off') return true;
+  // giver 於 date 休假後，其相鄰的上班日可能變孤立(僅在該上班日的「外側鄰居」確認休假時成立)
+  if(isAssignedThatDay(giverId,prev,sched)&&_neighborShiftState(giverId,addDays(date,-2),sched)==='off') return true;
+  if(isAssignedThatDay(giverId,next,sched)&&_neighborShiftState(giverId,addDays(date,2),sched)==='off') return true;
   return false;
 }
 function canWork(nurseId, date, shift, role, sched){
@@ -1819,7 +1834,7 @@ function enforceLongLeaveExactDays(newSched, fullSched, dates){
 // =false時略過此檢查(用於相鄰兩天一起新增，見呼叫端說明)。
 // 成功回傳 {date,shift,idx,stolenId}(stolenId為null代表填的是空缺，非搶班)，失敗回傳null。
 function placeNurseOneDay(nurse,newSched,fullSched,candidateDates,shift,checkIsolation){
-  const selfWouldIsolate=dt=>!isAssignedThatDay(nurse.id,addDays(dt,-1),newSched)&&!isAssignedThatDay(nurse.id,addDays(dt,1),newSched);
+  const selfWouldIsolate=dt=>_neighborShiftState(nurse.id,addDays(dt,-1),newSched)==='off'&&_neighborShiftState(nurse.id,addDays(dt,1),newSched)==='off';
   for(const dt of candidateDates){
     if(isAssignedThatDay(nurse.id,dt,newSched)) continue;
     if(checkIsolation&&selfWouldIsolate(dt)) continue;
@@ -1836,8 +1851,8 @@ function placeNurseOneDay(nurse,newSched,fullSched,candidateDates,shift,checkIso
       // checkIsolation=true時用moveWouldIsolate完整檢查(含nurse自己)；=false時(相鄰兩天
       // 新增中的第一天)只檢查「原班主人(occId)」是否會孤立，不檢查nurse(此時第二天還沒填，
       // 勢必"看似孤立"，但兩天都成功後會因互為鄰居而自然解決)。
-      const giverIsolate=isAssignedThatDay(occId,addDays(dt,-1),newSched)&&!isAssignedThatDay(occId,addDays(dt,-2),newSched)
-        ||isAssignedThatDay(occId,addDays(dt,1),newSched)&&!isAssignedThatDay(occId,addDays(dt,2),newSched);
+      const giverIsolate=isAssignedThatDay(occId,addDays(dt,-1),newSched)&&_neighborShiftState(occId,addDays(dt,-2),newSched)==='off'
+        ||isAssignedThatDay(occId,addDays(dt,1),newSched)&&_neighborShiftState(occId,addDays(dt,2),newSched)==='off';
       if(checkIsolation?moveWouldIsolate(occId,nurse.id,dt,newSched):giverIsolate) continue;
       arr[i]=null;
       const ok=canWork(nurse.id,dt,shift,roles[i],fullSched)||canWorkForce(nurse.id,dt,shift,roles[i],fullSched);
@@ -1847,31 +1862,70 @@ function placeNurseOneDay(nurse,newSched,fullSched,candidateDates,shift,checkIso
   }
   return null;
 }
-// 消除孤立單班(OFF-上班-OFF，只上1天)。作法：把孤立那天的班次，轉給「前一天或後一天有上班」
-// 的人承接——接手者因此把班接成連續(不孤立)，孤立者則少掉那個落單的班(該天改休)。
-// 純轉調既有職位、不製造空班、尊重所有鐵則，且移轉不得使任何人跳出合法班數帶[mn0,mx0]
-// (避免為了消孤立單班而擴大全距)。若某孤立班找不到合適承接者則暫時保留(盡力而為)。
-function fixIsolatedShifts(newSched, fullSched, dates){
+// 消除孤立單班(OFF-上班-OFF，只上1天)。兩種策略(依序嘗試)：
+//   策略一 EXTEND(優先)：讓孤立者「延伸」到相鄰一天，班次由該相鄰日的過勞者讓出——孤立者
+//     因此連上兩天(不孤立)，班數+1；讓班者-1。孤立者原本班數偏少(只上1天)，過勞者偏多，
+//     此移轉讓雙方都往中間靠攏，通常不需放寬全距就能消孤立，還順帶改善班數平衡。
+//   策略二 REMOVE(備援)：把孤立那天的班次轉給「前一天或後一天有上班」的人，孤立者該天改休。
+// 純轉調既有職位、不製造空班、尊重所有鐵則。班數帶預設 [mn0,mx0]；bandSlack>0 時只放寬
+// 「接手者上限」這端以爭取更多空間，但整體全距硬性維持 <=3(使用者：休假天數落在4個相鄰數字)。
+// 「不留孤立單班」優先於「班數全距越小越好」，故最後會用 bandSlack=1 再掃一次盡力清除。
+// 若某孤立班仍無合適移轉對象則暫時保留(盡力而為)。
+function fixIsolatedShifts(newSched, fullSched, dates, bandSlack){
+  bandSlack=bandSlack||0;
   const partsAll=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
   const inBand=id=>partsAll.some(p=>p.id===id);
   const c0=partsAll.map(d=>calcNurseShiftCount(d.id,newSched));
   const mn0=c0.length?Math.min(...c0):0, mx0=c0.length?Math.max(...c0):0;
-  for(let round=0;round<4;round++){
+  const room=Math.max(0, 3-(mx0-mn0));
+  const hiExt=Math.min(bandSlack, room);
+  const loFloor=mn0, hiCeil=mx0+hiExt;
+  const cnt=id=>calcNurseShiftCount(id,newSched);
+  // 策略一：孤立者 d 延伸到相鄰一天(由過勞者讓出班次)。成功回傳 true。
+  function extendIsolated(d,dt){
+    if(inBand(d.id)&&cnt(d.id)+1>hiCeil) return false; // 孤立者接手後不得超過帶頂
+    let best=null;
+    for(const ad of [addDays(dt,-1),addDays(dt,1)]){
+      const ds=newSched[ad]; if(!ds||!ds.roles) continue; // 相鄰日須在本月排班範圍
+      if(isAssignedThatDay(d.id,ad,newSched)) continue;
+      for(const sh of SHIFTS){
+        const arr=ds[sh], roles=ds.roles[sh];
+        for(let i=0;i<arr.length;i++){
+          const q=arr[i]; if(!q||q===d.id) continue;
+          if(isWorkLocked(ad,sh,i)) continue;
+          const qDoc=state.doctors.find(x=>x.id===q); if(!qDoc||qDoc.type!=='full') continue;
+          if(!roleAllowed(d.prefs.level,roles[i])) continue;   // 孤立者須符合該角色階級
+          if(inBand(q)&&cnt(q)-1<loFloor) continue;            // 讓班者不得低於帶底
+          arr[i]=null; // 暫移除 q，測試 d 是否可接手、且 q 不因失去此日而自己變孤立
+          const ok=(canWork(d.id,ad,sh,roles[i],fullSched)||canWorkForce(d.id,ad,sh,roles[i],fullSched)||canWorkSupport(d.id,ad,sh,roles[i],fullSched))
+            && !isIsolatedWorkDay(q,addDays(ad,-1),fullSched) && !isIsolatedWorkDay(q,addDays(ad,1),fullSched);
+          arr[i]=q;
+          if(ok){ const qc=cnt(q); if(!best||qc>best.qc) best={ad,sh,i,qc}; } // 優先讓班數最多的過勞者讓出
+        }
+      }
+    }
+    if(best){ newSched[best.ad][best.sh][best.i]=d.id; return true; }
+    return false;
+  }
+  for(let round=0;round<6;round++){
     let fixed=false;
     for(const d of state.doctors){
       if(d.type!=='full') continue;
       for(const dt of dates){
         if(!isIsolatedWorkDay(d.id,dt,fullSched)) continue;
+        // 策略一(優先)
+        if(extendIsolated(d,dt)){ fixed=true; continue; }
+        // 策略二(備援)
         const occ=findSlotOccupant(d.id,dt,newSched);
         if(!occ) continue;
         if(isWorkLocked(dt,occ.shift,occ.idx)) continue; // 預上班鎖定，不移轉
         // 孤立者(給方)若在班數帶內，讓出1班後不得低於帶底
-        if(inBand(d.id)&&calcNurseShiftCount(d.id,newSched)-1<mn0) continue;
+        if(inBand(d.id)&&cnt(d.id)-1<loFloor) continue;
         const prev=addDays(dt,-1), next=addDays(dt,1);
         const cands=state.doctors.filter(m=>m.id!==d.id&&m.type==='full'
           &&(isAssignedThatDay(m.id,prev,newSched)||isAssignedThatDay(m.id,next,newSched))
           &&!isAssignedThatDay(m.id,dt,newSched)
-          &&(!inBand(m.id)||calcNurseShiftCount(m.id,newSched)+1<=mx0) // 接手者加1後不得超過帶頂
+          &&(!inBand(m.id)||cnt(m.id)+1<=hiCeil) // 接手者加1後不得超過帶頂
           &&(canWork(m.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(m.id,dt,occ.shift,occ.role,fullSched)||canWorkSupport(m.id,dt,occ.shift,occ.role,fullSched)));
         if(!cands.length) continue;
         const arr=newSched[dt][occ.shift];
@@ -2241,6 +2295,11 @@ function generateScheduleAttempt(y,m,dates){
   // 「不在預假限制天數人員」若填了休假天數，收斂其班數至精確目標(在職天數-休假天數)，
   // 放在一般公平性收斂之後執行，避免干擾一般人員的班數收斂過程。
   enforceLongLeaveExactDays(newSched, fullSched, dates);
+
+  // 最終盡力清除殘留孤立單班：放寬班數帶1級(整體全距仍硬性 <=3)以爭取更多承接者。
+  // 「不留孤立單班」優先於「班數全距越小越好」，故此步允許把全距從1微幅放寬到最多3來換取
+  // 消掉孤立單班；此後不再跑會重新收緊全距的步驟，避免又把孤立單班救回來。
+  fixIsolatedShifts(newSched, fullSched, dates, 1);
 
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
