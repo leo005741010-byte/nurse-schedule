@@ -104,6 +104,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-D{background:#fff8e1;color:#e65100;font-weight:700;}
 .mg-E{background:#e3f2fd;color:#1565c0;font-weight:700;}
 .mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
+.mg-D8,.mg-N8{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 #master-table tr.mg-row-active{background:#e0f2f1;}
 #master-table tr.mg-row-active td.nm{background:#0d5c4a!important;color:#fff!important;}
@@ -796,12 +797,18 @@ function hoursBetween(d1,h1,d2,h2){
 // SHIFT HELPERS
 // ============================================================
 const SHIFTS=['D','E','N'];
-const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）'};
+// 特殊12小時班(D8/N8)：手動排列、不參與自動排班，但需讓自動排班的休息時數／連續上班天數
+// 判斷正確感知這些班次的存在，避免同一人同一天被自動排班重複指派、或排班忽略12小時班
+// 前後應有的休息間隔。SPECIAL_SHIFTS 只用於「忙碌狀態」相關檢查，絕不出現在核心排班迴圈。
+const SPECIAL_SHIFTS=['D8','N8'];
+const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）',D8:'08:00-20:00',N8:'20:00-08:00（次日）'};
 function shiftRange(shift){
   switch(shift){
     case 'D': return {s:8,e:16};
     case 'E': return {s:16,e:24};
     case 'N': return {s:24,e:32};
+    case 'D8': return {s:8,e:20};
+    case 'N8': return {s:20,e:32};
   }
 }
 function getShiftStart(shift,date){ const{s}=shiftRange(shift); return s<24?{date,hour:s}:{date:addDays(date,1),hour:s-24}; }
@@ -817,6 +824,9 @@ function ensureDay(dateStr){
       ds[sh]=ds.roles[sh].map((r,i)=>old[i]!==undefined?old[i]:null);
     }
   }
+  // 特殊12小時班(D8/N8)：無固定格數，人力全由管理者手動增減，故不像D/E/N需對齊roles長度。
+  if(!ds.D8) ds.D8=[];
+  if(!ds.N8) ds.N8=[];
   return ds;
 }
 function getRoles(dateStr,shift){
@@ -835,6 +845,9 @@ function getLastAssigned(nurseId, beforeDate, sched){
     for(const sh of SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) last={date:d,shift:sh};
     }
+    for(const sh of SPECIAL_SHIFTS){
+      if((ds[sh]||[]).includes(nurseId)) last={date:d,shift:sh};
+    }
   }
   return last;
 }
@@ -845,12 +858,15 @@ function getNextAssigned(nurseId, afterDate, sched){
     for(const sh of SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) return {date:d,shift:sh};
     }
+    for(const sh of SPECIAL_SHIFTS){
+      if((ds[sh]||[]).includes(nurseId)) return {date:d,shift:sh};
+    }
   }
   return null;
 }
 function isAssignedThatDay(nurseId,dateStr,sched){
   const ds=sched[dateStr]; if(!ds) return false;
-  return SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId));
+  return SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId));
 }
 function restOK(nurseId,date,shift,sched){
   const last=getLastAssigned(nurseId,date,sched);
@@ -1918,7 +1934,11 @@ function generateScheduleAttempt(y,m,dates){
   for(const d of dates){
     const existing=state.schedule[d]||{};
     const roles=existing.roles||{D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
-    newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null)};
+    // D8/N8(12小時特殊班)為手動排列、不參與自動排班，故直接沿用既有指派、原樣帶入結果，
+    // 不可被自動排班的產生過程覆蓋或遺失；isAssignedThatDay等忙碌檢查會讀到這裡的資料，
+    // 讓一般D/E/N的排班自動避開這些已佔用12小時班的人。
+    newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null),
+      D8:[...(existing.D8||[])], N8:[...(existing.N8||[])]};
   }
   const fullSched = new Proxy(newSched, {
     get(target, key, receiver){
@@ -2208,6 +2228,21 @@ function renderCalendar(){
       cell.appendChild(block);
     }
 
+    // 特殊12小時班(D8/N8)：手動排列，只有當天實際有人才顯示，不佔用空間干擾一般排班檢視。
+    for(const sh of SPECIAL_SHIFTS){
+      const arr=ds[sh]||[];
+      if(!arr.length) continue;
+      const block=document.createElement('div');
+      block.className='shift-block';
+      block.style.borderColor='#f9a825';
+      const rows=arr.map(nid=>{
+        const nu=state.doctors.find(x=>x.id===nid); if(!nu) return '';
+        return `<div class="role-row"><span class="role-abbr" style="background:#fff3e0;color:#e65100">特</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color}" title="${nu.name}">${nu.name}</span></div>`;
+      }).join('');
+      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag" style="background:#fff3e0;color:#e65100;border:1px solid #f9a825">${sh}</span><span class="shift-cnt">${arr.length}人</span></div>${rows}`;
+      cell.appendChild(block);
+    }
+
     const prs=state.preRequests[dateStr]||[];
     if(prs.length){
       const prow=document.createElement('div');
@@ -2250,6 +2285,7 @@ function openDayModal(dateStr){
   _dayDraft={
     roles:{D:[...ds.roles.D],E:[...ds.roles.E],N:[...ds.roles.N]},
     D:[...ds.D], E:[...ds.E], N:[...ds.N],
+    D8:[...ds.D8], N8:[...ds.N8],
   };
   const[y,mo,d]=dateStr.split('-').map(Number);
   const dow=['一','二','三','四','五','六','日'][getDOW(dateStr)];
@@ -2285,11 +2321,44 @@ function _renderDayDraft(){
     });
     html+=`</div>`;
   }
+  // 特殊12小時班(D8/N8)：手動排列、不參與自動排班，格數不固定，全部可自由增減。
+  const specialCfg=[{shift:'D8',label:'D8 (12小時特班)'},{shift:'N8',label:'N8 (12小時特班)'}];
+  for(const c of specialCfg){
+    const arr=ds[c.shift];
+    html+=`<div class="day-shift-block" style="border-color:#f9a825">
+      <div class="day-shift-hd">
+        <span class="slot-tag" style="padding:2px 8px;background:#fff3e0;color:#e65100;border:1px solid #f9a825">${c.label}</span>
+        <span style="font-size:11px;color:#666">${SHIFT_TIME[c.shift]}・手動排列，不參與自動排班</span>
+        <button class="btn-sm" style="background:#fff3e0;color:#e65100;margin-left:auto" onclick="_draftAddSpecial('${c.shift}')">＋新增人員</button>
+      </div>`;
+    arr.forEach((nid,i)=>{
+      const opts=`<option value=""${!nid?' selected':''}>-- 空缺 --</option>`+
+        state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>
+          `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':n.type==='support'?'(支援)':''}</option>`
+        ).join('');
+      html+=`<div class="day-slot-row"><span class="day-slot-role">特${i+1}</span><select onchange="_draftSpecialSlot('${c.shift}',${i},this.value)">${opts}</select><button class="btn-sm btn-del" onclick="_draftRemoveSpecial('${c.shift}',${i})">✕</button></div>`;
+    });
+    html+=`</div>`;
+  }
   const prs=state.preRequests[_dayDraftDate]||[];
   if(prs.length) html+=`<div style="margin-top:6px"><strong style="font-size:12px">📝 預假/預班：</strong><br>${prs.map(pr=>`<span class="pr-badge">${getDocName(pr.docId)}: ${prLabel(pr)}${pr.note?' ('+pr.note+')':''}</span> `).join('')}</div>`;
   document.getElementById('day-modal-body').innerHTML=html;
 }
-function _draftSlot(shift,idx,val){ _dayDraft[shift][idx]=val||null; }
+// 一人同一天不可能同時身兼一般班(D/E/N)與12小時特班(D8/N8)，兩邊互相排斥；
+// 選人時自動把該人從「其餘所有班別」清掉，避免手動編輯時不小心把同一人重複排入。
+function _clearNurseFromOtherSlots(nurseId,keepShift){
+  if(!nurseId) return;
+  for(const sh of [...SHIFTS,...SPECIAL_SHIFTS]){
+    if(sh===keepShift) continue;
+    const i=_dayDraft[sh].indexOf(nurseId);
+    if(i>=0) _dayDraft[sh][i]=null;
+  }
+}
+function _draftSlot(shift,idx,val){
+  _dayDraft[shift][idx]=val||null;
+  _clearNurseFromOtherSlots(val,shift);
+  _renderDayDraft();
+}
 function _draftAddExtra(shift){
   _dayDraft.roles[shift].push('支援');
   _dayDraft[shift].push(null);
@@ -2300,16 +2369,31 @@ function _draftRemoveExtra(shift,idx){
   _dayDraft[shift].splice(idx,1);
   _renderDayDraft();
 }
+function _draftSpecialSlot(shift,idx,val){
+  _dayDraft[shift][idx]=val||null;
+  _clearNurseFromOtherSlots(val,shift);
+  _renderDayDraft();
+}
+function _draftAddSpecial(shift){
+  _dayDraft[shift].push(null);
+  _renderDayDraft();
+}
+function _draftRemoveSpecial(shift,idx){
+  _dayDraft[shift].splice(idx,1);
+  _renderDayDraft();
+}
 function confirmDayModal(){
   if(!_dayDraftDate||!_dayDraft) return;
   pushUndo();
   const ds=ensureDay(_dayDraftDate);
   ds.roles={D:[..._dayDraft.roles.D],E:[..._dayDraft.roles.E],N:[..._dayDraft.roles.N]};
   ds.D=[..._dayDraft.D]; ds.E=[..._dayDraft.E]; ds.N=[..._dayDraft.N];
+  ds.D8=_dayDraft.D8.filter(Boolean); ds.N8=_dayDraft.N8.filter(Boolean);
   const savedDate=_dayDraftDate;
   _dayDraft=null; _dayDraftDate=null;
   autoSave();
   closeModal('day-modal');
+  renderMasterGrid();
   showToast(`✅ ${savedDate} 已儲存`);
 }
 function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-modal'); }
@@ -2762,7 +2846,7 @@ function renderStats(){
     const s=st[doc.id]; let cur=0;
     for(const dateStr of dates){
       const ds=state.schedule[dateStr]||{};
-      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
+      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
       if(worked){cur++;s.consecMax=Math.max(s.consecMax,cur);}else cur=0;
     }
   }
@@ -2808,6 +2892,7 @@ function renderStats(){
 function shiftOfNurseOnDate(nurseId,dateStr){
   const ds=state.schedule[dateStr]; if(!ds) return null;
   for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
+  for(const sh of SPECIAL_SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
 // 每日實際時數手動調整(部分請假/整班請休等，與班別指派互相獨立)。
@@ -2826,11 +2911,13 @@ function setHourAdjust(nurseId,dateStr,hrs){
   if(!state.hourAdjust[dateStr]) state.hourAdjust[dateStr]={};
   state.hourAdjust[dateStr][nurseId]=hrs;
 }
-// 當天實際時數：有手動調整用調整值，否則有班8小時、無班0小時。
+// 當天實際時數：有手動調整用調整值；否則D/E/N班8小時、D8/N8特殊12小時班為12小時、無班0小時。
 function hoursOnDate(nurseId,dateStr){
   const adj=getHourAdjust(nurseId,dateStr);
   if(adj!==null) return adj;
-  return shiftOfNurseOnDate(nurseId,dateStr)?8:0;
+  const sh=shiftOfNurseOnDate(nurseId,dateStr);
+  if(!sh) return 0;
+  return SPECIAL_SHIFTS.includes(sh)?12:8;
 }
 function calcNurseTotalHours(nurseId,dates){
   let h=0; for(const d of dates) h+=hoursOnDate(nurseId,d);
@@ -2911,8 +2998,9 @@ function renderMasterGrid(){
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
 }
 // 月班總表手動編輯：
-//   輸入 D/E/N → 指派班別(留空代表OFF)；輸入數字(如6.5、0) → 只調整當天實際時數
-//   (用於部分請假被批修/整班請休等情境)，不影響班別指派本身。
+//   輸入 D/E/N → 指派一般班別(留空代表OFF)；輸入 D8/N8 → 指派12小時特殊班(手動排列，
+//   不參與自動排班)；輸入數字(如6.5、0) → 只調整當天實際時數(用於部分請假被批修/整班請休
+//   等情境)，不影響班別指派本身。
 // 屬於手動指派，不做資格檢核(角色階級/連班天數等)，與日期格子編輯(day-modal)的行為一致。
 function updateMasterCell(nurseId,dateStr,rawVal){
   const raw=(rawVal||'').trim();
@@ -2928,8 +3016,8 @@ function updateMasterCell(nurseId,dateStr,rawVal){
   }
 
   const val=raw.toUpperCase();
-  if(val&&!SHIFTS.includes(val)){
-    showToast('請輸入 D、E、N、時數數字(如6.5)，或留空(代表OFF)','warn');
+  if(val&&!SHIFTS.includes(val)&&!SPECIAL_SHIFTS.includes(val)){
+    showToast('請輸入 D、E、N、D8、N8、時數數字(如6.5)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
   }
@@ -2939,7 +3027,11 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     const idx=ds[sh].indexOf(nurseId);
     if(idx>=0) ds[sh][idx]=null;
   }
-  if(val){
+  for(const sh of SPECIAL_SHIFTS){
+    const idx=ds[sh].indexOf(nurseId);
+    if(idx>=0) ds[sh].splice(idx,1);
+  }
+  if(val&&SHIFTS.includes(val)){
     const arr=ds[val];
     let idx=arr.indexOf(null);
     if(idx<0){
@@ -2948,8 +3040,10 @@ function updateMasterCell(nurseId,dateStr,rawVal){
       idx=arr.length-1;
     }
     arr[idx]=nurseId;
+  } else if(val&&SPECIAL_SHIFTS.includes(val)){
+    ds[val].push(nurseId); // D8/N8無固定格數，直接附加(手動排列)
   }
-  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(有班8h/無班0h)
+  setHourAdjust(nurseId,dateStr,null); // 重新指派/取消班別時，回到預設時數(D/E/N 8h、D8/N8 12h、無班0h)
   autoSave();
   renderMasterGrid();
   renderCalendar();
@@ -3427,7 +3521,7 @@ function generatePDF(){
     const s=st[doc.id]; let cur=0;
     for(const dateStr of dates){
       const ds=state.schedule[dateStr]||{};
-      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
+      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
       if(worked){cur++;s.consecMax=Math.max(s.consecMax,cur);}else cur=0;
     }
   }
