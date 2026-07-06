@@ -165,7 +165,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <button id="month-label" class="nav-btn" onclick="jumpMonth()" style="font-size:16px;font-weight:600;min-width:90px;padding:5px 10px;cursor:pointer" title="點擊跳至指定年月"></button>
   <button class="nav-btn" onclick="changeMonth(1)">下月 &#9654;</button>
   <button class="action-btn btn-green" onclick="autoSchedule()">⚡ 自動排班</button>
-  <button class="action-btn" style="background:#c0392b;color:#fff" onclick="toggleLock()">🔒 結束/解鎖</button>
+  <button id="btn-lock" class="action-btn" style="background:#757575;color:#fff" onclick="toggleLock()">🔓 結束/解鎖</button>
   <button class="action-btn btn-orange" onclick="clearSchedule()">🗑 清空</button>
   <button id="btn-undo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="undoLast()" disabled title="無可還原操作">↩ 還原</button>
   <button id="btn-redo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="redoLast()" disabled title="無可重做操作">↪ 重做</button>
@@ -597,7 +597,7 @@ function pushUndo(){
   _undoStack.push(snapshotUndoable());
   if(_undoStack.length>10) _undoStack.shift();
   _redoStack=[];
-  updateUndoBtn(); updateRedoBtn();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
 function undoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法還原','warn');return;}
@@ -608,7 +608,7 @@ function undoLast(){
   const snap=JSON.parse(_undoStack.pop());
   restoreUndoable(snap);
   autoSave(); rerenderAfterUndoRedo();
-  showToast('✅ 已還原'); updateUndoBtn(); updateRedoBtn();
+  showToast('✅ 已還原'); updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
 function redoLast(){
   if(isCurrentMonthLocked()){showToast('🔒 本月班表已鎖定，無法重做','warn');return;}
@@ -619,7 +619,7 @@ function redoLast(){
   const snap=JSON.parse(_redoStack.pop());
   restoreUndoable(snap);
   autoSave(); rerenderAfterUndoRedo();
-  showToast('✅ 已重做'); updateUndoBtn(); updateRedoBtn();
+  showToast('✅ 已重做'); updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
 function toggleLock(){
   const locked=isCurrentMonthLocked();
@@ -629,7 +629,7 @@ function toggleLock(){
   const key=`${state.year}-${state.month}`;
   if(locked){ _lockedMonths.delete(key); showToast(`🔓 ${state.year}年${state.month+1}月 已解鎖`); }
   else { _lockedMonths.add(key); showToast(`🔒 ${state.year}年${state.month+1}月 已鎖定`); }
-  updateUndoBtn(); updateRedoBtn();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
   autoSave();
 }
 function updateUndoBtn(){
@@ -645,6 +645,15 @@ function updateRedoBtn(){
   const ok=_redoStack.length>0&&!locked;
   b.disabled=!ok; b.style.opacity=ok?'1':'0.4';
   b.title=locked?'本月班表已鎖定':(_redoStack.length?`可重做 ${_redoStack.length} 步`:'無可重做操作');
+}
+// 鎖定按鈕外觀需隨「目前檢視月份」的鎖定狀態即時變化，否則使用者無法一眼看出
+// 現在這個月是否已鎖定。已鎖定＝紅底🔒(可點擊解鎖)；未鎖定＝灰底🔓(可點擊鎖定)。
+function updateLockBtn(){
+  const b=document.getElementById('btn-lock'); if(!b) return;
+  const locked=isCurrentMonthLocked();
+  b.textContent=locked?'🔒 已鎖定(點擊解鎖)':'🔓 結束/鎖定';
+  b.style.background=locked?'#c0392b':'#757575';
+  b.title=locked?`${state.year}年${state.month+1}月已鎖定，點擊輸入密碼解鎖`:`${state.year}年${state.month+1}月未鎖定，點擊輸入密碼鎖定`;
 }
 function toggleDocFilter(docId){ _filterDocId=(_filterDocId===docId)?null:docId; renderCalendar(); }
 let _prListYear = new Date().getFullYear();
@@ -2013,7 +2022,7 @@ function autoSchedule(){
     if(pwd===null) return;
     if(pwd!=='0320'){showToast('❌ 密碼錯誤','warn');return;}
     _lockedMonths.delete(`${state.year}-${state.month}`);
-    updateUndoBtn(); updateRedoBtn();
+    updateUndoBtn(); updateRedoBtn(); updateLockBtn();
     autoSave();
   }
   if(!window.__skipConfirm && !confirm('確定要自動排班？這將覆蓋本月班表。')) return;
@@ -2130,7 +2139,7 @@ function toggleHol(dateStr,e){
   pushUndo();
   if(state.holidays.has(dateStr)) state.holidays.delete(dateStr);
   else state.holidays.add(dateStr);
-  autoSave(); renderCalendar();
+  autoSave(); renderCalendar(); renderMasterGrid();
 }
 function escAttr(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 // 每日自由備註(如ACLS訓練、評鑑等提醒事項)，與班別指派無關，不受本月鎖定限制。
@@ -2359,14 +2368,14 @@ function saveDoc(){
   }
   autoSave();
   closeModal('nurse-modal');
-  renderNurseTable(); renderCalendar();
+  renderNurseTable(); renderCalendar(); renderMasterGrid();
   showToast('✅ 已儲存');
 }
 function deleteDoc(id){
   if(!confirm('確定刪除此護理師？其已排入的班別將維持顯示但需手動清除。')) return;
   pushUndo();
   state.doctors=state.doctors.filter(x=>x.id!==id);
-  autoSave(); renderNurseTable(); renderCalendar();
+  autoSave(); renderNurseTable(); renderCalendar(); renderMasterGrid();
 }
 
 // ============================================================
@@ -2551,7 +2560,7 @@ function addPR(){
     cur=addDays(cur,1); cnt++;
   }
   _prRangeStart=null; _prRangeEnd=null;
-  autoSave(); renderPRList(); renderCalendar(); renderPRCalGrid();
+  autoSave(); renderPRList(); renderCalendar(); renderPRCalGrid(); renderMasterGrid();
   showToast('✅ 已新增');
 }
 function delPR(date,prId){
@@ -2560,7 +2569,7 @@ function delPR(date,prId){
   pushUndo();
   state.preRequests[date]=state.preRequests[date].filter(p=>p.id!==prId);
   if(!state.preRequests[date].length) delete state.preRequests[date];
-  autoSave(); renderPRList(); renderCalendar();
+  autoSave(); renderPRList(); renderCalendar(); renderMasterGrid();
 }
 let _prMergedGroups={};
 function delPRRange(gid){
@@ -2572,7 +2581,7 @@ function delPRRange(gid){
     state.preRequests[date]=state.preRequests[date].filter(p=>!idSet.has(p.id));
     if(!state.preRequests[date].length) delete state.preRequests[date];
   }
-  autoSave(); renderPRList(); renderCalendar();
+  autoSave(); renderPRList(); renderCalendar(); renderMasterGrid();
 }
 function prDateRangeLabel(start,end){
   const[sy,sm,sd]=start.split('-').map(Number);
@@ -2889,6 +2898,7 @@ function changeMonth(delta){
   syncOtherTabsToCurrentMonth();
   renderCalendar();
   renderMasterGrid();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
 function jumpMonth(){
   const input=prompt('輸入年月 (格式 YYYY-MM)：',`${state.year}-${String(state.month+1).padStart(2,'0')}`);
@@ -2899,6 +2909,7 @@ function jumpMonth(){
   syncOtherTabsToCurrentMonth();
   renderCalendar();
   renderMasterGrid();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
@@ -2925,7 +2936,7 @@ function clearSchedule(){
     state.schedule[d]={roles,D:Array(roles.D.length).fill(null),E:Array(roles.E.length).fill(null),N:Array(roles.N.length).fill(null)};
     delete state.hourAdjust[d];
   }
-  autoSave(); renderCalendar();
+  autoSave(); renderCalendar(); renderMasterGrid();
   showToast('已清空本月排班');
 }
 
@@ -3046,7 +3057,8 @@ async function initCloud(url){
 function applyCloudData(data){
   applyData(data);
   _lastLocalTs=data._ts||Date.now();
-  renderCalendar(); renderNurseTable();
+  renderCalendar(); renderMasterGrid(); renderNurseTable();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
   try{ localStorage.setItem(LS_KEY,JSON.stringify({...serializeState(),_ts:_lastLocalTs})); }catch(e){}
 }
 function cloudSave(){
@@ -3419,6 +3431,7 @@ window.onload=()=>{
   renderPRList();
   renderPRCalGrid();
   renderStats();
+  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
   const cu=getCloudUrl();
   if(cu) initCloud(cu);
 };
