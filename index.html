@@ -3993,11 +3993,14 @@ function generatePDF(){
     table{border-collapse:collapse;width:100%;margin-bottom:16px;}
     th,td{border:1px solid #bbb;padding:3px 4px;text-align:center;vertical-align:middle;font-size:9px;}
     th{background:#0d5c4a;color:#fff;}
+    table.mg-table{table-layout:fixed;}
+    table.mg-table th:first-child,table.mg-table td:first-child{width:62px;font-size:11px;font-weight:600;text-align:left;padding-left:5px;}
+    table.mg-table th:nth-last-child(-n+4),table.mg-table td:nth-last-child(-n+4){width:32px;font-size:8px;}
     @media print{ @page{size:A4 landscape;margin:8mm;} .pb{page-break-before:always;margin-top:0;} }
   </style></head><body>
   <h1>天晟護理排班 ${monthStr}</h1>
   <h2>一、月班總表</h2>
-  <table>${mgHead}${mgRows}</table>
+  <table class="mg-table">${mgHead}${mgRows}</table>
   <div class="pb">
   <h2>二、排班表（職位）</h2>
   ${calHTML}
