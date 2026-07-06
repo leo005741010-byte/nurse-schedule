@@ -3857,11 +3857,12 @@ function generatePDF(){
     const bgCol=isHol?'background:#fde8e8;':'';
     return `<th style="${bgCol}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
-  // 假日班別的底色需與平日班別不同(方便一眼辨識)，同時仍要保留D/E/N各自的識別色，
+  // 假日班別的底色需與平日班別不同(方便一眼辨識)，但字的顏色維持跟平日一樣(不因假日改變)。
   // 因此不能單純疊加「假日底色」再蓋上「班別底色」(inline style同屬性後者會直接覆蓋前者，
-  // 假日底色等於白疊，之前就是這樣才會看不出來)。改採「假日版=同色系但更深」的做法。
-  const SHIFT_BG={D:'background:#fff8e1;color:#e65100',E:'background:#e3f2fd;color:#1565c0',N:'background:#f3e5f5;color:#6a1b9a'};
-  const SHIFT_BG_HOL={D:'background:#ffcc80;color:#8a4a00',E:'background:#90caf9;color:#0d3c78',N:'background:#ce93d8;color:#4a1461'};
+  // 假日底色等於白疊，之前就是這樣才會看不出來)，改為底色與字色分開組合。
+  const SHIFT_COLOR={D:'#e65100',E:'#1565c0',N:'#6a1b9a'};
+  const SHIFT_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5'};
+  const SHIFT_BG_HOL={D:'#ffcc80',E:'#90caf9',N:'#ce93d8'};
   const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
@@ -3872,7 +3873,7 @@ function generatePDF(){
       const sh=shiftOfNurseOnDate(doc.id,d);
       const adj=getHourAdjust(doc.id,d);
       const adjBadge=adj!==null?`<div style="font-size:7px;font-weight:700;color:#e65100">${adj}h</div>`:'';
-      if(sh){ total++; if(wknd) holCount++; const sb=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="${sb};font-weight:700">${sh}${adjBadge}</td>`; }
+      if(sh){ total++; if(wknd) holCount++; const bg=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="background:${bg};color:${SHIFT_COLOR[sh]};font-weight:700">${sh}${adjBadge}</td>`; }
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF${adjBadge}</td>`;
       return `<td style="${holBg}">${adjBadge}</td>`;
