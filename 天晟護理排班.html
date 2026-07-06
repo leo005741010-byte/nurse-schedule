@@ -1773,6 +1773,49 @@ function enforceMaxShiftJunior(newSched, fullSched, dates){
     if(!moved) break;
   }
 }
+// 需求(2026-07-07)：資深假多、資淺假少。除了顧最兩端(enforceMaxOffSenior/enforceMaxShiftJunior)，
+// 這裡處理「整體排序」——掃描所有 (資深S, 資淺J) 配對，只要資深S當月班數「多於」資淺J
+// (代表資深上比較多班、放比較少假，方向顛倒)，就把S的一個班次轉給J：S少一班(多放假)、
+// J多一班(少放假)，讓「資深多假、資淺少假」的關係更全面成立，而非僅止於最兩端。
+// 因為只在 counts[S]>counts[J] 時移轉，移轉後 S-1>=J、J+1<=S，天生不會擴大班數帶(全距不變或縮小)。
+// 純班數守恆、不製造空班、不動預上班鎖定格、不違反任何鐵則，且拒絕會製造孤立單班的移轉。
+function reduceSeniorityInversions(newSched, fullSched, dates){
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  const seniors=parts.filter(d=>isSenior(d.id));
+  const juniors=parts.filter(d=>!isSenior(d.id));
+  if(!seniors.length||!juniors.length) return;
+  const homeOf=d=>getNurseShiftType(d.id,state.year,state.month);
+  for(let round=0;round<300;round++){
+    const counts={};
+    for(const d of parts) counts[d.id]=calcNurseShiftCount(d.id,newSched);
+    // 最顛倒的配對優先修正：資深班數最多者當給方、資淺班數最少者當收方
+    const givers=seniors.slice().sort((a,b)=>counts[b.id]-counts[a.id]); // 資深班數多→少
+    const takers=juniors.slice().sort((a,b)=>counts[a.id]-counts[b.id]); // 資淺班數少→多
+    let moved=false;
+    outer:
+    for(const g of givers){
+      for(const t of takers){
+        if(counts[g.id]<=counts[t.id]) continue; // 只修正「資深班數 > 資淺班數」的顛倒配對
+        for(const dt of shuffle([...dates])){
+          const occ=findSlotOccupant(g.id,dt,newSched);
+          if(!occ) continue;
+          if(isWorkLocked(dt,occ.shift,occ.idx)) continue;
+          if(isAssignedThatDay(t.id,dt,newSched)) continue;
+          if(!roleAllowed(t.prefs.level,occ.role)) continue;
+          if(moveWouldIsolate(g.id,t.id,dt,newSched)) continue; // 不製造孤立單班
+          const arr=newSched[dt][occ.shift];
+          arr[occ.idx]=null;
+          const ok = homeOf(t)===occ.shift
+            ? (canWork(t.id,dt,occ.shift,occ.role,fullSched)||canWorkForce(t.id,dt,occ.shift,occ.role,fullSched))
+            : canWorkSupport(t.id,dt,occ.shift,occ.role,fullSched);
+          if(ok){ arr[occ.idx]=t.id; counts[g.id]--; counts[t.id]++; moved=true; break outer; }
+          else arr[occ.idx]=g.id;
+        }
+      }
+    }
+    if(!moved) break;
+  }
+}
 // 「不在預假限制天數人員」若填了當月休假天數，該數字是「當月休假總天數」的硬性目標(含既有
 // 預假)，不是 leaveAvailRatio 原本的軟性比例調降。例如林思廷填休16天，代表他整個月休假天數
 // 就是16天(不論其中有沒有既有預假)，班數收斂為「在職天數-16」。
@@ -2291,6 +2334,10 @@ function generateScheduleAttempt(y,m,dates){
   // 需求：依年資(主)＋大夜(輔)重新分配休假天數——資深假多、資淺假少，同資深時大夜假多。
   reallocateOffBySeniority(newSched, fullSched, dates);
 
+  // 需求：把「資深上比資淺多班(資深假反而較少)」的所有顛倒配對修正過來，讓資深多假、
+  // 資淺少假的關係在整份班表都成立，而非只有最兩端。不擴大班數帶。
+  reduceSeniorityInversions(newSched, fullSched, dates);
+
   // 鐵則：休假最多(班數最少)者必須是資深；若混入資淺者，讓資深接手其休假名額。
   enforceMaxOffSenior(newSched, fullSched, dates);
 
@@ -2301,6 +2348,7 @@ function generateScheduleAttempt(y,m,dates){
   // 未能消除的孤立單班；再各跑一次(皆不擴大班數帶，近收斂時成本極低)。
   fixIsolatedShifts(newSched, fullSched, dates);
   enforceSpreadLimit(newSched, fullSched, dates);
+  reduceSeniorityInversions(newSched, fullSched, dates);
   enforceMaxOffSenior(newSched, fullSched, dates);
   enforceMaxShiftJunior(newSched, fullSched, dates);
 
@@ -2332,7 +2380,9 @@ function scheduleQuality(newSched,y,m){
   const dates=monthDates(y,m);
   for(const d of state.doctors){ if(d.type!=='full') continue;
     for(const dt of dates){ if(isIsolatedWorkDay(d.id,dt,newSched)) isolated++; } }
-  let maxOffNotSenior=0, maxShiftNotJunior=0;
+  const countById={};
+  parts.forEach((d,i)=>countById[d.id]=counts[i]);
+  let maxOffNotSenior=0, maxShiftNotJunior=0, seniorityInversions=0;
   if(counts.length){
     const mn=Math.min(...counts), mx=Math.max(...counts);
     // mn===mx時全員班數相同，「最少/最多班數者」是同一群人，資深/資淺兩條鐵則會直接互相
@@ -2341,10 +2391,16 @@ function scheduleQuality(newSched,y,m){
     // 結果)反而被扣分。
     if(mn!==mx){
       // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
-      maxOffNotSenior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mn&&!isSenior(d.id)).length;
+      maxOffNotSenior=parts.filter(d=>countById[d.id]===mn&&!isSenior(d.id)).length;
       // 統計「上最多班(班數最多)卻是資深」的人數，越少越好(0＝最多班者皆資淺)
-      maxShiftNotJunior=parts.filter(d=>calcNurseShiftCount(d.id,newSched)===mx&&isSenior(d.id)).length;
+      maxShiftNotJunior=parts.filter(d=>countById[d.id]===mx&&isSenior(d.id)).length;
     }
+    // 整體排序品質：統計「資深班數 > 資淺班數」的顛倒配對數(資深上比資淺多班＝資深假較少，
+    // 方向顛倒)，越少越好(0＝每位資深的班數都不超過任何資淺，即資深普遍假較多)。用於在
+    // 多次嘗試中挑「資深多假、資淺少假」關係最完整的一份。
+    const seniors=parts.filter(d=>isSenior(d.id));
+    const juniors=parts.filter(d=>!isSenior(d.id));
+    for(const s of seniors) for(const j of juniors){ if(countById[s.id]>countById[j.id]) seniorityInversions++; }
   }
   // 「不在預假限制天數人員」與其精確休假天數目標的總誤差(絕對值加總)，越小越好(0＝全部精準命中)。
   let longLeaveMiss=0;
@@ -2361,7 +2417,7 @@ function scheduleQuality(newSched,y,m){
   // 結構性限制，非程式錯誤)。評分時合併看「兩鐵則違反人數的加總」，不讓其中一項系統性地
   // 壓過另一項，公平地取兩者總違反數最少的一次嘗試。
   const seniorityViolations=maxOffNotSenior+maxShiftNotJunior;
-  return {empty,longLeaveMiss,isolated,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,spread};
+  return {empty,longLeaveMiss,isolated,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
@@ -2369,6 +2425,9 @@ function isQualityBetter(q,best){
   if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
   if(q.seniorityViolations!==best.seniorityViolations) return q.seniorityViolations<best.seniorityViolations;
+  // 兩端鐵則相同時，再比整體「資深多假、資淺少假」的完整度(顛倒配對越少越好)，
+  // 排在班數全距之前——使用者明確要求優先讓資深假多、資淺假少。
+  if(q.seniorityInversions!==best.seniorityInversions) return q.seniorityInversions<best.seniorityInversions;
   return q.spread<best.spread;
 }
 const AUTO_SCHEDULE_ATTEMPTS=8;
