@@ -66,6 +66,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .btn-edit{background:#3498db;color:#fff;}.btn-del{background:#e74c3c;color:#fff;}
 .level-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#fff;}
 .lvl-L{background:#2e7d32;}.lvl-T{background:#1565c0;}.lvl-A2{background:#e67e22;}.lvl-B{background:#95a5a6;}
+.senior-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#fff;}
+.sr-senior{background:#6a1b9a;}.sr-junior{background:#c0392b;}
 /* ===== MODAL ===== */
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
@@ -250,7 +252,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -2885,6 +2887,7 @@ function renderNurseTable(){
       <td>${d.type==='full'?genderLabel:'-'}</td>
       <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
+      <td>${d.type==='full'?`<span class="senior-badge ${isSenior(d.id)?'sr-senior':'sr-junior'}">${isSenior(d.id)?'資深':'資淺'}</span>`:'-'}</td>
       <td>${d.type==='full'?wrStr:'-'}</td>
       <td>${d.type==='full'?supportStr:'-'}</td>
       <td><button class="btn-sm btn-edit" onclick="openNurseModal('${d.id}')">編輯</button><button class="btn-sm btn-del" onclick="deleteDoc('${d.id}')">刪除</button></td>
