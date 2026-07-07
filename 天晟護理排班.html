@@ -89,6 +89,16 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #pre-req-list td{padding:4px 7px;font-size:11px;border-bottom:1px solid #eee;}
 /* ===== STATS / MASTER GRID ===== */
 .stats-wrap{overflow-x:auto;}
+.help-wrap{max-width:900px;line-height:1.7;color:#2c3e50;font-size:14px;padding:4px 2px 30px;}
+.help-h2{font-size:20px;color:#0d5c4a;margin:0 0 6px;}
+.help-lead{background:#e6f5f1;border-left:4px solid #0d5c4a;padding:10px 14px;border-radius:0 6px 6px 0;margin:0 0 18px;color:#33554d;}
+.help-h3{font-size:16px;color:#0d5c4a;margin:22px 0 8px;padding-bottom:5px;border-bottom:2px solid #cde8e1;}
+.help-ul,.help-ol{margin:0 0 4px;padding-left:22px;}
+.help-ul li,.help-ol li{margin-bottom:7px;}
+.help-ol li{margin-bottom:9px;}
+.help-wrap code{background:#f2f4f5;border:1px solid #dde1e3;border-radius:3px;padding:1px 5px;font-size:13px;color:#c0392b;font-weight:700;}
+.help-wrap b{color:#0d5c4a;}
+.help-note{margin-top:16px;font-size:13px;color:#8a6d3b;background:#fcf8e3;border:1px solid #f5e79e;border-radius:6px;padding:10px 14px;}
 #stats-table{width:100%;border-collapse:collapse;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1);min-width:900px;font-size:11px;}
 #stats-table th{background:#0d5c4a;color:#fff;padding:6px 8px;text-align:center;white-space:nowrap;}
 #stats-table td{padding:5px 8px;border-bottom:1px solid #eee;text-align:center;}
@@ -186,6 +196,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div class="tab" onclick="switchTab('nurses')">👩‍⚕️ 護理師設定</div>
   <div class="tab" onclick="switchTab('prereq')">📝 預假/預班</div>
   <div class="tab" onclick="switchTab('stats')">📈 統計報表</div>
+  <div class="tab" onclick="switchTab('help')">📖 操作說明</div>
 </div>
 
 <div id="content">
@@ -279,7 +290,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <div class="pr-form">
         <div><div>護理師</div><select id="pr-doc"></select></div>
         <div>
-          <div style="margin-bottom:4px">選取日期（可複選多個不連續日期，或拖曳選一段範圍）</div>
+          <div style="margin-bottom:4px">選取日期（點選可複選多個不連續日期）</div>
           <div class="pr-cal-wrap">
             <div class="pr-cal-nav">
               <button onclick="prCalPrev()">&#9664;</button>
@@ -287,7 +298,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
               <button onclick="prCalNext()">&#9654;</button>
             </div>
             <div id="pr-cal-grid" class="pr-cal-grid"></div>
-            <div class="pr-cal-hint">點選可複選多天(再點一次取消該天)；按住拖曳可整段加入選取</div>
+            <div class="pr-cal-hint">點選日期即選取，可連點多天；再點一次取消該天</div>
             <div class="pr-cal-selected" id="pr-cal-selected">尚未選取日期</div>
           </div>
         </div>
@@ -338,6 +349,71 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </table>
     </div>
     <div id="stats-violations" style="margin-top:10px;"></div>
+  </div>
+
+  <!-- ======= 操作說明 ======= -->
+  <div id="tab-help" class="tab-pane">
+    <div class="help-wrap">
+      <h2 class="help-h2">📖 操作說明書</h2>
+      <p class="help-lead">本系統為單一網頁應用，所有資料自動存於瀏覽器並同步雲端；多台裝置開同一網址即共用同一份班表。以下依常用流程說明。</p>
+
+      <h3 class="help-h3">🗂 一、月班總表</h3>
+      <ul class="help-ul">
+        <li>整月一覽表：橫列為護理師、直欄為日期，格子顯示當天班別（D／E／N），假日欄位以不同底色標示。</li>
+        <li><b>手動指派班別</b>：直接在格子輸入 <code>D</code>／<code>E</code>／<code>N</code>；留空代表 OFF。輸入 <code>D12</code>／<code>N12</code> 指派 12 小時特班（08:00-20:00／20:00-08:00，手動排列、不參與自動排班）。</li>
+        <li><b>批修時數</b>：輸入「班別＋時數」如 <code>D2</code>、<code>E0</code>，代表指派該班別但當天實際只上 2 小時／0 小時（用於部分請假被批修）。時數 0～7.5、以 0.5 為間隔。要還原時數，只要重新輸入班別本身（如 <code>E</code>）即可清除。</li>
+        <li><b>手動鎖定</b>：<b>雙擊</b>格子可鎖定／解除鎖定該格（出現 ✋ 圖示）。鎖定後自動排班不會更動這一格。手動輸入或刪除班別本身不會鎖定，只有雙擊才會。</li>
+        <li>人名旁 <code>[3N]</code> 之類標記＝上個月月底的連續班別（方便確認換月轉班）；格子左上紅色 ❗＝該人階級不符此角色（僅提示）。</li>
+        <li>點日期表頭可只顯示當天有上班的人；點人名可只顯示該人有上班的日期。</li>
+      </ul>
+
+      <h3 class="help-h3">📅 二、排班表</h3>
+      <ul class="help-ul">
+        <li>以日曆方式呈現，每天分 D／E／N 各角色（組長、檢傷、重症、留觀、流動、支援等）。</li>
+        <li>點任一天可開啟編輯視窗，逐一指派各角色人員；不符階級者不會出現在該角色的可選清單中。</li>
+      </ul>
+
+      <h3 class="help-h3">👩‍⚕️ 三、護理師設定</h3>
+      <ul class="help-ul">
+        <li>新增／編輯護理師：姓名、顏色、預設班別、階級（L／T／A2／B）、性別、年資（資深／資淺）、是否可支援。</li>
+        <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
+        <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
+      </ul>
+
+      <h3 class="help-h3">📝 四、預假／預班</h3>
+      <ul class="help-ul">
+        <li>選護理師 → 在小月曆上<b>點選日期</b>（可連點多個不連續日期，再點一次取消）→ 選類型 → 按「新增」。</li>
+        <li>類型：<b>當天OFF</b>（預假）、<b>排D／E／N班</b>（預班，指定當天一定上某班）。預班會被鎖定，自動排班一定照排。</li>
+        <li>可設定每人每月最多預假天數、其中假日上限。「不在預假限制天數人員」可填當月休假總天數目標，自動排班會把班數收斂到此目標。</li>
+      </ul>
+
+      <h3 class="help-h3">📈 五、統計報表</h3>
+      <ul class="help-ul">
+        <li>各護理師當月 D／E／N 班數、總班數、總時數、假日班數、轉班次、最長連班一覽，並標示違反鐵則之處。</li>
+      </ul>
+
+      <h3 class="help-h3">🛠 六、常用操作</h3>
+      <ul class="help-ul">
+        <li><b>⚡ 自動排班</b>：依下方原則自動產生整月班表（會嘗試多種排法取最佳解，約需數秒）。會覆蓋本月班表，但預假／預班與手動鎖定的格子都會保留。</li>
+        <li><b>🔒 結束／鎖定</b>：鎖定本月班表避免誤改；解鎖需輸入密碼。</li>
+        <li><b>↩ 還原／↪ 重做</b>：可回復上一步操作。</li>
+        <li><b>匯出</b>：CSV、Excel（月班總表＋排班表）、PDF（月班總表＋排班表＋統計＋預假清單）。</li>
+        <li><b>☁️ 雲端</b>：資料自動同步；不同裝置開同一網址即共用。</li>
+      </ul>
+
+      <h3 class="help-h3">⚖ 七、自動排班原則（鐵則）</h3>
+      <ol class="help-ol">
+        <li><b>不留空班</b>：每個班別的需求人數一定補滿；本班別補不到時，依支援規則拉其他班別的人來支援。</li>
+        <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。上月大夜、本月轉白班者，在當月第一個大夜班之前可先上白班。</li>
+        <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。</li>
+        <li><b>放假天數集中</b>：全體放假天數落差控制在 4 個相鄰數字內（班數全距 ≤ 3）。</li>
+        <li><b>尊重預假／預班</b>：預假（OFF）與預班（指定上班）一定照辦，且預班會鎖定不被更動。</li>
+        <li><b>階級不可違反</b>：自動排班絕不把不符階級的人排入該角色。</li>
+        <li><b>資深多放假、資淺少放假</b>：整體上讓資深人員放假較多、資淺較少；同為資深時，大夜（N）放假優先。<b>放假最少（上最多班）的人一定是資淺，絕不會是資深</b>——這是最優先確保的原則。</li>
+        <li><b>特殊班（D12／N12）</b>：為手動排列的 12 小時班，與一般 D／E／N 互斥（同一天只能排一種），不參與自動排班。</li>
+      </ol>
+      <p class="help-note">※ 當人力結構特殊時（例如資深人數遠多於資淺），部分原則可能無法 100% 同時達成，系統會取最接近的排法並於排班後提示。</p>
+    </div>
   </div>
 
 </div>
@@ -2918,19 +2994,12 @@ function prShortLabel(pr){
   return map[pr.type]||pr.type;
 }
 
-// ---- 單點擊(可複選多個不連續日期)+拖曳(整段加入選取)的迷你月曆 ----
+// ---- 單點擊複選(可選多個不連續日期)的迷你月曆 ----
 let _prCalYear=new Date().getFullYear();
 let _prCalMonth=new Date().getMonth();
-let _prSelectedDates=new Set(); // 已確定選取的日期(不需連續)
-let _prDragStart=null, _prDragCurrent=null, _prDragging=false;
+let _prSelectedDates=new Set(); // 已選取的日期(不需連續)
 function prCalPrev(){ _prCalMonth--; if(_prCalMonth<0){_prCalMonth=11;_prCalYear--;} renderPRCalGrid(); }
 function prCalNext(){ _prCalMonth++; if(_prCalMonth>11){_prCalMonth=0;_prCalYear++;} renderPRCalGrid(); }
-function _prDragRangeLoHi(){
-  if(!_prDragStart) return null;
-  const lo=_prDragStart<_prDragCurrent?_prDragStart:_prDragCurrent;
-  const hi=_prDragStart<_prDragCurrent?_prDragCurrent:_prDragStart;
-  return {lo,hi};
-}
 function renderPRCalGrid(){
   const title=document.getElementById('pr-cal-title');
   if(title) title.textContent=`${_prCalYear}年${_prCalMonth+1}月`;
@@ -2949,48 +3018,24 @@ function renderPRCalGrid(){
   const numDays=daysInMonth(_prCalYear,_prCalMonth);
   const now=new Date();
   const todayStr=fmtDate(now.getFullYear(),now.getMonth(),now.getDate());
-  const dragRange=_prDragRangeLoHi();
   for(let d=1; d<=numDays; d++){
     const dateStr=fmtDate(_prCalYear,_prCalMonth,d);
     const dow=getDOW(dateStr);
     const cell=document.createElement('div');
     let cls='pr-cal-cell'+(dow>=5?' wknd':'')+(dateStr===todayStr?' today':'');
-    // 拖曳中的範圍預覽(游標移過的一段)，優先於已確定選取的樣式顯示，讓使用者看得出正在拖曳哪一段；
-    // 放開滑鼠後才會真正併入_prSelectedDates(見mouseup)。
-    if(dragRange&&dateStr>=dragRange.lo&&dateStr<=dragRange.hi){
-      if(dragRange.lo===dragRange.hi) cls+=' range-single';
-      else if(dateStr===dragRange.lo) cls+=' range-start';
-      else if(dateStr===dragRange.hi) cls+=' range-end';
-      else cls+=' in-range';
-    } else if(_prSelectedDates.has(dateStr)){
-      cls+=' range-single';
-    }
+    if(_prSelectedDates.has(dateStr)) cls+=' range-single';
     cell.className=cls;
     cell.textContent=d;
-    cell.addEventListener('mousedown',e=>{ e.preventDefault(); _prDragging=true; _prDragStart=dateStr; _prDragCurrent=dateStr; renderPRCalGrid(); });
-    cell.addEventListener('mouseenter',()=>{ if(_prDragging){ _prDragCurrent=dateStr; renderPRCalGrid(); } });
+    // 單點擊切換：未選→選取；已選→取消。可依此點出多個不連續日期。
+    cell.addEventListener('click',()=>{
+      if(_prSelectedDates.has(dateStr)) _prSelectedDates.delete(dateStr);
+      else _prSelectedDates.add(dateStr);
+      renderPRCalGrid();
+    });
     grid.appendChild(cell);
   }
   updatePRCalSelected();
 }
-window.addEventListener('mouseup',()=>{
-  if(!_prDragging) return;
-  _prDragging=false;
-  const range=_prDragRangeLoHi();
-  if(range){
-    if(range.lo===range.hi){
-      // 單純點擊(沒有拖曳移動)：切換這一天的選取狀態，可加入也可移除，方便複選不連續日期。
-      if(_prSelectedDates.has(range.lo)) _prSelectedDates.delete(range.lo);
-      else _prSelectedDates.add(range.lo);
-    } else {
-      // 拖曳選了一段範圍：整段併入已選取集合(不影響其他已選的不連續日期)。
-      let cur=range.lo;
-      while(cur<=range.hi){ _prSelectedDates.add(cur); cur=addDays(cur,1); }
-    }
-  }
-  _prDragStart=null; _prDragCurrent=null;
-  renderPRCalGrid();
-});
 function updatePRCalSelected(){
   const el=document.getElementById('pr-cal-selected');
   if(!el) return;
@@ -3630,7 +3675,7 @@ function jumpMonth(){
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  const idx={master:0,schedule:1,nurses:2,prereq:3,stats:4}[name];
+  const idx={master:0,schedule:1,nurses:2,prereq:3,stats:4,help:5}[name];
   document.querySelectorAll('.tab')[idx].classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
   // 注意：各分頁的年月導覽只在網頁「一開啟」時與排班表同步一次(見 window.onload)，
