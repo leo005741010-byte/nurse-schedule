@@ -167,6 +167,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:6px;font-size:13px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
 #toast.show{opacity:0.95;}
 #toast.warn{background:#c0392b;}
+#sched-progress-overlay{position:fixed;inset:0;background:rgba(13,92,74,.82);z-index:3000;display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;}
+#sched-progress-overlay.show{display:flex;}
+#sched-progress-overlay .spinner{width:52px;height:52px;border:5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+#sched-progress-text{font-size:17px;font-weight:700;}
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
@@ -189,7 +194,17 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <button class="action-btn" style="background:#6a1b9a;color:#fff" onclick="generatePDF()">🖨 生成PDF</button>
   <span id="_autosave_ind" style="font-size:11px;color:#a5d6a7;opacity:0;transition:opacity .4s">✓ 已自動存檔</span>
   <button class="action-btn btn-purple" onclick="openCloudSettings()" style="font-size:11px">☁️ 雲端設定</button>
+  <button class="action-btn" style="background:#00838f;color:#fff;font-size:11px" onclick="backupJSON()" title="把目前所有資料(班表/護理師/預假/設定)存成一個備份檔">💾 備份</button>
+  <button class="action-btn" style="background:#5d4037;color:#fff;font-size:11px" onclick="document.getElementById('restore-file-input').click()" title="從備份檔還原全部資料(會覆蓋目前資料)">📂 還原</button>
+  <input type="file" id="restore-file-input" accept="application/json,.json" style="display:none" onchange="restoreJSON(this)">
   <span id="_cloud_status" style="font-size:11px;color:#ef9a9a">☁️ 未連線</span>
+</div>
+
+<!-- 自動排班進度遮罩 -->
+<div id="sched-progress-overlay">
+  <div class="spinner"></div>
+  <div id="sched-progress-text">排班計算中…</div>
+  <div id="sched-progress-sub" style="font-size:12px;opacity:.8;margin-top:4px"></div>
 </div>
 
 <div id="tabs">
@@ -351,6 +366,27 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </table>
     </div>
     <div id="stats-violations" style="margin-top:10px;"></div>
+
+    <!-- 勞基法檢查提示 -->
+    <div style="margin-top:20px">
+      <h3 style="font-size:14px;color:#0d5c4a;margin-bottom:6px">⚖ 勞基法檢查（本月）</h3>
+      <div style="font-size:11px;color:#888;margin-bottom:6px">依《勞動基準法》常見規定自動檢查：七休一（連上不超過6天）、單週工時、輪班間隔。僅供提醒，實際以貴院人資規範為準。</div>
+      <div id="labor-law-check"></div>
+    </div>
+
+    <!-- 跨月公平性統計 -->
+    <div style="margin-top:22px">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <h3 style="font-size:14px;color:#0d5c4a;margin:0">📊 跨月公平性統計</h3>
+        <span style="font-size:12px;color:#555">從</span>
+        <input type="month" id="cross-from" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px">
+        <span style="font-size:12px;color:#555">到</span>
+        <input type="month" id="cross-to" style="padding:3px 6px;border:1px solid #ccc;border-radius:4px;font-size:12px">
+        <button class="action-btn btn-blue" style="font-size:12px" onclick="renderCrossMonthStats()">統計</button>
+      </div>
+      <div style="font-size:11px;color:#888;margin-bottom:6px">累計區間內每位護理師的班數/假日班/大夜班/總時數，並標示相對全體平均偏高(紅)或偏低(綠)，方便跨月調配公平性（例如上月假日班多的人，這月少排一些）。</div>
+      <div class="stats-wrap"><div id="cross-month-stats"></div></div>
+    </div>
   </div>
 
   <!-- ======= 操作說明 ======= -->
@@ -392,13 +428,16 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <h3 class="help-h3">📈 五、統計報表</h3>
       <ul class="help-ul">
         <li>各護理師當月 D／E／N 班數、總班數、總時數、假日班數、轉班次、最長連班一覽，並標示違反鐵則之處。</li>
+        <li><b>⚖ 勞基法檢查</b>：自動檢查本月是否有連上超過6天（七休一）、單週工時超過48小時、輪班間隔不足11小時，僅供提醒。</li>
+        <li><b>📊 跨月公平性統計</b>：選起訖月份，累計每人的總班數／假日班／大夜班／總時數，偏高標紅、偏低標綠，方便跨月調配（例如上月假日班多的人這月少排）。</li>
       </ul>
 
       <h3 class="help-h3">🛠 六、常用操作</h3>
       <ul class="help-ul">
-        <li><b>⚡ 自動排班</b>：依下方原則自動產生整月班表（會嘗試多種排法取最佳解，約需數秒）。會覆蓋本月班表，但預假／預班與手動鎖定的格子都會保留。</li>
+        <li><b>⚡ 自動排班</b>：依下方原則自動產生整月班表（會嘗試多種排法取最佳解，計算時會顯示進度）。會覆蓋本月班表，但預假／預班與手動鎖定的格子都會保留。</li>
         <li><b>🔒 結束／鎖定</b>：鎖定本月班表避免誤改；解鎖需輸入密碼。</li>
         <li><b>↩ 還原／↪ 重做</b>：可回復上一步操作。</li>
+        <li><b>💾 備份／📂 還原</b>：備份會把目前所有資料（班表／護理師／預假／設定）存成一個檔案；還原可從備份檔完整回復（會覆蓋目前資料）。<b>建議每次大幅調整前先按備份保平安</b>，也可用來把資料搬到另一台電腦。</li>
         <li><b>匯出</b>：CSV、Excel（月班總表＋排班表）、PDF（月班總表＋排班表＋統計＋預假清單）。</li>
         <li><b>☁️ 雲端</b>：資料自動同步；不同裝置開同一網址即共用。</li>
       </ul>
@@ -2524,7 +2563,7 @@ function isQualityBetter(q,best){
   return q.spread<best.spread;
 }
 const AUTO_SCHEDULE_ATTEMPTS=16;
-function autoSchedule(){
+async function autoSchedule(){
   if(isCurrentMonthLocked()){
     const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
     if(pwd===null) return;
@@ -2542,15 +2581,30 @@ function autoSchedule(){
   // 排班過程含亂數，單次結果偶爾收斂較差(見 generateScheduleAttempt 說明)。
   // 這裡嘗試多次、只採用最好的一份，讓「零空班」與「班數只差相鄰兩數」更穩定達成，
   // 一旦已達到雙鐵則同時滿足的理想結果就提早停止，不浪費運算時間。
-  let best=null, bestQ=null;
+  // 每次嘗試之間 await 一個 microtask，讓瀏覽器有機會重繪進度遮罩(否則整個迴圈同步
+  // 執行會凍結畫面十幾秒，使用者以為當機)。
+  const overlay=document.getElementById('sched-progress-overlay');
+  const ptext=document.getElementById('sched-progress-text');
+  const psub=document.getElementById('sched-progress-sub');
+  const showProg=overlay&&!window.__skipConfirm;
+  if(showProg){ overlay.classList.add('show'); }
+  const yieldPaint=()=>new Promise(r=>setTimeout(r,0));
+  let best=null, bestQ=null, usedAttempts=0;
   for(let attempt=0; attempt<AUTO_SCHEDULE_ATTEMPTS; attempt++){
+    if(showProg){
+      ptext.textContent=`排班計算中… 第 ${attempt+1}/${AUTO_SCHEDULE_ATTEMPTS} 次嘗試`;
+      psub.textContent=bestQ?`目前最佳：空班${bestQ.empty}、孤立${bestQ.isolated}、班數全距${bestQ.spread}`:'';
+      await yieldPaint(); // 讓遮罩與進度文字先畫出來
+    }
     const cand=generateScheduleAttempt(y,m,dates);
     const q=scheduleQuality(cand,y,m);
     if(isQualityBetter(q,bestQ)){ best=cand; bestQ=q; }
+    usedAttempts=attempt+1;
     // 達到理想(零空班、長假天數精準命中、無孤立單班、最少班者為資深、最多班者為資淺、
     // 班數全距<=1)即提早停止
     if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
   }
+  if(showProg){ overlay.classList.remove('show'); }
 
   Object.assign(state.schedule, best);
   autoSave();
@@ -3251,6 +3305,13 @@ function renderPRList(){
 // ============================================================
 function renderStats(){
   document.getElementById('stats-month').textContent=`${_statsYear}年${_statsMonth+1}月`;
+  // 跨月統計的起訖月份，首次進入時預設為「近3個月～目前統計月」
+  const cf=document.getElementById('cross-from'), ct=document.getElementById('cross-to');
+  if(cf&&!cf.value){
+    const curM=`${_statsYear}-${String(_statsMonth+1).padStart(2,'0')}`;
+    let py=_statsYear, pm=_statsMonth-2; while(pm<0){pm+=12;py--;}
+    cf.value=`${py}-${String(pm+1).padStart(2,'0')}`; ct.value=curM;
+  }
   const dates=monthDates(_statsYear,_statsMonth);
   const st={};
   for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
@@ -3310,6 +3371,127 @@ function renderStats(){
   document.getElementById('stats-violations').innerHTML=viols.length
     ?`<div class="alert alert-warn"><strong>提醒事項：</strong><br>${viols.map(v=>`• ${v}`).join('<br>')}</div>`
     :`<div class="alert alert-ok">✅ 所有限制條件均符合</div>`;
+  renderLaborLawCheck();
+}
+// ============================================================
+// 勞基法檢查：連續上班天數(七休一，§36)、單週工時(§30/§32)、輪班間隔(§34)。
+// 以「目前統計月份」為準；跨月邊界會一併把前後鄰月已排的班納入判斷(連班/間隔才正確)。
+// ============================================================
+const LABOR_MAX_CONSEC_DAYS=6;   // 七休一：每7日應有1日休息 → 連上不得超過6天
+const LABOR_WEEK_HOURS_WARN=48;  // 單週(含加班)工時上限48小時(§32)
+const LABOR_MIN_SHIFT_GAP=11;    // 輪班更換間隔至少11小時(§34)
+function renderLaborLawCheck(){
+  const box=document.getElementById('labor-law-check'); if(!box) return;
+  const y=_statsYear, m=_statsMonth;
+  const dates=monthDates(y,m);
+  const warns=[];
+  for(const doc of state.doctors){
+    if(doc.type!=='full') continue;
+    // 1) 七休一：掃描含前後鄰月的連續上班區段，任何落在本月的區段長度>6就提示
+    let runStart=null, runLen=0, flaggedConsec=false;
+    const scanStart=addDays(dates[0],-10), scanEnd=addDays(dates[dates.length-1],10);
+    for(let d=scanStart; d<=scanEnd; d=addDays(d,1)){
+      if(isAssignedThatDay(doc.id,d,state.schedule)){ if(runLen===0)runStart=d; runLen++; }
+      else{
+        if(runLen>LABOR_MAX_CONSEC_DAYS && runStart<=dates[dates.length-1] && addDays(runStart,runLen-1)>=dates[0] && !flaggedConsec){
+          warns.push(`❌ ${doc.name}：連續上班 ${runLen} 天（${runStart.slice(5)}起），違反七休一（連上不得超過6天）`);
+          flaggedConsec=true;
+        }
+        runLen=0;
+      }
+    }
+    // 2) 單週工時：以週一為界，累計每週總時數，超過48小時提示
+    const weekHours={};
+    for(const d of dates){
+      const h=hoursOnDate(doc.id,d);
+      if(!h) continue;
+      // 該日所屬週一
+      let mon=d; while(getDOW(mon)!==0) mon=addDays(mon,-1);
+      weekHours[mon]=(weekHours[mon]||0)+h;
+    }
+    for(const[mon,h] of Object.entries(weekHours)){
+      if(h>LABOR_WEEK_HOURS_WARN) warns.push(`⚠ ${doc.name}：${mon.slice(5)}那週工時達 ${h} 小時，超過單週上限 ${LABOR_WEEK_HOURS_WARN} 小時`);
+    }
+    // 3) 輪班間隔：相鄰兩班之間休息 <11 小時提示(逐日檢查當日班與下一次上班)
+    let gapFlagged=false;
+    for(const d of dates){
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(!sh||gapFlagged) continue;
+      const nxt=getNextAssigned(doc.id,d,state.schedule);
+      if(!nxt) continue;
+      const end=getShiftEndTime(sh,d), start=getShiftStart(nxt.shift,nxt.date);
+      const gap=hoursBetween(end.date,end.hour,start.date,start.hour);
+      if(gap>=0 && gap<LABOR_MIN_SHIFT_GAP){
+        warns.push(`⚠ ${doc.name}：${d.slice(5)} ${sh}班 接 ${nxt.date.slice(5)} ${nxt.shift}班，間隔僅 ${gap} 小時（低於 ${LABOR_MIN_SHIFT_GAP} 小時）`);
+        gapFlagged=true;
+      }
+    }
+  }
+  box.innerHTML=warns.length
+    ?`<div class="alert alert-warn"><strong>共 ${warns.length} 項提醒：</strong><br>${warns.map(v=>`• ${v}`).join('<br>')}</div>`
+    :`<div class="alert alert-ok">✅ 本月未發現勞基法相關疑慮</div>`;
+}
+// ============================================================
+// 跨月公平性統計：累計指定月份區間內每位護理師的班數/假日班/大夜班/總時數，
+// 相對全體平均偏高標紅、偏低標綠，方便跨月調配公平性。
+// ============================================================
+function renderCrossMonthStats(){
+  const box=document.getElementById('cross-month-stats'); if(!box) return;
+  const fromEl=document.getElementById('cross-from'), toEl=document.getElementById('cross-to');
+  const fm=fromEl.value, tm=toEl.value;
+  if(!fm||!tm){ box.innerHTML='<div style="color:#999;font-size:12px">請選擇起訖月份</div>'; return; }
+  let[fy,fmo]=fm.split('-').map(Number); let[ty,tmo]=tm.split('-').map(Number);
+  if(fy>ty||(fy===ty&&fmo>tmo)){ box.innerHTML='<div style="color:#c0392b;font-size:12px">起始月份不可晚於結束月份</div>'; return; }
+  // 收集區間內所有日期字串前綴
+  const months=[];
+  let cy=fy, cm=fmo;
+  while(cy<ty||(cy===ty&&cm<=tmo)){
+    months.push(`${cy}-${String(cm).padStart(2,'0')}`);
+    cm++; if(cm>12){cm=1;cy++;}
+  }
+  const monthSet=new Set(months);
+  const st={};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,hours:0,work:0};
+  for(const[dateStr,ds] of Object.entries(state.schedule)){
+    if(!monthSet.has(dateStr.slice(0,7))) continue;
+    const hol=isHoliday(dateStr);
+    for(const sh of SHIFTS){
+      (ds[sh]||[]).forEach(nid=>{
+        if(!nid||!st[nid]) return;
+        st[nid][sh]++; st[nid].work++; if(hol)st[nid].hol++;
+        st[nid].hours+=hoursOnDate(nid,dateStr);
+      });
+    }
+    for(const sh of SPECIAL_SHIFTS){
+      (ds[sh]||[]).forEach(nid=>{ if(!nid||!st[nid])return; st[nid].work++; st[nid].hours+=hoursOnDate(nid,dateStr); });
+    }
+  }
+  const fulls=state.doctors.filter(d=>d.type==='full');
+  const avg=k=>fulls.length?fulls.reduce((s,d)=>s+st[d.id][k],0)/fulls.length:0;
+  const avgWork=avg('work'), avgHol=avg('hol'), avgN=avg('N'), avgHours=avg('hours');
+  const cellHL=(v,a)=>{ // 偏離平均>15%上色
+    if(a<=0) return '';
+    if(v>a*1.15) return 'background:#fdecea;color:#c0392b;font-weight:700';
+    if(v<a*0.85) return 'background:#e8f5e9;color:#2e7d32;font-weight:700';
+    return '';
+  };
+  const rows=fulls.map(doc=>{
+    const s=st[doc.id];
+    return `<tr>
+      <td style="text-align:left"><span class="color-dot" style="background:${doc.color};vertical-align:middle;margin-right:4px"></span>${doc.name}<span class="senior-badge ${isSenior(doc.id)?'sr-senior':'sr-junior'}" style="margin-left:4px">${isSenior(doc.id)?'資深':'資淺'}</span></td>
+      <td style="${cellHL(s.work,avgWork)}">${s.work}</td>
+      <td style="${cellHL(s.hol,avgHol)}">${s.hol}</td>
+      <td style="${cellHL(s.N,avgN)}">${s.N}</td>
+      <td>${s.D}</td><td>${s.E}</td>
+      <td style="${cellHL(s.hours,avgHours)}">${s.hours}h</td>
+    </tr>`;
+  }).join('');
+  box.innerHTML=`<table style="min-width:560px">
+    <thead><tr><th>護理師</th><th>總班數</th><th>假日班</th><th>大夜(N)</th><th>D班</th><th>E班</th><th>總時數</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr style="background:#f0f2f5;font-weight:700"><td style="text-align:left">全體平均</td><td>${avgWork.toFixed(1)}</td><td>${avgHol.toFixed(1)}</td><td>${avgN.toFixed(1)}</td><td>-</td><td>-</td><td>${avgHours.toFixed(0)}h</td></tr></tfoot>
+  </table>
+  <div style="font-size:11px;color:#888;margin-top:4px">統計區間：${months[0]} ～ ${months[months.length-1]}（共 ${months.length} 個月）。<span style="color:#c0392b">紅=高於平均15%</span>、<span style="color:#2e7d32">綠=低於平均15%</span></div>`;
 }
 
 // ============================================================
@@ -3879,6 +4061,51 @@ function openCloudSettings(){
     return;
   }
   initCloud(url.trim());
+}
+
+// ============================================================
+// 一鍵 JSON 備份 / 還原：把整份資料(班表/護理師/預假/所有設定)存成單一檔案，
+// 或從檔案完整還原。用於雲端同步意外覆蓋時的保險，以及跨電腦搬移資料。
+// ============================================================
+function backupJSON(){
+  const payload={ _app:'tienSheng-nurse-schedule', _backupAt:new Date().toISOString(), ...serializeState() };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  const now=new Date();
+  const stamp=`${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}`;
+  a.download=`天晟護理排班_備份_${stamp}.json`;
+  a.click();
+  showToast('💾 已下載備份檔');
+}
+function restoreJSON(input){
+  const file=input.files&&input.files[0];
+  input.value=''; // 清掉，讓同一檔案可再次選取觸發 change
+  if(!file) return;
+  if(isCurrentMonthLocked()){ showToast('🔒 本月班表已鎖定，請先解鎖再還原','warn'); return; }
+  const reader=new FileReader();
+  reader.onload=e=>{
+    let data;
+    try{ data=JSON.parse(e.target.result); }
+    catch(err){ showToast('❌ 檔案格式錯誤，不是有效的備份檔','warn'); return; }
+    if(!data||typeof data!=='object'||!Array.isArray(data.doctors)||typeof data.schedule!=='object'){
+      showToast('❌ 這不是本系統的備份檔(缺少 doctors/schedule)','warn'); return;
+    }
+    const bakInfo=data._backupAt?`\n備份時間：${new Date(data._backupAt).toLocaleString()}`:'';
+    const cnt=data.doctors.length, days=Object.keys(data.schedule).length;
+    if(!confirm(`確定要用此備份還原？\n將覆蓋目前全部資料。${bakInfo}\n護理師 ${cnt} 位、已排班日期 ${days} 天`)) return;
+    pushUndo();
+    applyData(data);
+    autoSave();
+    _prCalYear=state.year; _prCalMonth=state.month;
+    _prListYear=state.year; _prListMonth=state.month;
+    _statsYear=state.year; _statsMonth=state.month;
+    renderCalendar(); renderMasterGrid(); renderNurseTable(); renderPRList(); renderPRCalGrid(); renderStats();
+    updateUndoBtn(); updateRedoBtn(); updateLockBtn();
+    showToast('✅ 已從備份檔還原全部資料');
+  };
+  reader.onerror=()=>showToast('❌ 讀取檔案失敗','warn');
+  reader.readAsText(file);
 }
 
 // 匯出用：每個班別的欄位數取「模板格數」與「當月實際最大格數」的較大值。
