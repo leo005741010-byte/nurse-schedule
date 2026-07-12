@@ -447,6 +447,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>不留空班</b>：每個班別的需求人數一定補滿；本班別補不到時，依支援規則拉其他班別的人來支援。</li>
         <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。上月大夜、本月轉白班者，在當月第一個大夜班之前可先上白班。</li>
         <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。</li>
+        <li><b>一個月最多2種班別</b>：同一人整月不會被排到日（D）／小夜（E）／大夜（N）三種都有，最多只出現其中兩種，減少日夜作息負擔。（唯有在補不到人、否則會空班時，才會為了「不留空班」這條更高優先的鐵則而破例。）</li>
         <li><b>放假天數集中</b>：全體放假天數落差控制在 4 個相鄰數字內（班數全距 ≤ 3）。</li>
         <li><b>尊重預假／預班</b>：預假（OFF）與預班（指定上班）一定照辦，且預班會鎖定不被更動。</li>
         <li><b>階級不可違反</b>：自動排班絕不把不符階級的人排入該角色。</li>
@@ -1109,6 +1110,27 @@ function hasDOnOrAfterInMonth(nurseId,date,sched){
   }
   return false;
 }
+// 原則：一個月最多只出現2種班別(D/E/N)——不讓同一人整月被排到日/小夜/大夜三種都有，
+// 作息負擔過大。回傳該人本月(sched中)已出現的不同一般班別集合(不含D12/N12特殊班)。
+function shiftTypesInMonth(nurseId,dateStr,sched){
+  const{y,m}=ymFromDate(dateStr);
+  const pref=`${y}-${String(m+1).padStart(2,'0')}`;
+  const set=new Set();
+  for(const d of Object.keys(sched)){
+    if(!d.startsWith(pref)) continue;
+    for(const sh of SHIFTS){ if((((sched[d]||{})[sh])||[]).includes(nurseId)){ set.add(sh); break; } }
+  }
+  return set;
+}
+// 保底補空班時暫時放行(「不留空班」為最高鐵則，優先於「一個月最多2種班別」)。
+let _bypassShiftVariety=false;
+// 指派 shift 給 nurse 是否會使該月一般班別種類數超過2(已有2種、又要新增第3種)。
+function wouldExceed2ShiftTypes(nurseId,dateStr,shift,sched){
+  if(!SHIFTS.includes(shift)) return false; // 特殊班D12/N12不列入此限
+  const set=shiftTypesInMonth(nurseId,dateStr,sched);
+  if(set.has(shift)) return false; // 已是既有種類，不增加種類數
+  return set.size>=2;
+}
 // D轉N順序鐵則的反向防護：D轉N者若這天要排 N、而本月更晚的日期已存在他先前排入的
 // D 班，會形成「上過N又回頭上D」。平衡階段以亂序指派，光靠支援檢查擋不住這種
 // 「N 排在既有 D 之前」的情形，故指派 N 時一併檢查。
@@ -1198,6 +1220,9 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   if(avoidBlocked(nurseId,date,sched)) return false;
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
+  // 原則：一個月最多2種班別。支援跨班別時若會讓此人本月出現第3種班別則不排
+  // (保底補空班階段_bypassShiftVariety為true時放行，因「不留空班」優先)。
+  if(!_bypassShiftVariety && wouldExceed2ShiftTypes(nurseId,date,shift,sched)) return false;
   return true;
 }
 
@@ -1521,6 +1546,8 @@ function cleanupNOffD(newSched, fullSched, dates){
 // 不再侷限於「休假天數平衡」中「須低於目標班數」的前提。
 // ============================================================
 function emergencyFillEmpty(newSched, fullSched, dates){
+  _bypassShiftVariety=true; // 不留空班優先於「一個月最多2種班別」
+  try{
   for(let round=0;round<4;round++){
     let progressed=false;
     for(const d of shuffle([...dates])){
@@ -1529,9 +1556,15 @@ function emergencyFillEmpty(newSched, fullSched, dates){
         for(let i=0;i<arr.length;i++){
           if(arr[i]) continue;
           const role=roles[i];
-          const candidates=state.doctors.filter(doc=>
-            (canWork(doc.id,d,shift,role,fullSched)||canWorkForce(doc.id,d,shift,role,fullSched)||canWorkSupport(doc.id,d,shift,role,fullSched))
+          // 先找不會造成第3種班別的候選人；真的沒有時才放行第3種(維持不留空班)。
+          let candidates=state.doctors.filter(doc=>
+            (canWork(doc.id,d,shift,role,fullSched)||canWorkForce(doc.id,d,shift,role,fullSched)||(!wouldExceed2ShiftTypes(doc.id,d,shift,fullSched)&&canWorkSupport(doc.id,d,shift,role,fullSched)))
             &&!isAssignedThatDay(doc.id,d,newSched));
+          if(!candidates.length){
+            candidates=state.doctors.filter(doc=>
+              (canWork(doc.id,d,shift,role,fullSched)||canWorkForce(doc.id,d,shift,role,fullSched)||canWorkSupport(doc.id,d,shift,role,fullSched))
+              &&!isAssignedThatDay(doc.id,d,newSched));
+          }
           if(candidates.length){
             const scored=candidates.map(doc=>({id:doc.id,sc:scoreNurse(doc.id,d,shift,role,newSched)}));
             scored.sort((a,b)=>b.sc-a.sc);
@@ -1542,6 +1575,7 @@ function emergencyFillEmpty(newSched, fullSched, dates){
     }
     if(!progressed) break;
   }
+  }finally{ _bypassShiftVariety=false; }
 }
 // ============================================================
 // 性別多元化：同一班次不可全為男性，事後修正嘗試換入至少一位女性。
@@ -1714,6 +1748,8 @@ function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
   return false;
 }
 function finalGuaranteeNoEmpty(newSched, fullSched, dates){
+  _bypassShiftVariety=true; // 不留空班優先於「一個月最多2種班別」
+  try{
   for(let pass=0; pass<3; pass++){
     let anyEmpty=false;
     for(const d of dates){
@@ -1728,6 +1764,7 @@ function finalGuaranteeNoEmpty(newSched, fullSched, dates){
     }
     if(!anyEmpty) break;
   }
+  }finally{ _bypassShiftVariety=false; }
 }
 // ============================================================
 // 需求2：全月參與者的休假天數盡量一致；無法完全一致(總班數無法被人數整除)時，
@@ -2550,13 +2587,19 @@ function scheduleQuality(newSched,y,m){
   // 結構性限制，非程式錯誤)。評分時合併看「兩鐵則違反人數的加總」，不讓其中一項系統性地
   // 壓過另一項，公平地取兩者總違反數最少的一次嘗試。
   const seniorityViolations=maxOffNotSenior+maxShiftNotJunior;
-  return {empty,longLeaveMiss,isolated,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
+  // 原則：一個月最多2種班別。統計本月被排到3種以上一般班別的人數(越少越好，理想為0)。
+  let threeShiftTypes=0;
+  const monthAnchor=dates[0];
+  for(const doc of parts){ if(shiftTypesInMonth(doc.id,monthAnchor,newSched).size>=3) threeShiftTypes++; }
+  return {empty,longLeaveMiss,isolated,threeShiftTypes,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
   if(q.empty!==best.empty) return q.empty<best.empty;
   if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
+  // 原則：一個月最多2種班別——被排到3種班別的人數越少越好(排在孤立單班之後、年資之前)。
+  if(q.threeShiftTypes!==best.threeShiftTypes) return q.threeShiftTypes<best.threeShiftTypes;
   // 使用者最在意的「至少」硬底線：當月上最多班(放假最少)者絕不可以是資深。獨立成最高優先的
   // 年資判準(不再與 maxOffNotSenior 加總後比較)，避免「有資深上最多班但資淺沒放最多假」的排法
   // 因總違反數較小而被誤選。務必先把這一項壓到最低，其它年資考量才往後排。
@@ -2607,7 +2650,7 @@ async function autoSchedule(){
     usedAttempts=attempt+1;
     // 達到理想(零空班、長假天數精準命中、無孤立單班、最少班者為資深、最多班者為資淺、
     // 班數全距<=1)即提早停止
-    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
+    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.threeShiftTypes===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
   }
   if(showProg){ overlay.classList.remove('show'); }
 
