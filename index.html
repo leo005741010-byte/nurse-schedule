@@ -445,7 +445,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <h3 class="help-h3">⚖ 七、自動排班原則（鐵則）</h3>
       <ol class="help-ol">
         <li><b>不留空班</b>：每個班別的需求人數一定補滿；本班別補不到時，依支援規則拉其他班別的人來支援。</li>
-        <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。上月大夜、本月轉白班者，在當月第一個大夜班之前可先上白班。</li>
+        <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。<b>換月轉班作息銜接（兩種互為鏡像）</b>：①上月大夜、本月轉白班者，本月一開始還在夜間作息，可先上大夜，直到上到本月第一個白班為止；②上月白班、本月轉大夜者，本月一開始還在日間作息，可先上白班，直到上到本月第一個大夜為止。</li>
         <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。</li>
         <li><b>一個月最多2種班別</b>：同一人整月不會被排到日（D）／小夜（E）／大夜（N）三種都有，最多只出現其中兩種，減少日夜作息負擔。（唯有在補不到人、否則會空班時，才會為了「不留空班」這條更高優先的鐵則而破例。）</li>
         <li><b>轉班次數 ≤ 4 次</b>：轉班定義為「相鄰兩個有上班的日子只要班別不同就算一次」（不限 D↔N，任何換班別都算；中間隔幾天休假不影響）。整月轉班次數控制在 4 次以內，避免作息一直被打亂。（同樣在會造成空班時才會破例。）</li>
@@ -1070,26 +1070,45 @@ function violatesNOffD(nurseId,date,shift,sched){
 //   D(白班) 只可支援 E；不可支援 N。
 //   E(小夜) 可支援 D 與 N。
 //   N(大夜) 只可支援 E；不可支援 D(「N不能貼D的洞」)。
-// 唯一例外：上月本班別為 D、本月轉 N 者，在本月尚未上過第一個 N 班之前可先上 D
-// (銜接上月作息)；一旦上過 N，之後就不得再回頭上 D。
-// (預上班 WORK_D 由管理者明確指定並以 _workLocks 鎖定，不經過這些資格判斷，
+// 換月轉班的作息銜接例外(兩種互為鏡像，讓身體循序調整，不硬跳)：
+//   (甲)上月大夜(N)、本月轉白班(D)者：本月一開始還在夜間作息，可先上大夜(N)，
+//       直到上到本月第一個白班(D)為止；之後就不再回頭上 N。
+//   (乙)上月白班(D)、本月轉大夜(N)者：本月一開始還在日間作息，可先上白班(D)，
+//       直到上到本月第一個大夜(N)為止；之後就不再回頭上 D。
+// (預上班 WORK_D/N 由管理者明確指定並以 _workLocks 鎖定，不經過這些資格判斷，
 // 屬人工override，不受此限。)
 function supportShiftBlocked(nurseId,date,shift,sched){
   const home=getNurseShiftTypeAtDate(nurseId,date);
   if(home===shift) return false;
-  if(home==='D'&&shift==='N') return true;
+  if(home==='D'&&shift==='N'){
+    // 例外(甲)：上月N本月D，尚未上到第一個D之前可先上N銜接夜間作息
+    if(!isNtoDTransition(nurseId,date)) return true;
+    return hasDBeforeInMonth(nurseId,date,sched);
+  }
   if(home==='N'&&shift==='D'){
+    // 例外(乙)：上月D本月N，尚未上到第一個N之前可先上D銜接日間作息
     if(!isDtoNTransition(nurseId,date)) return true;
     return hasNBeforeInMonth(nurseId,date,sched);
   }
   return false; // D→E、E→D、E→N 皆可
 }
-// 是否為「上月本班別D、本月轉N」的轉班者
+// 上個月的本班別(換月轉班判斷用)
+function prevMonthHomeShift(nurseId,date){
+  const{y,m}=ymFromDate(date);
+  let pm=m-1, py=y; while(pm<0){pm+=12;py--;}
+  return getNurseShiftType(nurseId,py,pm);
+}
+// 是否為「上月本班別D、本月轉N」的轉班者(例外乙)
 function isDtoNTransition(nurseId,date){
   const{y,m}=ymFromDate(date);
   if(getNurseShiftType(nurseId,y,m)!=='N') return false;
-  let pm=m-1, py=y; while(pm<0){pm+=12;py--;}
-  return getNurseShiftType(nurseId,py,pm)==='D';
+  return prevMonthHomeShift(nurseId,date)==='D';
+}
+// 是否為「上月本班別N、本月轉D」的轉班者(例外甲)
+function isNtoDTransition(nurseId,date){
+  const{y,m}=ymFromDate(date);
+  if(getNurseShiftType(nurseId,y,m)!=='D') return false;
+  return prevMonthHomeShift(nurseId,date)==='N';
 }
 // 本月 date 之前是否已排過 N 班
 function hasNBeforeInMonth(nurseId,date,sched){
@@ -1101,6 +1120,16 @@ function hasNBeforeInMonth(nurseId,date,sched){
   }
   return false;
 }
+// 本月 date 之前是否已排過 D 班
+function hasDBeforeInMonth(nurseId,date,sched){
+  const{y,m}=ymFromDate(date);
+  const pref=`${y}-${String(m+1).padStart(2,'0')}`;
+  for(const d of Object.keys(sched)){
+    if(!d.startsWith(pref)||d>=date) continue;
+    if((((sched[d]||{}).D)||[]).includes(nurseId)) return true;
+  }
+  return false;
+}
 // 本月 date (含)之後是否已有 D 班
 function hasDOnOrAfterInMonth(nurseId,date,sched){
   const{y,m}=ymFromDate(date);
@@ -1108,6 +1137,16 @@ function hasDOnOrAfterInMonth(nurseId,date,sched){
   for(const d of Object.keys(sched)){
     if(!d.startsWith(pref)||d<date) continue;
     if((((sched[d]||{}).D)||[]).includes(nurseId)) return true;
+  }
+  return false;
+}
+// 本月 date (含)之後是否已有 N 班
+function hasNOnOrAfterInMonth(nurseId,date,sched){
+  const{y,m}=ymFromDate(date);
+  const pref=`${y}-${String(m+1).padStart(2,'0')}`;
+  for(const d of Object.keys(sched)){
+    if(!d.startsWith(pref)||d<date) continue;
+    if((((sched[d]||{}).N)||[]).includes(nurseId)) return true;
   }
   return false;
 }
@@ -1153,13 +1192,20 @@ function wouldExceedTransitions(nurseId,dateStr,shift,sched){
   if(!SHIFTS.includes(shift)) return false; // 特殊班不列入
   return monthTransitionCount(nurseId,dateStr,sched,dateStr,shift) > MAX_TRANSITIONS;
 }
-// D轉N順序鐵則的反向防護：D轉N者若這天要排 N、而本月更晚的日期已存在他先前排入的
+// D轉N順序鐵則的反向防護：D轉N者(例外乙)若這天要排 N、而本月更晚的日期已存在他先前排入的
 // D 班，會形成「上過N又回頭上D」。平衡階段以亂序指派，光靠支援檢查擋不住這種
 // 「N 排在既有 D 之前」的情形，故指派 N 時一併檢查。
 function violatesDtoNOrder(nurseId,date,shift,sched){
   if(shift!=='N') return false;
   if(!isDtoNTransition(nurseId,date)) return false;
   return hasDOnOrAfterInMonth(nurseId,date,sched);
+}
+// N轉D順序鐵則的反向防護(例外甲的鏡像)：N轉D者若這天要排 D、而本月更晚的日期已存在他
+// 先前排入的 N 班，會形成「上過D又回頭上N」。故指派 D 時一併檢查。
+function violatesNtoDOrder(nurseId,date,shift,sched){
+  if(shift!=='D') return false;
+  if(!isNtoDTransition(nurseId,date)) return false;
+  return hasNOnOrAfterInMonth(nurseId,date,sched);
 }
 // 相鄰日的班別狀態(用於孤立單班判斷)：
 //   'work'   = 該日該人上班
@@ -1207,6 +1253,7 @@ function canWork(nurseId, date, shift, role, sched){
   if(avoidBlocked(nurseId,date,sched)) return false;
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
+  if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   return true;
 }
 // 強制排班用：僅放寬「避免同時上班」這類軟性偏好，
@@ -1223,6 +1270,7 @@ function canWorkForce(nurseId, date, shift, role, sched){
   if(wouldExceedConsec(nurseId,date,sched)) return false;
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
+  if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   return true;
 }
 // 跨班別支援用：休假天數平衡機制專用，允許護理師支援非當月本班別的班次，
@@ -1242,6 +1290,7 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   if(avoidBlocked(nurseId,date,sched)) return false;
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
+  if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   // 原則：一個月最多2種班別。支援跨班別時若會讓此人本月出現第3種班別則不排
   // (保底補空班階段_bypassShiftVariety為true時放行，因「不留空班」優先)。
   if(!_bypassShiftVariety && wouldExceed2ShiftTypes(nurseId,date,shift,sched)) return false;
@@ -1684,6 +1733,7 @@ function tryChainAssign(nurseId, date, shift, role, newSched, fullSched, homeMat
   if(!restOK(nurseId,date,shift,fullSched)) return false;
   if(violatesNOffD(nurseId,date,shift,fullSched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,fullSched)) return false;
+  if(violatesNtoDOrder(nurseId,date,shift,fullSched)) return false;
   if(!homeMatch&&doc.prefs.allowSupport===false) return false;
   if(!wouldExceedConsec(nurseId,date,fullSched)) return false; // 其餘鐵則皆通過，代表不是連班卡關，判定不可行
 
@@ -1725,6 +1775,7 @@ function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
     if(!homeMatch && doc.prefs.allowSupport===false) return false;
     if(supportShiftBlocked(doc.id,date,shift,fullSched)) return false; // 支援矩陣鐵則(連鎖補位也不例外)
     if(violatesDtoNOrder(doc.id,date,shift,fullSched)) return false;
+    if(violatesNtoDOrder(doc.id,date,shift,fullSched)) return false;
     return true;
   };
 
