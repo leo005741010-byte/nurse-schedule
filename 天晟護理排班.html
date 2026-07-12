@@ -359,7 +359,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <thead>
           <tr>
             <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th>
-            <th>假日班數</th><th>轉班次(D↔N)</th><th>最長連班</th>
+            <th>假日班數</th><th>轉班次</th><th>最長連班</th>
           </tr>
         </thead>
         <tbody id="stats-tbody"></tbody>
@@ -448,6 +448,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。上月大夜、本月轉白班者，在當月第一個大夜班之前可先上白班。</li>
         <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。</li>
         <li><b>一個月最多2種班別</b>：同一人整月不會被排到日（D）／小夜（E）／大夜（N）三種都有，最多只出現其中兩種，減少日夜作息負擔。（唯有在補不到人、否則會空班時，才會為了「不留空班」這條更高優先的鐵則而破例。）</li>
+        <li><b>轉班次數 ≤ 4 次</b>：轉班定義為「相鄰兩個有上班的日子只要班別不同就算一次」（不限 D↔N，任何換班別都算；中間隔幾天休假不影響）。整月轉班次數控制在 4 次以內，避免作息一直被打亂。（同樣在會造成空班時才會破例。）</li>
         <li><b>放假天數集中</b>：全體放假天數落差控制在 4 個相鄰數字內（班數全距 ≤ 3）。</li>
         <li><b>尊重預假／預班</b>：預假（OFF）與預班（指定上班）一定照辦，且預班會鎖定不被更動。</li>
         <li><b>階級不可違反</b>：自動排班絕不把不符階級的人排入該角色。</li>
@@ -1122,7 +1123,7 @@ function shiftTypesInMonth(nurseId,dateStr,sched){
   }
   return set;
 }
-// 保底補空班時暫時放行(「不留空班」為最高鐵則，優先於「一個月最多2種班別」)。
+// 保底補空班時暫時放行(「不留空班」為最高鐵則，優先於「一個月最多2種班別」與「轉班次數上限」)。
 let _bypassShiftVariety=false;
 // 指派 shift 給 nurse 是否會使該月一般班別種類數超過2(已有2種、又要新增第3種)。
 function wouldExceed2ShiftTypes(nurseId,dateStr,shift,sched){
@@ -1130,6 +1131,27 @@ function wouldExceed2ShiftTypes(nurseId,dateStr,shift,sched){
   const set=shiftTypesInMonth(nurseId,dateStr,sched);
   if(set.has(shift)) return false; // 已是既有種類，不增加種類數
   return set.size>=2;
+}
+// 轉班定義：把該月已排的工作日依日期排序，只要相鄰兩個「有上班的日子」班別不同就算一次轉班
+// (不限D↔N，任何換班別都算；中間的休假日不重置——休假前後同班別不算轉班)。上限4次。
+const MAX_TRANSITIONS=4;
+function monthTransitionCount(nurseId,dateStr,sched,extraDate,extraShift){
+  const{y,m}=ymFromDate(dateStr);
+  const pref=`${y}-${String(m+1).padStart(2,'0')}`;
+  const map={};
+  for(const d of Object.keys(sched)){
+    if(!d.startsWith(pref)) continue;
+    for(const sh of SHIFTS){ if((((sched[d]||{})[sh])||[]).includes(nurseId)){ map[d]=sh; break; } }
+  }
+  if(extraDate&&extraShift&&SHIFTS.includes(extraShift)) map[extraDate]=extraShift; // 假設性指派
+  let last=null, cnt=0;
+  for(const d of Object.keys(map).sort()){ const sh=map[d]; if(last&&last!==sh) cnt++; last=sh; }
+  return cnt;
+}
+// 指派 shift 給 nurse 於 date 是否會使該月轉班次數超過上限(4次)。
+function wouldExceedTransitions(nurseId,dateStr,shift,sched){
+  if(!SHIFTS.includes(shift)) return false; // 特殊班不列入
+  return monthTransitionCount(nurseId,dateStr,sched,dateStr,shift) > MAX_TRANSITIONS;
 }
 // D轉N順序鐵則的反向防護：D轉N者若這天要排 N、而本月更晚的日期已存在他先前排入的
 // D 班，會形成「上過N又回頭上D」。平衡階段以亂序指派，光靠支援檢查擋不住這種
@@ -1223,6 +1245,9 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   // 原則：一個月最多2種班別。支援跨班別時若會讓此人本月出現第3種班別則不排
   // (保底補空班階段_bypassShiftVariety為true時放行，因「不留空班」優先)。
   if(!_bypassShiftVariety && wouldExceed2ShiftTypes(nurseId,date,shift,sched)) return false;
+  // 原則：一個月轉班(換班別)次數不超過4次。支援跨班別是轉班的來源，故在此把關
+  // (同樣在保底補空班階段放行)。
+  if(!_bypassShiftVariety && wouldExceedTransitions(nurseId,date,shift,sched)) return false;
   return true;
 }
 
@@ -2588,10 +2613,14 @@ function scheduleQuality(newSched,y,m){
   // 壓過另一項，公平地取兩者總違反數最少的一次嘗試。
   const seniorityViolations=maxOffNotSenior+maxShiftNotJunior;
   // 原則：一個月最多2種班別。統計本月被排到3種以上一般班別的人數(越少越好，理想為0)。
-  let threeShiftTypes=0;
+  // 同時統計轉班超過4次的人數(轉班定義見 monthTransitionCount)。
+  let threeShiftTypes=0, transitionExcess=0;
   const monthAnchor=dates[0];
-  for(const doc of parts){ if(shiftTypesInMonth(doc.id,monthAnchor,newSched).size>=3) threeShiftTypes++; }
-  return {empty,longLeaveMiss,isolated,threeShiftTypes,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
+  for(const doc of parts){
+    if(shiftTypesInMonth(doc.id,monthAnchor,newSched).size>=3) threeShiftTypes++;
+    if(monthTransitionCount(doc.id,monthAnchor,newSched)>MAX_TRANSITIONS) transitionExcess++;
+  }
+  return {empty,longLeaveMiss,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
@@ -2600,6 +2629,8 @@ function isQualityBetter(q,best){
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
   // 原則：一個月最多2種班別——被排到3種班別的人數越少越好(排在孤立單班之後、年資之前)。
   if(q.threeShiftTypes!==best.threeShiftTypes) return q.threeShiftTypes<best.threeShiftTypes;
+  // 原則：轉班不超過4次——超過的人數越少越好。
+  if(q.transitionExcess!==best.transitionExcess) return q.transitionExcess<best.transitionExcess;
   // 使用者最在意的「至少」硬底線：當月上最多班(放假最少)者絕不可以是資深。獨立成最高優先的
   // 年資判準(不再與 maxOffNotSenior 加總後比較)，避免「有資深上最多班但資淺沒放最多假」的排法
   // 因總違反數較小而被誤選。務必先把這一項壓到最低，其它年資考量才往後排。
@@ -2650,7 +2681,7 @@ async function autoSchedule(){
     usedAttempts=attempt+1;
     // 達到理想(零空班、長假天數精準命中、無孤立單班、最少班者為資深、最多班者為資淺、
     // 班數全距<=1)即提早停止
-    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.threeShiftTypes===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
+    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.threeShiftTypes===0&&bestQ.transitionExcess===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
   }
   if(showProg){ overlay.classList.remove('show'); }
 
@@ -3372,7 +3403,8 @@ function renderStats(){
         const s=st[nid];
         s[shift]++;
         if(hol) s.hol++;
-        if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
+        // 轉班：相鄰兩個有上班的日子只要班別不同就算一次(不限D↔N)。
+        if(s.lastShift&&s.lastShift!==shift) s.transitions++;
         s.lastShift=shift;
       });
     }
@@ -3403,7 +3435,7 @@ function renderStats(){
     const s=st[doc.id];
     const capForDoc=state.maxConsecByShift[getNurseShiftType(doc.id,_statsYear,_statsMonth)]||MAX_CONSEC;
     if(s.consecMax>capForDoc) viols.push(`⚠ ${doc.name} 連班超過上限(${s.consecMax}天 > ${capForDoc}天)`);
-    if(s.transitions>=3) viols.push(`⚠ ${doc.name} D↔N 轉班次數${s.transitions}次（建議 < 3次）`);
+    if(s.transitions>MAX_TRANSITIONS) viols.push(`⚠ ${doc.name} 轉班次數${s.transitions}次，超過上限（${MAX_TRANSITIONS}次以內）`);
   }
   let empties=0, understaffed=0;
   for(const d of dates){
@@ -4402,7 +4434,7 @@ function generatePDF(){
       (ds[shift]||[]).forEach((nid,i)=>{
         if(!nid||!st[nid]) return;
         const s=st[nid]; s[shift]++; if(hol) s.hol++;
-        if(s.lastShift&&((s.lastShift==='D'&&shift==='N')||(s.lastShift==='N'&&shift==='D'))) s.transitions++;
+        if(s.lastShift&&s.lastShift!==shift) s.transitions++; // 任何換班別都算一次轉班
         s.lastShift=shift;
       });
     }
