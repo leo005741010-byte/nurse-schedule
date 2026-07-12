@@ -246,6 +246,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
   <!-- ======= 月班總表 ======= -->
   <div id="tab-master" class="tab-pane active">
+    <div id="quality-banner" style="margin-bottom:8px"></div>
     <div class="stats-wrap">
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
     </div>
@@ -434,7 +435,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
       <h3 class="help-h3">🛠 六、常用操作</h3>
       <ul class="help-ul">
-        <li><b>⚡ 自動排班</b>：依下方原則自動產生整月班表（會嘗試多種排法取最佳解，計算時會顯示進度）。會覆蓋本月班表，但預假／預班與手動鎖定的格子都會保留。</li>
+        <li><b>⚡ 自動排班</b>：依下方原則自動產生整月班表（會嘗試 10 種排法取最佳解，計算時顯示進度）。完成後在月班總表上方顯示<b>品質評分（0～100 分）</b>與各項明細，分數越高代表越接近所有原則。會覆蓋本月班表，但預假／預班與手動鎖定的格子都會保留。</li>
         <li><b>🔒 結束／鎖定</b>：鎖定本月班表避免誤改；解鎖需輸入密碼。</li>
         <li><b>↩ 還原／↪ 重做</b>：可回復上一步操作。</li>
         <li><b>💾 備份／📂 還原</b>：備份會把目前所有資料（班表／護理師／預假／設定）存成一個檔案；還原可從備份檔完整回復（會覆蓋目前資料）。<b>建議每次大幅調整前先按備份保平安</b>，也可用來把資料搬到另一台電腦。</li>
@@ -2512,12 +2513,17 @@ function scheduleQuality(newSched,y,m){
   parts.forEach((d,i)=>countById[d.id]=counts[i]);
   let maxOffNotSenior=0, maxShiftNotJunior=0, seniorityInversions=0;
   if(counts.length){
+    // 全員同一年資(全資深或全資淺)時，「資深多假/資淺少假」的規則根本無從套用
+    // (沒有另一群人可以承接最多班或最多假的位置)，視為規則不適用、不扣分，
+    // 避免評分被結構上不可能達成的目標無謂拉低。
+    const hasSenior=parts.some(d=>isSenior(d.id));
+    const hasJunior=parts.some(d=>!isSenior(d.id));
     const mn=Math.min(...counts), mx=Math.max(...counts);
     // mn===mx時全員班數相同，「最少/最多班數者」是同一群人，資深/資淺兩條鐵則會直接互相
     // 矛盾(同一群人不可能同時被要求全資深又全資淺)，此時視為規則不適用(與enforceMaxOffSenior/
     // enforceMaxShiftJunior的mn0===mx0提早return保持一致)，不計入違反數，避免均分班數(理想
     // 結果)反而被扣分。
-    if(mn!==mx){
+    if(mn!==mx&&hasSenior&&hasJunior){
       // 統計「休最多假(班數最少)卻是資淺」的人數，越少越好(0＝最多假者皆資深)
       maxOffNotSenior=parts.filter(d=>countById[d.id]===mn&&!isSenior(d.id)).length;
       // 統計「上最多班(班數最多)卻是資深」的人數，越少越好(0＝最多班者皆資淺)
@@ -2562,7 +2568,44 @@ function isQualityBetter(q,best){
   if(q.seniorityInversions!==best.seniorityInversions) return q.seniorityInversions<best.seniorityInversions;
   return q.spread<best.spread;
 }
-const AUTO_SCHEDULE_ATTEMPTS=16;
+// 由 scheduleQuality 的各項扣分換算成 0～100 的「班表品質評分」，供畫面顯示。
+// 扣分權重對應各鐵則的嚴重度：空班最重、其次孤立單班/年資硬底線，最後才是全距與顛倒配對。
+function scoreFromQuality(q){
+  let s=100;
+  s-=q.empty*15;                 // 空班：每格 -15(最嚴重)
+  s-=q.isolated*8;               // 孤立單班：每處 -8
+  s-=q.maxShiftNotJunior*6;      // 放假最少者是資深：每人 -6(使用者最在意)
+  s-=q.maxOffNotSenior*4;        // 放假最多者是資淺：每人 -4
+  s-=q.longLeaveMiss*4;          // 長假天數誤差：每天 -4
+  s-=Math.max(0,q.spread-1)*5;   // 班數全距超過1：每多1級 -5
+  s-=q.seniorityInversions*1;    // 資深/資淺整體顛倒配對：每對 -1
+  return Math.max(0,Math.min(100,Math.round(s)));
+}
+// 產生品質評分橫幅(顯示於月班總表上方)：分數、等第色塊、各項明細。
+function qualityBannerHTML(q){
+  const score=scoreFromQuality(q);
+  const grade = score>=90?{t:'優',c:'#2e7d32',bg:'#e8f5e9'} : score>=75?{t:'良',c:'#e67e22',bg:'#fff4e5'} : {t:'待調整',c:'#c0392b',bg:'#fdecea'};
+  const parts=[];
+  parts.push(`空班 ${q.empty}`);
+  parts.push(`孤立單班 ${q.isolated}`);
+  parts.push(`班數全距 ${q.spread}`);
+  parts.push(`放假最少含資深 ${q.maxShiftNotJunior} 人`);
+  parts.push(`放假最多含資淺 ${q.maxOffNotSenior} 人`);
+  parts.push(`資深/資淺顛倒 ${q.seniorityInversions} 對`);
+  if(q.longLeaveMiss>0) parts.push(`長假誤差 ${q.longLeaveMiss} 天`);
+  return `<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:${grade.bg};border:1px solid ${grade.c}55;border-radius:8px;padding:8px 14px">
+    <div style="display:flex;align-items:baseline;gap:6px"><span style="font-size:13px;color:#555">本月班表品質評分</span><span style="font-size:26px;font-weight:800;color:${grade.c}">${score}</span><span style="font-size:13px;color:#555">/100</span><span style="font-size:12px;font-weight:700;color:#fff;background:${grade.c};border-radius:10px;padding:1px 9px;margin-left:4px">${grade.t}</span></div>
+    <div style="font-size:11px;color:#666;line-height:1.6">${parts.join('　·　')}</div>
+  </div>`;
+}
+function renderQualityBanner(){
+  const box=document.getElementById('quality-banner'); if(!box) return;
+  const parts=state.doctors.filter(d=>d.type==='full'&&isFullMonthParticipant(d.id,state.year,state.month));
+  if(!parts.length){ box.innerHTML=''; return; }
+  const q=scheduleQuality(state.schedule,state.year,state.month);
+  box.innerHTML=qualityBannerHTML(q);
+}
+const AUTO_SCHEDULE_ATTEMPTS=10;
 async function autoSchedule(){
   if(isCurrentMonthLocked()){
     const pwd=prompt('本月班表已鎖定，請輸入密碼以解鎖並重新自動排班：');
@@ -2609,15 +2652,16 @@ async function autoSchedule(){
   Object.assign(state.schedule, best);
   autoSave();
   renderCalendar();
-  switchTab('master');
+  switchTab('master'); // 內含 renderMasterGrid → 更新品質評分橫幅
+  const score=scoreFromQuality(bestQ);
   if(bestQ.empty>0){
-    showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最佳解)，維持空班。`,'warn');
+    showToast(`品質評分 ${score}/100。${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${usedAttempts} 種排法取最佳解)，維持空班。`,'warn');
   } else if(bestQ.longLeaveMiss>0){
-    showToast(`排班完成，但「不在預假限制天數人員」中有人受限於連班上限/孤立單班等鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最接近解)。`,'warn');
+    showToast(`品質評分 ${score}/100。「不在預假限制天數人員」中有人受限於鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
   } else if(bestQ.seniorityViolations>0){
-    showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${AUTO_SCHEDULE_ATTEMPTS} 種排法取最接近解)。`,'warn');
+    showToast(`品質評分 ${score}/100。受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未符合資深/資淺原則(已嘗試 ${usedAttempts} 種排法)。`,'warn');
   } else {
-    showToast('✅ 自動排班完成，已全數排滿！','ok');
+    showToast(`✅ 自動排班完成！品質評分 ${score}/100（已全數排滿、無孤立單班，共嘗試 ${usedAttempts} 次取最佳）`,'ok');
   }
 }
 
@@ -3646,6 +3690,7 @@ function renderMasterGrid(){
     return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
+  renderQualityBanner();
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
