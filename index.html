@@ -2951,6 +2951,10 @@ async function autoSchedule(){
     showToast(`排班完成，但「不在預假限制天數人員」中有人受限於連班上限/孤立單班等鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
   } else if(bestQ.seniorityViolations>0){
     showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
+  } else if(bestQ.spread>3){
+    // 班數全距超過鐵則的3：通常是「不能同時上班」等硬性配對限制或人力結構造成的數學上限，
+    // 引擎已取最接近解，但必須讓使用者知道休假天數落差偏大、以及可能的原因。
+    showToast(`排班完成(零空班)，但班數全距為 ${bestQ.spread}(超過鐵則的3)。通常因「不能同時上班」配對、長區間限制或人力結構所致，屬結構上限，請檢視統計報表確認休假分布。`,'warn');
   } else {
     showToast('✅ 自動排班完成，已全數排滿！','ok');
   }
