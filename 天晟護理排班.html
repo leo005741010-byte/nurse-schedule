@@ -407,6 +407,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <ul class="help-ul">
         <li>整月一覽表：橫列為護理師、直欄為日期，格子顯示當天班別（D／E／N），假日欄位以不同底色標示。</li>
         <li><b>手動指派班別</b>：直接在格子輸入 <code>D</code>／<code>E</code>／<code>N</code>；留空代表 OFF。輸入 <code>D12</code>／<code>N12</code> 指派 12 小時特班（08:00-20:00／20:00-08:00）；輸入 <code>H</code> 指派<b>行政班</b>（08:00-16:00、8小時、照常算時數）。D12／N12／H 皆為手動排列、不參與自動排班。</li>
+        <li><b>行政班/特班與休假公平</b>：H 行政班（及 D12／N12 特班）不計入「總班數」（另以「+N行」顯示），但算「有上班的一天」，所以會減少放假數。<b>自動排班會把這些天當工作日，讓有 H 的人少排幾天一般班來補償，使每個人的總休假天數維持公平</b>（想公平生效，請在「自動排班之前」先把 H 排好）。</li>
         <li><b>批修時數</b>：輸入「班別＋時數」如 <code>D2</code>、<code>E0</code>，代表指派該班別但當天實際只上 2 小時／0 小時（用於部分請假被批修）。時數 0～7.5、以 0.5 為間隔。要還原時數，只要重新輸入班別本身（如 <code>E</code>）即可清除。</li>
         <li><b>手動鎖定</b>：<b>雙擊</b>格子可鎖定／解除鎖定該格（出現 ✋ 圖示）。鎖定後自動排班不會更動這一格。手動輸入或刪除班別本身不會鎖定，只有雙擊才會。</li>
         <li>人名旁 <code>[3N]</code> 之類標記＝上個月月底的連續班別（方便確認換月轉班）；格子左上紅色 ❗＝該人階級不符此角色（僅提示）。</li>
@@ -1361,10 +1362,14 @@ function canWorkSupport(nurseId, date, shift, role, sched){
 // ============================================================
 // SCORING
 // ============================================================
+// 供自動排班「休假天數公平」用：一般班(D/E/N)＋行政班/特班(H/D12/N12)都算「有上班的一天」。
+// 因此手動加了 H/特班的人，自動排班會少排幾天一般班來補償，讓大家的總休假天數維持公平。
+// (畫面上的「總班數」另外只算 D/E/N，見 renderMasterGrid，兩者用途不同。)
 function calcNurseShiftCount(nurseId, sched){
   let n=0;
   for(const ds of Object.values(sched)){
     for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) n++;
+    for(const sh of MANUAL_SHIFTS) if((ds[sh]||[]).includes(nurseId)) n++;
   }
   return n;
 }
@@ -2596,8 +2601,12 @@ function generateScheduleAttempt(y,m,dates){
   {
     let totalSlots=0;
     for(const d of dates) totalSlots+=newSched[d].roles.D.length+newSched[d].roles.E.length+newSched[d].roles.N.length;
-    const totalFull=state.doctors.filter(d=>d.type==='full').length;
-    const avgEq=totalFull>0?totalSlots/totalFull:0;
+    // 手動加入的行政/特班(H/D12/N12)也算工作日，一併計入平均目標，讓「總工作日(含H)」平均分配、休假公平。
+    let totalManual=0;
+    const fulls=state.doctors.filter(d=>d.type==='full');
+    for(const d of dates) for(const sh of MANUAL_SHIFTS) for(const nid of (newSched[d][sh]||[])) if(nid&&fulls.some(f=>f.id===nid)) totalManual++;
+    const totalFull=fulls.length;
+    const avgEq=totalFull>0?(totalSlots+totalManual)/totalFull:0;
     _eqTargets={deAvg:avgEq, nAvg:avgEq};
   }
 
@@ -3970,16 +3979,20 @@ function renderMasterGrid(){
     const rowSel=_mgSelNurse===doc.id;
     const nurseWorkedSelDate=_mgSelDate&&doc.type==='full'&&shiftOfNurseOnDate(doc.id,_mgSelDate);
 
-    // 月合計(總班數/放假數/假日班數/總時數)一律以整月計算，不受目前欄位篩選影響。
-    let total=0, holCount=0, empDays=0;
+    // 月合計一律以整月計算，不受欄位篩選影響。總班數只算一般班(D/E/N)；行政班(H)與特班(D12/N12)
+    // 另外算成 manualDays，不計入總班數，但仍算「有上班的日子」，因此會減少放假數(讓休假天數公平)。
+    let den=0, manualDays=0, holCount=0, empDays=0;
     if(doc.type==='full'){
       for(const d of allDates){
         if(!isEmployedOnDate(doc.id,d)) continue;
         empDays++;
         const sh=shiftOfNurseOnDate(doc.id,d);
-        if(sh){ total++; if(isHoliday(d)) holCount++; }
+        if(!sh) continue;
+        if(SHIFTS.includes(sh)){ den++; if(isHoliday(d)) holCount++; }
+        else manualDays++; // H行政班／D12/N12特班
       }
     }
+    const total=den;
     const hourTotal=doc.type==='full'?calcNurseTotalHours(doc.id,allDates):0;
 
     const cells=visibleDates.map(d=>{
@@ -4007,7 +4020,7 @@ function renderMasterGrid(){
           oninput="this.dataset.dirty='1'" onblur="if(this.dataset.dirty){this.dataset.dirty='';updateMasterCell('${doc.id}','${d}',this.value);}" onkeydown="if(event.key==='Enter')this.blur()" ondblclick="unlockManualCell('${doc.id}','${d}')" title="${roleWarnTitle}${manualTitle}輸入 D/E/N 指派班別；留空代表OFF；輸入數字(如6.5、0)調整當天實際時數(不影響班別)；輸入班別+時數(如D2)可一次指派並批修時數">${adj!==null?`<div style="font-size:8px;color:#e65100;font-weight:700;line-height:1;padding-bottom:2px">${adj}h</div>`:''}${isManual?`<span style="position:absolute;top:1px;right:1px;font-size:7px;line-height:1;color:#6a1b9a">✋</span>`:''}${roleMismatch?`<span style="position:absolute;top:1px;left:1px;font-size:7px;line-height:1;color:#c0392b">❗</span>`:''}
       </td>`;
     }).join('');
-    const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
+    const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):0; // 放假數＝在職日 − 一般班 − 行政/特班(H算上班)
     const nmClass=`nm${nurseWorkedSelDate?' mg-glow':''}`;
     const nmTitle=rowSel?'再次點擊還原顯示全部日期':'點擊只顯示此人有上班的日期';
     const prevCode=doc.type==='full'?prevMonthEndCode(doc.id,y,m):'';
@@ -4015,7 +4028,7 @@ function renderMasterGrid(){
     if(prevCode==='OFF') prevTitle='上個月月底排班：最後一天休假';
     else if(prevCode){ const mch=prevCode.match(/^(\d+)(\D+)$/); if(mch) prevTitle=`上個月月底排班：最後連${mch[1]}天上班，最後一天為${mch[2]}班`; }
     const prevBadge=prevCode?`<span style="font-size:9px;color:#888;font-weight:400;margin-left:4px" title="${prevTitle}">[${prevCode}]</span>`:'';
-    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
+    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong>${doc.type==='full'&&manualDays>0?`<span style="font-size:9px;color:#78909c" title="行政班H/特班D12,N12 共${manualDays}天(不計入總班數，但算上班日)">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
 }
@@ -4578,18 +4591,18 @@ async function exportExcel(){
   ws1.getColumn(2+dates.length).width=8; ws1.getColumn(3+dates.length).width=8; ws1.getColumn(4+dates.length).width=9;
 
   for(const doc of sortedRoster(y,m)){
-    let total=0, holCount=0, empDays=0;
+    let den=0, manualDays=0, holCount=0, empDays=0;
     const rowVals=[doc.name+(doc.type==='head'?'(管理)':'')];
     for(const d of dates){
       if(doc.type!=='full'){ rowVals.push(''); continue; }
       if(!isEmployedOnDate(doc.id,d)){ rowVals.push('－'); continue; }
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
-      if(sh){ total++; if(isHoliday(d)) holCount++; rowVals.push(sh); }
+      if(sh){ if(SHIFTS.includes(sh)){den++; if(isHoliday(d)) holCount++;} else manualDays++; rowVals.push(sh); }
       else{ rowVals.push('OFF'); }
     }
-    const offCount=doc.type==='full'?Math.max(0,empDays-total):'';
-    rowVals.push(doc.type==='full'?total:'', offCount, doc.type==='full'?holCount:'');
+    const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):'';
+    rowVals.push(doc.type==='full'?(manualDays>0?`${den}(+${manualDays}行)`:den):'', offCount, doc.type==='full'?holCount:'');
     const row=ws1.addRow(rowVals);
     row.eachCell((cell,colNumber)=>{
       cell.alignment={horizontal:'center',vertical:'middle'};
@@ -4664,7 +4677,7 @@ function generatePDF(){
   const SHIFT_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5',D12:'#ffe0b2',N12:'#ffe0b2',H:'#eceff1'};
   const SHIFT_BG_HOL={D:'#ffcc80',E:'#90caf9',N:'#ce93d8',D12:'#ffb74d',N12:'#ffb74d',H:'#cfd8dc'};
   const mgRows=sortedRoster(y,m).map(doc=>{
-    let total=0, holCount=0, empDays=0;
+    let den=0, manualDays=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
       const holBg=wknd?'background:#fde8e8;':'';
@@ -4674,14 +4687,14 @@ function generatePDF(){
       const sh=shiftOfNurseOnDate(doc.id,d);
       const adj=getHourAdjust(doc.id,d);
       const adjBadge=adj!==null?`<div style="font-size:7px;font-weight:700;color:#e65100">${adj}h</div>`:'';
-      if(sh){ total++; if(wknd) holCount++; const bg=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="background:${bg};color:${SHIFT_COLOR[sh]};font-weight:700">${sh}${adjBadge}</td>`; }
+      if(sh){ if(SHIFTS.includes(sh)){den++; if(wknd) holCount++;} else manualDays++; const bg=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="background:${bg};color:${SHIFT_COLOR[sh]};font-weight:700">${sh}${adjBadge}</td>`; }
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF${adjBadge}</td>`;
       return `<td style="${holBg}color:#bbb">OFF${adjBadge}</td>`;
     }).join('');
-    const offCount=doc.type==='full'?Math.max(0,empDays-total):0;
+    const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):0;
     const hrs=doc.type==='full'?calcNurseTotalHours(doc.id,dates):null;
-    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?total:'-'}</b></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${hrs!==null?hrs+'h':'-'}</td></tr>`;
+    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?den:'-'}</b>${doc.type==='full'&&manualDays>0?`<span style="font-size:7px;color:#78909c">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${hrs!==null?hrs+'h':'-'}</td></tr>`;
   }).join('');
 
   // --- 排班表 (角色格式) ---
