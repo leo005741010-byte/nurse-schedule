@@ -2644,6 +2644,35 @@ function generateScheduleAttempt(y,m,dates){
     arr[idx]=lock.nurseId; _workLocks.add(cellKey(lock.date,lock.shift,idx));
   }
 
+  // #4：上月底OFF-上班者，本月第1天必須上班(否則上月最後一天變孤立單班)。在greedy「之前」先把
+  // 他放進第1天的空缺格並鎖定——此時第1天還全空，一定放得進去，且鎖定後平衡不會再把他挪成休假。
+  // 尊重預假OFF；若休息時數等鐵則讓他當天無法上班則作罷(鐵則優先)。
+  {
+    const day1=dates[0];
+    for(const doc of state.doctors){
+      if(doc.type!=='full') continue;
+      if(!isEmployedOnDate(doc.id,day1)) continue;
+      if(offBlocked(doc.id,day1)) continue;
+      if(isAssignedThatDay(doc.id,day1,newSched)) continue;
+      if(!prevMonthEndedOffThenWork(doc.id,y,m)) continue;
+      const home=getNurseShiftTypeAtDate(doc.id,day1);
+      const order=[home,...SHIFTS.filter(s=>s!==home)];
+      let placed=false;
+      for(const sh of order){
+        const arr=newSched[day1][sh], roles=newSched[day1].roles[sh];
+        for(let i=0;i<arr.length;i++){
+          if(arr[i]) continue;
+          const role=roles[i];
+          const ok = home===sh
+            ? (canWork(doc.id,day1,sh,role,fullSched)||canWorkForce(doc.id,day1,sh,role,fullSched))
+            : canWorkSupport(doc.id,day1,sh,role,fullSched);
+          if(ok){ arr[i]=doc.id; _workLocks.add(cellKey(day1,sh,i)); placed=true; break; }
+        }
+        if(placed) break;
+      }
+    }
+  }
+
   // Multi-pass greedy fill, one role at a time (本班別人員為主，確保每班先求足額覆蓋)
   for(let pass=0;pass<5;pass++){
     const ordDates=pass===0?[...dates]:shuffle([...dates]);
