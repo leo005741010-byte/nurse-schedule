@@ -117,6 +117,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-E{background:#e3f2fd;color:#1565c0;font-weight:700;}
 .mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
 .mg-D12,.mg-N12{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
+.mg-H{background:#eceff1;color:#37474f;font-weight:700;box-shadow:inset 0 0 0 1px #78909c;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
 .mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
@@ -273,16 +274,23 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <tbody id="nurse-tbody"></tbody>
     </table>
     <div style="margin-top:16px;background:#fff;border-radius:6px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
-      <h3 style="font-size:13px;margin-bottom:10px;color:#0d5c4a">🚫 避免同時上班設定</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px">設定後，這兩位護理師在同一天不會同時出現在班表中。</p>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-        <select id="avoid-doc1" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
-        <span style="font-weight:700;color:#666">不與</span>
-        <select id="avoid-doc2" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
-        <span style="font-weight:700;color:#666">同時上班</span>
-        <button class="action-btn btn-red" onclick="addAvoidPair()" style="padding:5px 12px">新增</button>
+      <h3 style="font-size:13px;margin-bottom:10px;color:#0d5c4a">🔗 配對限制設定（誰與誰）</h3>
+      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。「不能同時上班」為硬性限制；「要同時上班／不能同時放假」為盡量達成，若受其他鐵則所限無法完全達成，會在統計報表提示。</p>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+        <select id="pair-doc1" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
+        <select id="pair-type" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+          <option value="nowork">不能同時上班</option>
+          <option value="mustwork">要同時上班</option>
+          <option value="nooff">不能同時放假</option>
+        </select>
+        <select id="pair-doc2" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
+        <span style="font-size:12px;color:#666">日期</span>
+        <input type="number" id="pair-from" min="1" max="31" placeholder="幾號" style="width:60px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+        <span style="font-size:12px;color:#666">到</span>
+        <input type="number" id="pair-to" min="1" max="31" placeholder="幾號" style="width:60px;padding:4px 6px;border:1px solid #ddd;border-radius:4px;font-size:12px">
+        <button class="action-btn btn-green" onclick="addPairRule()" style="padding:5px 12px">新增</button>
       </div>
-      <div id="avoid-pairs-list"></div>
+      <div id="pair-rules-list"></div>
     </div>
   </div>
 
@@ -398,7 +406,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <h3 class="help-h3">🗂 一、月班總表</h3>
       <ul class="help-ul">
         <li>整月一覽表：橫列為護理師、直欄為日期，格子顯示當天班別（D／E／N），假日欄位以不同底色標示。</li>
-        <li><b>手動指派班別</b>：直接在格子輸入 <code>D</code>／<code>E</code>／<code>N</code>；留空代表 OFF。輸入 <code>D12</code>／<code>N12</code> 指派 12 小時特班（08:00-20:00／20:00-08:00，手動排列、不參與自動排班）。</li>
+        <li><b>手動指派班別</b>：直接在格子輸入 <code>D</code>／<code>E</code>／<code>N</code>；留空代表 OFF。輸入 <code>D12</code>／<code>N12</code> 指派 12 小時特班（08:00-20:00／20:00-08:00）；輸入 <code>H</code> 指派<b>行政班</b>（08:00-16:00、8小時、照常算時數）。D12／N12／H 皆為手動排列、不參與自動排班。</li>
         <li><b>批修時數</b>：輸入「班別＋時數」如 <code>D2</code>、<code>E0</code>，代表指派該班別但當天實際只上 2 小時／0 小時（用於部分請假被批修）。時數 0～7.5、以 0.5 為間隔。要還原時數，只要重新輸入班別本身（如 <code>E</code>）即可清除。</li>
         <li><b>手動鎖定</b>：<b>雙擊</b>格子可鎖定／解除鎖定該格（出現 ✋ 圖示）。鎖定後自動排班不會更動這一格。手動輸入或刪除班別本身不會鎖定，只有雙擊才會。</li>
         <li>人名旁 <code>[3N]</code> 之類標記＝上個月月底的連續班別（方便確認換月轉班）；格子左上紅色 ❗＝該人階級不符此角色（僅提示）。</li>
@@ -416,6 +424,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li>新增／編輯護理師：姓名、顏色、預設班別、階級（L／T／A2／B）、性別、年資（資深／資淺）、是否可支援。</li>
         <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
+        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>（硬性，一定遵守）、<b>要同時上班</b>、<b>不能同時放假</b>（後兩者盡量達成，受其他鐵則限制時會在統計報表列出未達成的日期）。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
       </ul>
 
       <h3 class="help-h3">📝 四、預假／預班</h3>
@@ -446,7 +455,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <ol class="help-ol">
         <li><b>不留空班</b>：每個班別的需求人數一定補滿；本班別補不到時，依支援規則拉其他班別的人來支援。</li>
         <li><b>支援方向限制</b>：D只能支援E；E可支援D與N；N只能支援E（N不能貼D的洞）。<b>換月轉班作息銜接（兩種互為鏡像）</b>：①上月大夜、本月轉白班者，本月一開始還在夜間作息，可先上大夜，直到上到本月第一個白班為止；②上月白班、本月轉大夜者，本月一開始還在日間作息，可先上白班，直到上到本月第一個大夜為止。</li>
-        <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。</li>
+        <li><b>不出現孤立單班</b>：不會排成「休－上班－休」的單獨一天上班（月底最後兩天因下月尚未排，屬正常）。若上個月底是「休假－上班」（倒數第2天休、最後一天上班），本月第1天不會排休假，以免上月最後一天變成孤立單班。</li>
         <li><b>一個月最多2種班別</b>：同一人整月不會被排到日（D）／小夜（E）／大夜（N）三種都有，最多只出現其中兩種，減少日夜作息負擔。（唯有在補不到人、否則會空班時，才會為了「不留空班」這條更高優先的鐵則而破例。）</li>
         <li><b>轉班次數 ≤ 4 次</b>：轉班定義為「相鄰兩個有上班的日子只要班別不同就算一次」（不限 D↔N，任何換班別都算；中間隔幾天休假不影響）。整月轉班次數控制在 4 次以內，避免作息一直被打亂。（同樣在會造成空班時才會破例。）</li>
         <li><b>放假天數集中</b>：全體放假天數落差控制在 4 個相鄰數字內（班數全距 ≤ 3）。</li>
@@ -751,6 +760,7 @@ let state = {
   longLeaveExempt: {},
   longLeaveDays: {},
   avoidPairs: [],
+  pairRules: [],
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
     {id:'n1',name:'宋品儒',type:'full',color:'#1565c0',prefs:defPrefs('D')},
@@ -796,7 +806,7 @@ function snapshotUndoable(){
     doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours, roleCounts:state.roleCounts,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
-    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs
+    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs, pairRules:state.pairRules
   });
 }
 function restoreUndoable(snap){
@@ -808,10 +818,11 @@ function restoreUndoable(snap){
   state.maxOffDays=snap.maxOffDays??null; state.maxOffHolidayDays=snap.maxOffHolidayDays??null;
   state.longLeaveExempt=snap.longLeaveExempt||{}; state.longLeaveDays=snap.longLeaveDays||{};
   state.avoidPairs=snap.avoidPairs||[];
+  state.pairRules=snap.pairRules||[];
 }
 function rerenderAfterUndoRedo(){
   renderCalendar(); renderMasterGrid(); renderPRList(); renderPRCalGrid();
-  renderNurseTable(); renderAvoidPairs(); renderStats();
+  renderNurseTable(); renderPairRules(); renderStats();
 }
 function pushUndo(){
   _undoStack.push(snapshotUndoable());
@@ -934,7 +945,11 @@ const SHIFTS=['D','E','N'];
 // 判斷正確感知這些班次的存在，避免同一人同一天被自動排班重複指派、或排班忽略12小時班
 // 前後應有的休息間隔。SPECIAL_SHIFTS 只用於「忙碌狀態」相關檢查，絕不出現在核心排班迴圈。
 const SPECIAL_SHIFTS=['D12','N12'];
-const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）',D12:'08:00-20:00',N12:'20:00-08:00（次日）'};
+// H＝行政班：手動加入、上白班時段(08-16)8小時、照常算時數，但不佔一般D/E/N職缺、不參與自動排班。
+// MANUAL_SHIFTS＝所有「手動加入、不參與自動排班」的班別(12小時特班＋行政班)，
+// 供忙碌偵測/休息時數/顯示/時數計算等處統一辨識(核心自動排班迴圈仍只跑 SHIFTS)。
+const MANUAL_SHIFTS=['D12','N12','H'];
+const SHIFT_TIME={D:'08:00-16:00',E:'16:00-24:00',N:'00:00-08:00（次日）',D12:'08:00-20:00',N12:'20:00-08:00（次日）',H:'08:00-16:00（行政）'};
 function shiftRange(shift){
   switch(shift){
     case 'D': return {s:8,e:16};
@@ -942,6 +957,7 @@ function shiftRange(shift){
     case 'N': return {s:24,e:32};
     case 'D12': return {s:8,e:20};
     case 'N12': return {s:20,e:32};
+    case 'H': return {s:8,e:16};
   }
 }
 function getShiftStart(shift,date){ const{s}=shiftRange(shift); return s<24?{date,hour:s}:{date:addDays(date,1),hour:s-24}; }
@@ -957,9 +973,10 @@ function ensureDay(dateStr){
       ds[sh]=ds.roles[sh].map((r,i)=>old[i]!==undefined?old[i]:null);
     }
   }
-  // 特殊12小時班(D12/N12)：無固定格數，人力全由管理者手動增減，故不像D/E/N需對齊roles長度。
+  // 手動加入的班別(D12/N12特班、H行政班)：無固定格數，人力全由管理者手動增減，不對齊roles長度。
   if(!ds.D12) ds.D12=[];
   if(!ds.N12) ds.N12=[];
+  if(!ds.H) ds.H=[];
   return ds;
 }
 function getRoles(dateStr,shift){
@@ -978,7 +995,7 @@ function getLastAssigned(nurseId, beforeDate, sched){
     for(const sh of SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) last={date:d,shift:sh};
     }
-    for(const sh of SPECIAL_SHIFTS){
+    for(const sh of MANUAL_SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) last={date:d,shift:sh};
     }
   }
@@ -991,7 +1008,7 @@ function getNextAssigned(nurseId, afterDate, sched){
     for(const sh of SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) return {date:d,shift:sh};
     }
-    for(const sh of SPECIAL_SHIFTS){
+    for(const sh of MANUAL_SHIFTS){
       if((ds[sh]||[]).includes(nurseId)) return {date:d,shift:sh};
     }
   }
@@ -999,7 +1016,7 @@ function getNextAssigned(nurseId, afterDate, sched){
 }
 function isAssignedThatDay(nurseId,dateStr,sched){
   const ds=sched[dateStr]; if(!ds) return false;
-  return SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId));
+  return SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId))||MANUAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(nurseId));
 }
 function restOK(nurseId,date,shift,sched){
   const last=getLastAssigned(nurseId,date,sched);
@@ -1046,10 +1063,20 @@ function wouldExceedConsec(nurseId,date,sched){
   }
   return (back+fwd+1)>consecCapFor(nurseId,date);
 }
+// 配對限制(pairRules)：{a,b,type,start,end}。type=nowork(不能同時上班)/mustwork(要同時上班)/
+// nooff(不能同時放假)。start/end 為 'YYYY-MM-DD' 或 null(整段皆適用)。
+function pairRuleActiveOn(rule,date){
+  if(rule.start&&date<rule.start) return false;
+  if(rule.end&&date>rule.end) return false;
+  return true;
+}
+function pairRulesOfType(type){ return (state.pairRules||[]).filter(r=>r.type===type); }
+// nowork 為硬性：某人於 date 上班時，若有 nowork 對象當天也上班則擋下。
 function avoidBlocked(nurseId,date,sched){
-  for(const pair of (state.avoidPairs||[])){
-    if(!pair.includes(nurseId)) continue;
-    const other=pair.find(x=>x!==nurseId);
+  for(const r of pairRulesOfType('nowork')){
+    if(r.a!==nurseId&&r.b!==nurseId) continue;
+    if(!pairRuleActiveOn(r,date)) continue;
+    const other=r.a===nurseId?r.b:r.a;
     if(isAssignedThatDay(other,date,sched)) return true;
   }
   return false;
@@ -1256,8 +1283,8 @@ function canWork(nurseId, date, shift, role, sched){
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   return true;
 }
-// 強制排班用：僅放寬「避免同時上班」這類軟性偏好，
-// 休息時數／連續上班天數上限／班別指派／階級資格／在職日期／N-OFF-D為鐵則，不可放寬。
+// 強制排班用：休息時數／連續上班天數上限／班別指派／階級資格／在職日期／N-OFF-D／
+// 「不能同時上班」配對限制皆為鐵則，不可放寬(僅greedy評分偏好層面放寬)。
 function canWorkForce(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
@@ -1268,6 +1295,7 @@ function canWorkForce(nurseId, date, shift, role, sched){
   if(offBlocked(nurseId,date)) return false;
   if(!restOK(nurseId,date,shift,sched)) return false;
   if(wouldExceedConsec(nurseId,date,sched)) return false;
+  if(avoidBlocked(nurseId,date,sched)) return false; // 「不能同時上班」硬性限制
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
@@ -1734,6 +1762,7 @@ function tryChainAssign(nurseId, date, shift, role, newSched, fullSched, homeMat
   if(violatesNOffD(nurseId,date,shift,fullSched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,fullSched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,fullSched)) return false;
+  if(avoidBlocked(nurseId,date,fullSched)) return false; // 「不能同時上班」硬性限制，連鎖補位也遵守
   if(!homeMatch&&doc.prefs.allowSupport===false) return false;
   if(!wouldExceedConsec(nurseId,date,fullSched)) return false; // 其餘鐵則皆通過，代表不是連班卡關，判定不可行
 
@@ -1776,6 +1805,7 @@ function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
     if(supportShiftBlocked(doc.id,date,shift,fullSched)) return false; // 支援矩陣鐵則(連鎖補位也不例外)
     if(violatesDtoNOrder(doc.id,date,shift,fullSched)) return false;
     if(violatesNtoDOrder(doc.id,date,shift,fullSched)) return false;
+    if(avoidBlocked(doc.id,date,fullSched)) return false; // 「不能同時上班」硬性限制
     return true;
   };
 
@@ -2413,6 +2443,74 @@ function enforceWorkPreRequests(newSched, dates){
     }
   }
 }
+// 配對限制的盡力達成(nooff/mustwork)：只用「補進當天既有空缺格」的方式，不擠掉別人、不製造空班。
+// 找一個該人適任(本班別優先，其次可支援)的空缺格填入；成功回傳true。
+function tryFillOneEmptyForNurse(nurseId,date,newSched,fullSched){
+  if(isAssignedThatDay(nurseId,date,newSched)) return true; // 已上班
+  const ds=newSched[date]; if(!ds) return false;
+  const home=getNurseShiftTypeAtDate(nurseId,date);
+  const order=[home,...SHIFTS.filter(s=>s!==home)];
+  for(const sh of order){
+    const arr=ds[sh]; const roles=ds.roles[sh]; if(!arr) continue;
+    for(let i=0;i<arr.length;i++){
+      if(arr[i]) continue;
+      const role=roles[i];
+      const ok = home===sh
+        ? (canWork(nurseId,date,sh,role,fullSched)||canWorkForce(nurseId,date,sh,role,fullSched))
+        : canWorkSupport(nurseId,date,sh,role,fullSched);
+      if(ok){ arr[i]=nurseId; return true; }
+    }
+  }
+  return false;
+}
+// nooff：某對在適用日不可同時放假 → 兩人當天都沒上班時，盡量讓其中一人補進空缺上班。
+function enforceNoOffTogether(newSched,fullSched,dates){
+  for(const r of pairRulesOfType('nooff')){
+    for(const d of dates){
+      if(!pairRuleActiveOn(r,d)) continue;
+      if(isAssignedThatDay(r.a,d,newSched)||isAssignedThatDay(r.b,d,newSched)) continue; // 已有一人上班
+      // 兩人都休：優先讓「非預假OFF、當天在職」的一方補班
+      for(const nid of [r.a,r.b]){
+        if(offBlocked(nid,d)) continue;        // 預假OFF尊重，不強拉
+        if(!isEmployedOnDate(nid,d)) continue;
+        if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)) break;
+      }
+    }
+  }
+}
+// mustwork：某對在適用日要同時上班 → 只有一人上班時，盡量把另一人補進空缺一起上。
+function enforceMustWorkTogether(newSched,fullSched,dates){
+  for(const r of pairRulesOfType('mustwork')){
+    for(const d of dates){
+      if(!pairRuleActiveOn(r,d)) continue;
+      const aOn=isAssignedThatDay(r.a,d,newSched), bOn=isAssignedThatDay(r.b,d,newSched);
+      if(aOn===bOn) continue; // 都上或都休都算符合(同進同退)
+      const off=aOn?r.b:r.a;
+      if(offBlocked(off,d)||!isEmployedOnDate(off,d)) continue; // 預假OFF/未在職不硬拉
+      tryFillOneEmptyForNurse(off,d,newSched,fullSched);
+    }
+  }
+}
+// 上月底是「OFF-上班」(倒數第2天休、最後一天上班)者：本月第1天不可放假，否則上月最後一天
+// 會變成孤立單班(前後皆休)。盡量把這些人補進本月第1天的空缺格。
+function prevMonthEndedOffThenWork(nurseId,y,m){
+  let py=y,pm=m-1; if(pm<0){pm=11;py--;}
+  const dim=daysInMonth(py,pm); if(dim<2) return false;
+  const last=fmtDate(py,pm,dim), prev=fmtDate(py,pm,dim-1);
+  return isAssignedThatDay(nurseId,last,state.schedule)&&!isAssignedThatDay(nurseId,prev,state.schedule);
+}
+function enforceBoundaryDay1Work(newSched,fullSched,dates){
+  const day1=dates[0]; if(!day1) return;
+  const y=state.year,m=state.month;
+  for(const doc of state.doctors){
+    if(doc.type!=='full') continue;
+    if(!isEmployedOnDate(doc.id,day1)) continue;
+    if(isAssignedThatDay(doc.id,day1,newSched)) continue;
+    if(offBlocked(doc.id,day1)) continue; // 預假OFF尊重
+    if(!prevMonthEndedOffThenWork(doc.id,y,m)) continue;
+    tryFillOneEmptyForNurse(doc.id,day1,newSched,fullSched);
+  }
+}
 // 產生「一次」排班嘗試，回傳完整的候選班表(不寫回 state.schedule)。
 // 排班過程中大量使用亂數(shuffle/評分抖動)做為打散僵局的手段，同一份輸入資料
 // 每次執行的結果不一定相同——多數情況下會收斂到「零空班、班數只差相鄰兩數」，
@@ -2427,7 +2525,7 @@ function generateScheduleAttempt(y,m,dates){
     // 不可被自動排班的產生過程覆蓋或遺失；isAssignedThatDay等忙碌檢查會讀到這裡的資料，
     // 讓一般D/E/N的排班自動避開這些已佔用12小時班的人。
     newSched[d]={roles, D:Array(roles.D.length).fill(null), E:Array(roles.E.length).fill(null), N:Array(roles.N.length).fill(null),
-      D12:[...(existing.D12||[])], N12:[...(existing.N12||[])]};
+      D12:[...(existing.D12||[])], N12:[...(existing.N12||[])], H:[...(existing.H||[])]};
   }
   const fullSched = new Proxy(newSched, {
     get(target, key, receiver){
@@ -2601,6 +2699,13 @@ function generateScheduleAttempt(y,m,dates){
   // 使用者最在意「上最多班的絕不可以是資深」。允許放寬帶頂1級(全距仍硬性<=3)讓資淺多接，
   // 把仍卡在最多班的資深擠離該位置。因帶 moveWouldIsolate 防護，不會製造新的孤立單班。
   enforceMaxShiftJunior(newSched, fullSched, dates, 1);
+
+  // 上月底OFF-上班者，本月第1天不可放假(避免跨月孤立單班)。
+  enforceBoundaryDay1Work(newSched, fullSched, dates);
+
+  // 配對限制盡力達成(放在最後、只補空缺不擠人)：不能同時放假、要同時上班。
+  enforceNoOffTogether(newSched, fullSched, dates);
+  enforceMustWorkTogether(newSched, fullSched, dates);
 
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
@@ -2823,18 +2928,20 @@ function renderCalendar(){
       cell.appendChild(block);
     }
 
-    // 特殊12小時班(D12/N12)：手動排列，只有當天實際有人才顯示，不佔用空間干擾一般排班檢視。
-    for(const sh of SPECIAL_SHIFTS){
+    // 手動加入的班別(D12/N12特班＋H行政班)：只有當天實際有人才顯示，不佔用空間干擾一般排班檢視。
+    const manualStyle={D12:{bd:'#f9a825',bg:'#fff3e0',fg:'#e65100',tag:'特'},N12:{bd:'#f9a825',bg:'#fff3e0',fg:'#e65100',tag:'特'},H:{bd:'#78909c',bg:'#eceff1',fg:'#37474f',tag:'H'}};
+    for(const sh of MANUAL_SHIFTS){
       const arr=ds[sh]||[];
       if(!arr.length) continue;
+      const stl=manualStyle[sh];
       const block=document.createElement('div');
       block.className='shift-block';
-      block.style.borderColor='#f9a825';
+      block.style.borderColor=stl.bd;
       const rows=arr.map(nid=>{
         const nu=state.doctors.find(x=>x.id===nid); if(!nu) return '';
-        return `<div class="role-row"><span class="role-abbr" style="background:#fff3e0;color:#e65100">特</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color}" title="${nu.name}">${nu.name}</span></div>`;
+        return `<div class="role-row"><span class="role-abbr" style="background:${stl.bg};color:${stl.fg}">${stl.tag}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color}" title="${nu.name}">${nu.name}</span></div>`;
       }).join('');
-      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag" style="background:#fff3e0;color:#e65100;border:1px solid #f9a825">${sh}</span><span class="shift-cnt">${arr.length}人</span></div>${rows}`;
+      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag" style="background:${stl.bg};color:${stl.fg};border:1px solid ${stl.bd}">${sh}</span><span class="shift-cnt">${arr.length}人</span></div>${rows}`;
       cell.appendChild(block);
     }
 
@@ -2880,7 +2987,7 @@ function openDayModal(dateStr){
   _dayDraft={
     roles:{D:[...ds.roles.D],E:[...ds.roles.E],N:[...ds.roles.N]},
     D:[...ds.D], E:[...ds.E], N:[...ds.N],
-    D12:[...ds.D12], N12:[...ds.N12],
+    D12:[...ds.D12], N12:[...ds.N12], H:[...(ds.H||[])],
   };
   const[y,mo,d]=dateStr.split('-').map(Number);
   const dow=['一','二','三','四','五','六','日'][getDOW(dateStr)];
@@ -2918,22 +3025,26 @@ function _renderDayDraft(){
     });
     html+=`</div>`;
   }
-  // 特殊12小時班(D12/N12)：手動排列、不參與自動排班，格數不固定，全部可自由增減。
-  const specialCfg=[{shift:'D12',label:'D12 (12小時特班)'},{shift:'N12',label:'N12 (12小時特班)'}];
+  // 手動加入的班別：D12/N12(12小時特班)＋H(行政班)。手動排列、不參與自動排班，格數不固定。
+  const specialCfg=[
+    {shift:'D12',label:'D12 (12小時特班)',bd:'#f9a825',bg:'#fff3e0',fg:'#e65100',tag:'特'},
+    {shift:'N12',label:'N12 (12小時特班)',bd:'#f9a825',bg:'#fff3e0',fg:'#e65100',tag:'特'},
+    {shift:'H',label:'H (行政班)',bd:'#78909c',bg:'#eceff1',fg:'#37474f',tag:'H'},
+  ];
   for(const c of specialCfg){
-    const arr=ds[c.shift];
-    html+=`<div class="day-shift-block" style="border-color:#f9a825">
+    const arr=ds[c.shift]||[];
+    html+=`<div class="day-shift-block" style="border-color:${c.bd}">
       <div class="day-shift-hd">
-        <span class="slot-tag" style="padding:2px 8px;background:#fff3e0;color:#e65100;border:1px solid #f9a825">${c.label}</span>
+        <span class="slot-tag" style="padding:2px 8px;background:${c.bg};color:${c.fg};border:1px solid ${c.bd}">${c.label}</span>
         <span style="font-size:11px;color:#666">${SHIFT_TIME[c.shift]}・手動排列，不參與自動排班</span>
-        <button class="btn-sm" style="background:#fff3e0;color:#e65100;margin-left:auto" onclick="_draftAddSpecial('${c.shift}')">＋新增人員</button>
+        <button class="btn-sm" style="background:${c.bg};color:${c.fg};margin-left:auto" onclick="_draftAddSpecial('${c.shift}')">＋新增人員</button>
       </div>`;
     arr.forEach((nid,i)=>{
       const opts=`<option value=""${!nid?' selected':''}>-- 空缺 --</option>`+
         state.doctors.filter(n=>n.type==='full'||n.id===nid).map(n=>
           `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':n.type==='support'?'(支援)':''}</option>`
         ).join('');
-      html+=`<div class="day-slot-row"><span class="day-slot-role">特${i+1}</span><select onchange="_draftSpecialSlot('${c.shift}',${i},this.value)">${opts}</select><button class="btn-sm btn-del" onclick="_draftRemoveSpecial('${c.shift}',${i})">✕</button></div>`;
+      html+=`<div class="day-slot-row"><span class="day-slot-role">${c.tag}${i+1}</span><select onchange="_draftSpecialSlot('${c.shift}',${i},this.value)">${opts}</select><button class="btn-sm btn-del" onclick="_draftRemoveSpecial('${c.shift}',${i})">✕</button></div>`;
     });
     html+=`</div>`;
   }
@@ -2945,8 +3056,9 @@ function _renderDayDraft(){
 // 選人時自動把該人從「其餘所有班別」清掉，避免手動編輯時不小心把同一人重複排入。
 function _clearNurseFromOtherSlots(nurseId,keepShift){
   if(!nurseId) return;
-  for(const sh of [...SHIFTS,...SPECIAL_SHIFTS]){
+  for(const sh of [...SHIFTS,...MANUAL_SHIFTS]){
     if(sh===keepShift) continue;
+    if(!_dayDraft[sh]) continue;
     const i=_dayDraft[sh].indexOf(nurseId);
     if(i>=0) _dayDraft[sh][i]=null;
   }
@@ -3006,6 +3118,7 @@ function confirmDayModal(){
   ds.roles={D:[..._dayDraft.roles.D],E:[..._dayDraft.roles.E],N:[..._dayDraft.roles.N]};
   ds.D=[..._dayDraft.D]; ds.E=[..._dayDraft.E]; ds.N=[..._dayDraft.N];
   ds.D12=_dayDraft.D12.filter(Boolean); ds.N12=_dayDraft.N12.filter(Boolean);
+  ds.H=(_dayDraft.H||[]).filter(Boolean);
   const savedDate=_dayDraftDate;
   syncDayRolesForSpecialShift(savedDate); // 依D12/N12是否存在，收斂/還原當天D/E/N的空缺格數
   _dayDraft=null; _dayDraftDate=null;
@@ -3078,30 +3191,49 @@ function renderNurseTable(){
     </tr>`;
   }).join('');
 
-  const sel1=document.getElementById('avoid-doc1'), sel2=document.getElementById('avoid-doc2');
-  const opts=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
-  sel1.innerHTML=opts; sel2.innerHTML=opts;
-  renderAvoidPairs();
+  const sel1=document.getElementById('pair-doc1'), sel2=document.getElementById('pair-doc2');
+  if(sel1&&sel2){
+    const opts=state.doctors.map(d=>`<option value="${d.id}">${d.name}</option>`).join('');
+    sel1.innerHTML=opts; sel2.innerHTML=opts;
+  }
+  renderPairRules();
 }
-function renderAvoidPairs(){
-  const list=state.avoidPairs||[];
-  document.getElementById('avoid-pairs-list').innerHTML=list.length?list.map((p,i)=>
-    `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
-      <span>${getDocName(p[0])} 不與 ${getDocName(p[1])} 同時上班</span>
-      <button class="btn-sm btn-del" onclick="removeAvoidPair(${i})">移除</button>
-    </div>`).join(''):'<div style="color:#999;font-size:11px">尚無設定</div>';
+const PAIR_TYPE_LABEL={nowork:'不能同時上班',mustwork:'要同時上班',nooff:'不能同時放假'};
+const PAIR_TYPE_COLOR={nowork:'#c0392b',mustwork:'#2e7d32',nooff:'#e67e22'};
+function renderPairRules(){
+  const box=document.getElementById('pair-rules-list'); if(!box) return;
+  const list=state.pairRules||[];
+  box.innerHTML=list.length?list.map((r,i)=>{
+    const rangeStr=(r.start||r.end)?`（${(r.start||'').slice(5)}～${(r.end||'').slice(5)}）`:'（整段適用）';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+      <span style="color:${PAIR_TYPE_COLOR[r.type]||'#333'};font-weight:700">${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]||r.type} ${getDocName(r.b)}</span>
+      <span style="color:#888">${rangeStr}</span>
+      <button class="btn-sm btn-del" onclick="removePairRule(${i})">移除</button>
+    </div>`;
+  }).join(''):'<div style="color:#999;font-size:11px">尚無設定</div>';
 }
-function addAvoidPair(){
-  const a=document.getElementById('avoid-doc1').value, b=document.getElementById('avoid-doc2').value;
+function addPairRule(){
+  const a=document.getElementById('pair-doc1').value, b=document.getElementById('pair-doc2').value;
+  const type=document.getElementById('pair-type').value;
   if(!a||!b||a===b){showToast('請選擇兩位不同護理師','warn');return;}
-  if(!state.avoidPairs) state.avoidPairs=[];
-  if(state.avoidPairs.some(p=>(p[0]===a&&p[1]===b)||(p[0]===b&&p[1]===a))){showToast('此組合已存在','warn');return;}
+  const fromN=parseInt(document.getElementById('pair-from').value)||null;
+  const toN=parseInt(document.getElementById('pair-to').value)||null;
+  const dim=daysInMonth(state.year,state.month);
+  let start=null,end=null;
+  if(fromN||toN){
+    const s=fromN||1, e=toN||fromN||dim;
+    if(s<1||e>dim||s>e){showToast(`日期需為 1～${dim} 且起始不晚於結束`,'warn');return;}
+    start=fmtDate(state.year,state.month,s); end=fmtDate(state.year,state.month,e);
+  }
+  if(!state.pairRules) state.pairRules=[];
+  if(state.pairRules.some(r=>r.type===type&&((r.a===a&&r.b===b)||(r.a===b&&r.b===a))&&r.start===start&&r.end===end)){showToast('此組合已存在','warn');return;}
   pushUndo();
-  state.avoidPairs.push([a,b]);
-  autoSave(); renderAvoidPairs();
-  showToast('已新增');
+  state.pairRules.push({a,b,type,start,end});
+  document.getElementById('pair-from').value=''; document.getElementById('pair-to').value='';
+  autoSave(); renderPairRules();
+  showToast('✅ 已新增配對限制');
 }
-function removeAvoidPair(i){ pushUndo(); state.avoidPairs.splice(i,1); autoSave(); renderAvoidPairs(); }
+function removePairRule(i){ pushUndo(); state.pairRules.splice(i,1); autoSave(); renderPairRules(); }
 function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
@@ -3464,7 +3596,7 @@ function renderStats(){
     const s=st[doc.id]; let cur=0;
     for(const dateStr of dates){
       const ds=state.schedule[dateStr]||{};
-      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
+      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||MANUAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
       if(worked){cur++;s.consecMax=Math.max(s.consecMax,cur);}else cur=0;
     }
   }
@@ -3499,6 +3631,18 @@ function renderStats(){
   }
   if(empties>0) viols.push(`❌ 尚有 ${empties} 個職位空缺（可能因無符合階級人員可上）`);
   if(understaffed>0) viols.push(`⚠ 有 ${understaffed} 個班次職位未全部補齊`);
+  // 配對限制違反檢查(nowork/mustwork/nooff)——列出未能完全達成的日期
+  for(const r of (state.pairRules||[])){
+    const bad=[];
+    for(const dd of dates){
+      if(!pairRuleActiveOn(r,dd)) continue;
+      const aOn=isAssignedThatDay(r.a,dd,state.schedule), bOn=isAssignedThatDay(r.b,dd,state.schedule);
+      if(r.type==='nowork'&&aOn&&bOn) bad.push(dd.slice(8));
+      else if(r.type==='mustwork'&&aOn!==bOn) bad.push(dd.slice(8));
+      else if(r.type==='nooff'&&!aOn&&!bOn) bad.push(dd.slice(8));
+    }
+    if(bad.length) viols.push(`⚠ 配對限制未達成：${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]} ${getDocName(r.b)}（${bad.length}天：${bad.slice(0,10).join('、')}${bad.length>10?'…':''}號）`);
+  }
   document.getElementById('stats-violations').innerHTML=viols.length
     ?`<div class="alert alert-warn"><strong>提醒事項：</strong><br>${viols.map(v=>`• ${v}`).join('<br>')}</div>`
     :`<div class="alert alert-ok">✅ 所有限制條件均符合</div>`;
@@ -3593,7 +3737,7 @@ function renderCrossMonthStats(){
         st[nid].hours+=hoursOnDate(nid,dateStr);
       });
     }
-    for(const sh of SPECIAL_SHIFTS){
+    for(const sh of MANUAL_SHIFTS){
       (ds[sh]||[]).forEach(nid=>{ if(!nid||!st[nid])return; st[nid].work++; st[nid].hours+=hoursOnDate(nid,dateStr); });
     }
   }
@@ -3631,7 +3775,7 @@ function renderCrossMonthStats(){
 function shiftOfNurseOnDate(nurseId,dateStr){
   const ds=state.schedule[dateStr]; if(!ds) return null;
   for(const sh of SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
-  for(const sh of SPECIAL_SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
+  for(const sh of MANUAL_SHIFTS) if((ds[sh]||[]).includes(nurseId)) return sh;
   return null;
 }
 // 該人在該日、該一般班別(D/E/N)實際擔任的角色(組長/檢傷/...)，供階級不符警示使用。
@@ -3905,8 +4049,8 @@ function updateMasterCell(nurseId,dateStr,rawVal){
       forcedHour=hourVal;
     }
   }
-  if(val&&!SHIFTS.includes(val)&&!SPECIAL_SHIFTS.includes(val)){
-    showToast('請輸入 D、E、N、D12、N12、時數數字(如6.5)、班別+批修時數(如D2、E0)，或留空(代表OFF)','warn');
+  if(val&&!SHIFTS.includes(val)&&!MANUAL_SHIFTS.includes(val)){
+    showToast('請輸入 D、E、N、D12、N12、H(行政班)、時數數字(如6.5)、班別+批修時數(如D2、E0)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
   }
@@ -3919,8 +4063,8 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     const idx=ds[sh].indexOf(nurseId);
     if(idx>=0) ds[sh][idx]=null;
   }
-  for(const sh of SPECIAL_SHIFTS){
-    const idx=ds[sh].indexOf(nurseId);
+  for(const sh of MANUAL_SHIFTS){
+    const idx=(ds[sh]||[]).indexOf(nurseId);
     if(idx>=0) ds[sh].splice(idx,1);
   }
   if(val&&SHIFTS.includes(val)){
@@ -3933,9 +4077,10 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     }
     arr[idx]=nurseId;
     if(wasLocked) setManualWorkPin(nurseId,dateStr,val);
-  } else if(val&&SPECIAL_SHIFTS.includes(val)){
-    ds[val].push(nurseId); // D12/N12無固定格數，直接附加(手動排列)
-    if(wasLocked) clearManualPin(nurseId,dateStr); // 改為特班，一般班鎖定不再適用
+  } else if(val&&MANUAL_SHIFTS.includes(val)){
+    if(!ds[val]) ds[val]=[];
+    ds[val].push(nurseId); // D12/N12/H 無固定格數，直接附加(手動排列)
+    if(wasLocked) clearManualPin(nurseId,dateStr); // 改為特班/行政班，一般班鎖定不再適用
   } else {
     if(wasLocked) setManualOffPin(nurseId,dateStr);
   }
@@ -4039,7 +4184,7 @@ function serializeState(){
     maxConsecByShift:state.maxConsecByShift||{D:6,E:6,N:5},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
-    avoidPairs:state.avoidPairs||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
+    avoidPairs:state.avoidPairs||[],pairRules:state.pairRules||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
 // 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType(單選,已停用) → defaultShiftType(當月未設定時的預設)；補上性別預設值
@@ -4089,6 +4234,9 @@ function applyData(d){
   state.longLeaveExempt=d.longLeaveExempt||{};
   state.longLeaveDays=d.longLeaveDays||{};
   state.avoidPairs=d.avoidPairs||[];
+  // 舊版「避免同時上班」(avoidPairs=[[a,b],...])遷移為新版配對限制(nowork、整段適用)。
+  if(Array.isArray(d.pairRules)) state.pairRules=d.pairRules;
+  else state.pairRules=(d.avoidPairs||[]).map(p=>({a:p[0],b:p[1],type:'nowork',start:null,end:null}));
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
   // 修正舊資料可能殘留的「D12/N12與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
@@ -4291,7 +4439,7 @@ function hexToARGB(hex){ return 'FF'+(hex||'#000000').replace('#','').toUpperCas
 const XLSX_FILL={
   D:{fg:'FFFFF8E1',font:'FFE65100'}, E:{fg:'FFE3F2FD',font:'FF1565C0'},
   N:{fg:'FFF3E5F5',font:'FF6A1B9A'}, OFF:{fg:'FFFDECEA',font:'FFC0392B'},
-  D12:{fg:'FFFFE0B2',font:'FFE65100'}, N12:{fg:'FFFFE0B2',font:'FFE65100'},
+  D12:{fg:'FFFFE0B2',font:'FFE65100'}, N12:{fg:'FFFFE0B2',font:'FFE65100'}, H:{fg:'FFECEFF1',font:'FF37474F'},
   NA:{fg:'FFE0E0E0',font:'FFAAAAAA'}, HOL_HEAD:{fg:'FFC0392B',font:'FFFFFFFF'}
 };
 function xlsxFillFont(cell,def){
@@ -4350,7 +4498,7 @@ async function exportExcel(){
       if(colNumber===1){ cell.alignment={horizontal:'left',vertical:'middle'}; return; }
       if(colNumber>1&&colNumber<=1+dates.length){
         const v=cell.value;
-        if(v==='D'||v==='E'||v==='N'||v==='D12'||v==='N12') xlsxFillFont(cell,XLSX_FILL[v]);
+        if(v==='D'||v==='E'||v==='N'||v==='D12'||v==='N12'||v==='H') xlsxFillFont(cell,XLSX_FILL[v]);
         else if(v==='OFF') xlsxFillFont(cell,XLSX_FILL.OFF);
         else if(v==='－') xlsxFillFont(cell,XLSX_FILL.NA);
       } else {
@@ -4413,9 +4561,9 @@ function generatePDF(){
   // 假日班別的底色需與平日班別不同(方便一眼辨識)，但字的顏色維持跟平日一樣(不因假日改變)。
   // 因此不能單純疊加「假日底色」再蓋上「班別底色」(inline style同屬性後者會直接覆蓋前者，
   // 假日底色等於白疊，之前就是這樣才會看不出來)，改為底色與字色分開組合。
-  const SHIFT_COLOR={D:'#e65100',E:'#1565c0',N:'#6a1b9a',D12:'#e65100',N12:'#e65100'};
-  const SHIFT_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5',D12:'#ffe0b2',N12:'#ffe0b2'};
-  const SHIFT_BG_HOL={D:'#ffcc80',E:'#90caf9',N:'#ce93d8',D12:'#ffb74d',N12:'#ffb74d'};
+  const SHIFT_COLOR={D:'#e65100',E:'#1565c0',N:'#6a1b9a',D12:'#e65100',N12:'#e65100',H:'#37474f'};
+  const SHIFT_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5',D12:'#ffe0b2',N12:'#ffe0b2',H:'#eceff1'};
+  const SHIFT_BG_HOL={D:'#ffcc80',E:'#90caf9',N:'#ce93d8',D12:'#ffb74d',N12:'#ffb74d',H:'#cfd8dc'};
   const mgRows=sortedRoster(y,m).map(doc=>{
     let total=0, holCount=0, empDays=0;
     const cells=dates.map(d=>{
@@ -4494,7 +4642,7 @@ function generatePDF(){
     const s=st[doc.id]; let cur=0;
     for(const dateStr of dates){
       const ds=state.schedule[dateStr]||{};
-      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||SPECIAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
+      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||MANUAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
       if(worked){cur++;s.consecMax=Math.max(s.consecMax,cur);}else cur=0;
     }
   }
