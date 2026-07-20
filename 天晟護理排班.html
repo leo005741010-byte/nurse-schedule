@@ -68,6 +68,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .lvl-L{background:#2e7d32;}.lvl-T{background:#1565c0;}.lvl-A2{background:#e67e22;}.lvl-B{background:#95a5a6;}
 .senior-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#fff;}
 .sr-senior{background:#6a1b9a;}.sr-junior{background:#c0392b;}
+.rolepref-badge{display:inline-block;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;color:#00695c;background:#e0f2f1;border:1px solid #4db6ac;white-space:nowrap;}
 /* ===== MODAL ===== */
 .modal-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;}
 .modal-overlay.show{display:flex;}
@@ -268,7 +269,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -3305,6 +3306,9 @@ function renderNurseTable(){
     const dim=daysInMonth(state.year,state.month);
     const wrStr=(wr.start===1&&wr.end===dim)?'全月':`${wr.start}-${wr.end}`;
     const supportStr=d.prefs.allowSupport!==false?'✔':'✕';
+    // 位置優先(當月)：顯示偏好階級與其代表位置；未設定顯示「—」。
+    const rolePref=d.type==='full'?getRolePref(d.id,state.year,state.month):'';
+    const prefRoleName={L:'組長',T:'檢傷',A2:'重症',B:'留觀'}[rolePref]||'';
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
@@ -3312,6 +3316,7 @@ function renderNurseTable(){
       <td>${d.type==='full'?genderLabel:'-'}</td>
       <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
+      <td>${d.type!=='full'?'-':(rolePref?`<span class="rolepref-badge" title="自動排班會優先把他排到「${prefRoleName}」位置">${rolePref}／${prefRoleName}</span>`:'<span style="color:#bbb">—</span>')}</td>
       <td>${d.type==='full'?`<span class="senior-badge ${isSenior(d.id)?'sr-senior':'sr-junior'}">${isSenior(d.id)?'資深':'資淺'}</span>`:'-'}</td>
       <td>${d.type==='full'?wrStr:'-'}</td>
       <td>${d.type==='full'?supportStr:'-'}</td>
