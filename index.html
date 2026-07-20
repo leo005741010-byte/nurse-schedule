@@ -417,6 +417,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <ul class="help-ul">
         <li>以日曆方式呈現，每天分 D／E／N 各角色（組長、檢傷、重症、留觀、流動、支援等）。</li>
         <li>點任一天可開啟編輯視窗，逐一指派各角色人員；不符階級者不會出現在該角色的可選清單中。</li>
+        <li><b>🔒 位置鎖定</b>：編輯視窗中每位已指派的人旁有鎖頭鈕，按下鎖定後自動排班不會更動這個人在這個位置（班別＋角色）；日曆上該人名前會顯示 🔒。再按一次解鎖。</li>
       </ul>
 
       <h3 class="help-h3">👩‍⚕️ 三、護理師設定</h3>
@@ -425,6 +426,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
         <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>（硬性，一定遵守）、<b>要同時上班</b>、<b>不能同時放假</b>（後兩者盡量達成，受其他鐵則限制時會在統計報表列出未達成的日期）。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
+        <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月優先上哪個階級的位置（可選自己的階級或更低階級，例如 L 級選「T」會優先排到檢傷）。自動排班會盡量把他排到該位置。</li>
       </ul>
 
       <h3 class="help-h3">📝 四、預假／預班</h3>
@@ -462,7 +464,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>尊重預假／預班</b>：預假（OFF）與預班（指定上班）一定照辦，且預班會鎖定不被更動。</li>
         <li><b>階級不可違反</b>：自動排班絕不把不符階級的人排入該角色。</li>
         <li><b>資深多放假、資淺少放假</b>：整體上讓資深人員放假較多、資淺較少；同為資深時，大夜（N）放假優先。<b>放假最少（上最多班）的人一定是資淺，絕不會是資深</b>——這是最優先確保的原則。</li>
-        <li><b>特殊班（D12／N12）</b>：為手動排列的 12 小時班，與一般 D／E／N 互斥（同一天只能排一種），不參與自動排班。</li>
+        <li><b>月底連班盡量不要太長（非強制）</b>：接近月底時，會盡量避免把某人的連續上班拉得太長。</li>
+        <li><b>連段位置盡量固定（非強制）</b>：同一個人連續上班的期間，會盡量讓他待在同一個角色位置。</li>
+        <li><b>特殊班（D12／N12）與行政班（H）</b>：皆為手動排列、不參與自動排班。D12／N12 為 12 小時班且與一般 D／E／N 互斥；H 為 8 小時行政班。</li>
       </ol>
       <p class="help-note">※ 當人力結構特殊時（例如資深人數遠多於資淺），部分原則可能無法 100% 同時達成，系統會取最接近的排法並於排班後提示。</p>
     </div>
@@ -531,7 +535,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <div class="check-row"><input type="radio" name="shift-type" id="shift-N" value="N"><label for="shift-N">N班 (00-08次日)</label></div>
     <h3>階級 (決定可擔任的職位)</h3>
     <div class="form-row"><label>階級</label>
-      <select id="doc-level">
+      <select id="doc-level" onchange="populateRolePref(this.value, document.getElementById('doc-rolepref').value)">
         <option value="L">L — 全部位置都可以上 (組長/檢傷/重症/留觀/流動)</option>
         <option value="T">T — 上檢傷或重症或留觀</option>
         <option value="A2">A2 — 上重症或留觀</option>
@@ -539,6 +543,10 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="check-row"><input type="checkbox" id="doc-allow-support"><label for="doc-allow-support">可跳班支援其他班別 (勾選才能在休假天數平衡時跨班別支援)</label></div>
+    <div class="form-row"><label id="doc-rolepref-title">位置優先(當月)</label>
+      <select id="doc-rolepref"></select>
+    </div>
+    <p style="font-size:11px;color:#888;margin-top:2px">選擇後，自動排班會優先把這個人排到該階級的位置(例如 L 級選「T」會優先上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。</p>
     <h3 id="doc-modal-workrange-title">當月工作日期</h3>
     <div class="form-row">
       <label>日期區間</label>
@@ -653,6 +661,25 @@ function defPrefs(shiftType,gender){
   return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior'};
 }
 const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
+// 各角色的「代表階級」(該角色所屬的位置層級)，供「位置優先」偏好比對。流動/支援任何階級皆可，無代表階級。
+const ROLE_BASE_LEVEL={組長:'L',檢傷:'T',重症:'A2',留觀:'B'};
+// 位置優先：某護理師某月偏好上哪個階級的位置(可為本階級或更低階級)。空＝無偏好。
+function getRolePref(nurseId,y,m){
+  const k=monthKey(y,m);
+  return (state.monthlyRolePref&&state.monthlyRolePref[k]&&state.monthlyRolePref[k][nurseId])||'';
+}
+function setRolePref(nurseId,y,m,level){
+  if(!state.monthlyRolePref) state.monthlyRolePref={};
+  const k=monthKey(y,m);
+  if(!state.monthlyRolePref[k]) state.monthlyRolePref[k]={};
+  if(level) state.monthlyRolePref[k][nurseId]=level; else delete state.monthlyRolePref[k][nurseId];
+}
+// 某人在 sched 的某日實際擔任的角色(供「位置固定」偏好比對)。
+function roleOfNurseInSched(nurseId,date,sched){
+  const ds=sched[date]; if(!ds||!ds.roles) return null;
+  for(const sh of SHIFTS){ const i=(ds[sh]||[]).indexOf(nurseId); if(i>=0) return ds.roles[sh]&&ds.roles[sh][i]; }
+  return null;
+}
 // 年資：資深(senior)休假較多、資淺(junior)休假較少。未明確設定 prefs.seniority 時，
 // 依階級自動判定——L 級視為資深，其餘(T/A2/B)視為資淺。
 function isSenior(nurseOrId){
@@ -753,6 +780,7 @@ let state = {
   dayNotes: {},
   preRequests: {},
   monthlyShiftType: {},
+  monthlyRolePref: {},
   workDateRange: {},
   maxConsecByShift: {D:6,E:6,N:5},
   maxOffDays: null,
@@ -761,6 +789,7 @@ let state = {
   longLeaveDays: {},
   avoidPairs: [],
   pairRules: [],
+  posLocks: [],
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
     {id:'n1',name:'宋品儒',type:'full',color:'#1565c0',prefs:defPrefs('D')},
@@ -802,16 +831,16 @@ let _redoStack = [];
 // 若能被還原/重做繞過就失去密碼保護的意義，因此鎖定狀態本身不列入還原範圍)。
 function snapshotUndoable(){
   return JSON.stringify({
-    schedule:state.schedule, hourAdjust:state.hourAdjust, dayNotes:state.dayNotes, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType,
+    schedule:state.schedule, hourAdjust:state.hourAdjust, dayNotes:state.dayNotes, preRequests:state.preRequests, monthlyShiftType:state.monthlyShiftType, monthlyRolePref:state.monthlyRolePref,
     doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours, roleCounts:state.roleCounts,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
-    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs, pairRules:state.pairRules
+    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs, pairRules:state.pairRules, posLocks:state.posLocks
   });
 }
 function restoreUndoable(snap){
   state.schedule=snap.schedule; state.hourAdjust=snap.hourAdjust||{}; state.dayNotes=snap.dayNotes||{}; state.preRequests=snap.preRequests;
-  state.monthlyShiftType=snap.monthlyShiftType||{}; state.doctors=snap.doctors||state.doctors;
+  state.monthlyShiftType=snap.monthlyShiftType||{}; state.monthlyRolePref=snap.monthlyRolePref||{}; state.doctors=snap.doctors||state.doctors;
   state.holidays=new Set(snap.holidays||[]); state.minRestHours=snap.minRestHours??state.minRestHours;
   state.roleCounts=snap.roleCounts||defaultRoleCounts();
   state.workDateRange=snap.workDateRange||{}; state.maxConsecByShift=snap.maxConsecByShift||state.maxConsecByShift;
@@ -819,6 +848,7 @@ function restoreUndoable(snap){
   state.longLeaveExempt=snap.longLeaveExempt||{}; state.longLeaveDays=snap.longLeaveDays||{};
   state.avoidPairs=snap.avoidPairs||[];
   state.pairRules=snap.pairRules||[];
+  state.posLocks=snap.posLocks||[];
 }
 function rerenderAfterUndoRedo(){
   renderCalendar(); renderMasterGrid(); renderPRList(); renderPRCalGrid();
@@ -1373,6 +1403,7 @@ let _eqTargets=null;
 let _workLocks=new Set();
 function cellKey(date,shift,idx){ return `${date}|${shift}|${idx}`; }
 function isWorkLocked(date,shift,idx){ return _workLocks.has(cellKey(date,shift,idx)); }
+function isPosLocked(date,shift,nurseId){ return (state.posLocks||[]).some(l=>l.date===date&&l.shift===shift&&l.nurseId===nurseId); }
 function personalTargetShiftCount(nurseId,date,sched){
   const base=_eqTargets?_eqTargets.deAvg:avgShiftCount(sched);
   return base*leaveAvailRatio(nurseId,date);
@@ -1395,6 +1426,25 @@ function scoreNurse(nurseId, date, shift, role, sched){
     if(last.shift===shift) score+=15;
     else if((last.shift==='D'&&shift==='N')||(last.shift==='N'&&shift==='D')) score-=60;
     else score-=8;
+  }
+  const {y,m}=ymFromDate(date);
+  // #5 位置優先：命中偏好階級的位置加分；比偏好更高階的位置(如偏好T卻要當組長)減分讓給別人。
+  const pref=getRolePref(nurseId,y,m);
+  if(pref){
+    const base=ROLE_BASE_LEVEL[role];
+    if(base===pref) score+=12;
+    else if(base&&LEVEL_ORDER[base]<LEVEL_ORDER[pref]) score-=6;
+  }
+  // #7 位置固定(非強制)：昨天同班別且同角色，連段盡量待在同一個位置。
+  if(last&&last.shift===shift){
+    const yRole=roleOfNurseInSched(nurseId,addDays(date,-1),sched);
+    if(yRole&&yRole===role) score+=6;
+  }
+  // #6 月底盡量不要太長連班(非強制)：最後一週，連班已偏長者再上班扣分。
+  const dnum=parseInt(date.slice(-2));
+  if(dnum>daysInMonth(y,m)-7){
+    const consec=consecDaysBefore(nurseId,date,sched);
+    if(consec>=4) score-=(consec-3)*4;
   }
   return score;
 }
@@ -2573,6 +2623,18 @@ function generateScheduleAttempt(y,m,dates){
     }
   }
 
+  // 位置鎖定(posLocks)：把管理者在排班表鎖定的人放進指定班別的指定角色格並鎖定，
+  // 後續平衡/清理/挪動皆不得更動(與預上班同樣以 _workLocks 保護)。
+  for(const lock of (state.posLocks||[])){
+    if(!newSched[lock.date]||!SHIFTS.includes(lock.shift)) continue;
+    if(isAssignedThatDay(lock.nurseId,lock.date,newSched)) continue;
+    const arr=newSched[lock.date][lock.shift], roles=newSched[lock.date].roles[lock.shift];
+    let idx=-1;
+    for(let i=0;i<arr.length;i++){ if(!arr[i]&&roles[i]===lock.role){idx=i;break;} }
+    if(idx<0){ roles.push(lock.role); arr.push(null); idx=arr.length-1; } // 該角色格已被占滿→補一格
+    arr[idx]=lock.nurseId; _workLocks.add(cellKey(lock.date,lock.shift,idx));
+  }
+
   // Multi-pass greedy fill, one role at a time (本班別人員為主，確保每班先求足額覆蓋)
   for(let pass=0;pass<5;pass++){
     const ordDates=pass===0?[...dates]:shuffle([...dates]);
@@ -2922,7 +2984,8 @@ function renderCalendar(){
         const nu=state.doctors.find(x=>x.id===nid); if(!nu) return '';
         const dim=_filterDocId&&nid!==_filterDocId?'opacity:0.15;':'';
         const hl=_filterDocId&&nid===_filterDocId?`box-shadow:0 0 0 1px ${nu.color};`:'';
-        return `<div class="role-row"><span class="role-abbr" style="background:${nu.color}22;color:${nu.color}">${abbr}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color};${dim}${hl}" title="${role} ${nu.name}">${nu.name}</span></div>`;
+        const lk=isPosLocked(dateStr,si.shift,nid)?'🔒':'';
+        return `<div class="role-row"><span class="role-abbr" style="background:${nu.color}22;color:${nu.color}">${abbr}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color};${dim}${hl}" title="${role} ${nu.name}${lk?' (位置已鎖定)':''}">${lk}${nu.name}</span></div>`;
       }).join('');
       block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag ${si.tagClass}">${si.shift}</span><span class="shift-cnt${short?' short':''}">${filled}/${roles.length}</span></div>${rows}`;
       cell.appendChild(block);
@@ -2988,6 +3051,7 @@ function openDayModal(dateStr){
     roles:{D:[...ds.roles.D],E:[...ds.roles.E],N:[...ds.roles.N]},
     D:[...ds.D], E:[...ds.E], N:[...ds.N],
     D12:[...ds.D12], N12:[...ds.N12], H:[...(ds.H||[])],
+    lockedKeys:new Set((state.posLocks||[]).filter(l=>l.date===dateStr).map(l=>l.shift+'|'+l.nurseId)),
   };
   const[y,mo,d]=dateStr.split('-').map(Number);
   const dow=['一','二','三','四','五','六','日'][getDOW(dateStr)];
@@ -3021,7 +3085,9 @@ function _renderDayDraft(){
           }
           return `<option value="${n.id}"${n.id===nid?' selected':''}>${n.name}${n.type==='head'?'(管理)':n.type==='support'?'(支援)':''}${warn}</option>`;
         }).join('');
-      html+=`<div class="day-slot-row"><span class="day-slot-role">${role}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select>${role==='支援'?`<button class="btn-sm btn-del" onclick="_draftRemoveExtra('${c.shift}',${i})">✕</button>`:''}</div>`;
+      const locked=nid&&_dayDraft.lockedKeys&&_dayDraft.lockedKeys.has(c.shift+'|'+nid);
+      const lockBtn=nid?`<button class="btn-sm" title="鎖定此人在此位置，自動排班不會更動" style="background:${locked?'#6a1b9a':'#eee'};color:${locked?'#fff':'#888'}" onclick="_draftToggleLock('${c.shift}','${nid}')">${locked?'🔒':'🔓'}</button>`:'';
+      html+=`<div class="day-slot-row"><span class="day-slot-role">${role}</span><select onchange="_draftSlot('${c.shift}',${i},this.value)">${opts}</select>${lockBtn}${role==='支援'?`<button class="btn-sm btn-del" onclick="_draftRemoveExtra('${c.shift}',${i})">✕</button>`:''}</div>`;
     });
     html+=`</div>`;
   }
@@ -3064,8 +3130,16 @@ function _clearNurseFromOtherSlots(nurseId,keepShift){
   }
 }
 function _draftSlot(shift,idx,val){
+  const old=_dayDraft[shift][idx];
+  if(old&&_dayDraft.lockedKeys) _dayDraft.lockedKeys.delete(shift+'|'+old); // 換人時清掉原鎖定
   _dayDraft[shift][idx]=val||null;
   _clearNurseFromOtherSlots(val,shift);
+  _renderDayDraft();
+}
+function _draftToggleLock(shift,nid){
+  if(!_dayDraft.lockedKeys) _dayDraft.lockedKeys=new Set();
+  const k=shift+'|'+nid;
+  if(_dayDraft.lockedKeys.has(k)) _dayDraft.lockedKeys.delete(k); else _dayDraft.lockedKeys.add(k);
   _renderDayDraft();
 }
 function _draftAddExtra(shift){
@@ -3120,6 +3194,15 @@ function confirmDayModal(){
   ds.D12=_dayDraft.D12.filter(Boolean); ds.N12=_dayDraft.N12.filter(Boolean);
   ds.H=(_dayDraft.H||[]).filter(Boolean);
   const savedDate=_dayDraftDate;
+  // 位置鎖定：以當前草稿重建這一天的 posLocks(只保留仍在該班別、格內確有此人的鎖定)。
+  state.posLocks=(state.posLocks||[]).filter(l=>l.date!==savedDate);
+  if(_dayDraft.lockedKeys){
+    for(const key of _dayDraft.lockedKeys){
+      const[shift,nid]=key.split('|');
+      const idx=ds[shift].indexOf(nid);
+      if(idx>=0) state.posLocks.push({date:savedDate,shift,role:ds.roles[shift][idx],nurseId:nid});
+    }
+  }
   syncDayRolesForSpecialShift(savedDate); // 依D12/N12是否存在，收斂/還原當天D/E/N的空缺格數
   _dayDraft=null; _dayDraftDate=null;
   autoSave();
@@ -3234,6 +3317,14 @@ function addPairRule(){
   showToast('✅ 已新增配對限制');
 }
 function removePairRule(i){ pushUndo(); state.pairRules.splice(i,1); autoSave(); renderPairRules(); }
+// 位置優先下拉：選項為「不指定」＋該階級本身與所有更低階級(附代表位置名稱)。
+function populateRolePref(level,current){
+  const sel=document.getElementById('doc-rolepref'); if(!sel) return;
+  const roleForLevel={L:'組長',T:'檢傷',A2:'重症',B:'留觀'};
+  const levels=['L','T','A2','B'].filter(l=>LEVEL_ORDER[l]>=LEVEL_ORDER[level||'L']);
+  sel.innerHTML=`<option value="">不指定</option>`+levels.map(l=>`<option value="${l}">${l}（優先上${roleForLevel[l]}）</option>`).join('');
+  if(current&&levels.includes(current)) sel.value=current;
+}
 function openNurseModal(id){
   const isEdit=!!id;
   document.getElementById('doc-modal-title').textContent=isEdit?'編輯護理師':'新增護理師';
@@ -3252,6 +3343,9 @@ function openNurseModal(id){
   document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
   document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
+  const rpTitle=document.getElementById('doc-rolepref-title');
+  if(rpTitle) rpTitle.textContent=`位置優先 (${state.year}年${state.month+1}月)`;
+  populateRolePref(d.prefs.level||'L', isEdit?getRolePref(d.id,state.year,state.month):'');
   const wrTitle=document.getElementById('doc-modal-workrange-title');
   if(wrTitle) wrTitle.textContent=`${state.year}年${state.month+1}月 工作日期`;
   const dim=daysInMonth(state.year,state.month);
@@ -3269,6 +3363,7 @@ function saveDoc(){
   const gender=document.getElementById('doc-gender').value;
   const seniority=document.getElementById('doc-seniority').value;
   const allowSupport=document.getElementById('doc-allow-support').checked;
+  const rolePref=document.getElementById('doc-rolepref').value;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
   const dim=daysInMonth(state.year,state.month);
@@ -3281,12 +3376,14 @@ function saveDoc(){
     d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.seniority=seniority; d.prefs.allowSupport=allowSupport;
     setNurseShiftType(id,state.year,state.month,shiftRadio.value);
     setWorkRange(id,state.year,state.month,wr);
+    setRolePref(id,state.year,state.month,rolePref);
   } else {
     const newId='n_'+(_idCnt++);
     const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport};
     state.doctors.push({id:newId,name,type,color,prefs});
     setNurseShiftType(newId,state.year,state.month,shiftRadio.value);
     setWorkRange(newId,state.year,state.month,wr);
+    setRolePref(newId,state.year,state.month,rolePref);
   }
   autoSave();
   closeModal('nurse-modal');
@@ -4178,13 +4275,13 @@ function serializeState(){
   return {
     doctors:state.doctors,schedule:state.schedule,hourAdjust:state.hourAdjust||{},dayNotes:state.dayNotes||{},preRequests:state.preRequests,
     holidays:[...state.holidays],year:state.year,month:state.month,
-    minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},
+    minRestHours:state.minRestHours,monthlyShiftType:state.monthlyShiftType||{},monthlyRolePref:state.monthlyRolePref||{},
     roleCounts:state.roleCounts||defaultRoleCounts(),
     workDateRange:state.workDateRange||{},
     maxConsecByShift:state.maxConsecByShift||{D:6,E:6,N:5},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
-    avoidPairs:state.avoidPairs||[],pairRules:state.pairRules||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
+    avoidPairs:state.avoidPairs||[],pairRules:state.pairRules||[],posLocks:state.posLocks||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
 // 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType(單選,已停用) → defaultShiftType(當月未設定時的預設)；補上性別預設值
@@ -4227,6 +4324,7 @@ function applyData(d){
   state.minRestHours=d.minRestHours||16;
   state.roleCounts=d.roleCounts||defaultRoleCounts();
   state.monthlyShiftType=d.monthlyShiftType||{};
+  state.monthlyRolePref=d.monthlyRolePref||{};
   state.workDateRange=d.workDateRange||{};
   state.maxConsecByShift=d.maxConsecByShift||{D:6,E:6,N:5};
   state.maxOffDays=d.maxOffDays??(d.maxPreReqDays??null);
@@ -4237,6 +4335,7 @@ function applyData(d){
   // 舊版「避免同時上班」(avoidPairs=[[a,b],...])遷移為新版配對限制(nowork、整段適用)。
   if(Array.isArray(d.pairRules)) state.pairRules=d.pairRules;
   else state.pairRules=(d.avoidPairs||[]).map(p=>({a:p[0],b:p[1],type:'nowork',start:null,end:null}));
+  state.posLocks=Array.isArray(d.posLocks)?d.posLocks:[];
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
   // 修正舊資料可能殘留的「D12/N12與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
