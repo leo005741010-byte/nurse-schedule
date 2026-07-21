@@ -276,7 +276,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     </table>
     <div style="margin-top:16px;background:#fff;border-radius:6px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
       <h3 style="font-size:13px;margin-bottom:10px;color:#0d5c4a">🔗 配對限制設定（誰與誰）</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。「不能同時上班」為硬性限制；「要同時上班／不能同時放假」為盡量達成，若受其他鐵則所限無法完全達成，會在統計報表提示。</p>
+      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。<b style="color:#c0392b">「不能同時上班」與「不能同時放假」皆為強制</b>（不能同時放假＝當天至少一人上班，必要時會把別人換下來讓其中一人頂上，但不會硬拉有預假OFF的人）；「要同時上班」為盡量達成。未能達成者會在統計報表列出。</p>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <select id="pair-doc1" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
         <select id="pair-type" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
@@ -427,8 +427,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li>新增／編輯護理師：姓名、顏色、預設班別、階級（L／T／A2／B）、性別、年資（資深／資淺）、是否可支援。</li>
         <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
-        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>（硬性，一定遵守）、<b>要同時上班</b>、<b>不能同時放假</b>（後兩者盡量達成，受其他鐵則限制時會在統計報表列出未達成的日期）。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
-        <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月優先上哪個階級的位置（可選自己的階級或更低階級，例如 L 級選「T」會優先排到檢傷）。自動排班會盡量把他排到該位置。</li>
+        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>與<b>不能同時放假</b>皆為<b style="color:#c0392b">強制</b>（不能同時放假＝當天至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，但不會硬拉當天有預假OFF的人）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
+        <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月固定上哪個位置（可選自己的階級或更低階級）。<b style="color:#c0392b">設定後為強制</b>——這個人只要上班就一定被排在該位置，不會出現在其他位置（例如 L 級選「T」＝整月只上檢傷）。<b>同一班別的同一個位置只能一個人選</b>（例如白班不可兩人同選 L／組長），重複選會被擋下。</li>
       </ul>
 
       <h3 class="help-h3">📝 四、預假／預班</h3>
@@ -549,7 +549,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <div class="form-row"><label id="doc-rolepref-title">位置優先(當月)</label>
       <select id="doc-rolepref"></select>
     </div>
-    <p style="font-size:11px;color:#888;margin-top:2px">選擇後，自動排班會優先把這個人排到該階級的位置(例如 L 級選「T」會優先上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。</p>
+    <p style="font-size:11px;color:#888;margin-top:2px"><b style="color:#c0392b">設定後為強制</b>：這個人只要上班就<b>一定</b>排在該位置，不會被排到其他位置(例如 L 級選「T」＝整月只上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。<br>※<b>同一班別的同一個位置只能一個人選</b>(例如白班不可以兩個人都選 L／組長)，重複選會被擋下。</p>
     <h3 id="doc-modal-workrange-title">當月工作日期</h3>
     <div class="form-row">
       <label>日期區間</label>
@@ -678,8 +678,17 @@ function defPrefs(shiftType,gender){
   return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior'};
 }
 const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
-// 各角色的「代表階級」(該角色所屬的位置層級)，供「位置優先」偏好比對。流動/支援任何階級皆可，無代表階級。
+// 各角色的「代表階級」(該角色所屬的位置層級)，供「位置優先」比對。流動/支援任何階級皆可，無代表階級。
 const ROLE_BASE_LEVEL={組長:'L',檢傷:'T',重症:'A2',留觀:'B'};
+// 階級 → 代表位置(位置優先設定的實際位置)
+const LEVEL_ROLE={L:'組長',T:'檢傷',A2:'重症',B:'留觀'};
+// 位置優先為【強制】：設定後，該人只要上班就一定被排在該位置，其他位置一律不排(含流動/支援)。
+function rolePrefBlocksRole(nurseId,date,role){
+  const{y,m}=ymFromDate(date);
+  const pref=getRolePref(nurseId,y,m);
+  if(!pref) return false;              // 未設定→不限制
+  return role!==LEVEL_ROLE[pref];
+}
 // 位置優先：某護理師某月偏好上哪個階級的位置(可為本階級或更低階級)。空＝無偏好。
 function getRolePref(nurseId,y,m){
   const k=monthKey(y,m);
@@ -1340,6 +1349,7 @@ function canWork(nurseId, date, shift, role, sched){
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
+  if(rolePrefBlocksRole(nurseId,date,role)) return false; // 位置優先為強制：只能排在指定位置，不可例外
   return true;
 }
 // 強制排班用：休息時數／連續上班天數上限／班別指派／階級資格／在職日期／N-OFF-D／
@@ -1359,6 +1369,7 @@ function canWorkForce(nurseId, date, shift, role, sched){
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
   if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
+  if(rolePrefBlocksRole(nurseId,date,role)) return false; // 位置優先為強制：只能排在指定位置，不可例外
   return true;
 }
 // 跨班別支援用：休假天數平衡機制專用，允許護理師支援非當月本班別的班次，
@@ -1386,6 +1397,7 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   // (同樣在保底補空班階段放行)。
   if(!_bypassShiftVariety && wouldExceedTransitions(nurseId,date,shift,sched)) return false;
   if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
+  if(rolePrefBlocksRole(nurseId,date,role)) return false; // 位置優先為強制：只能排在指定位置，不可例外
   return true;
 }
 
@@ -1848,6 +1860,7 @@ function tryChainAssign(nurseId, date, shift, role, newSched, fullSched, homeMat
   if(violatesDtoNOrder(nurseId,date,shift,fullSched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,fullSched)) return false;
   if(avoidBlocked(nurseId,date,fullSched)) return false; // 「不能同時上班」硬性限制，連鎖補位也遵守
+  if(rolePrefBlocksRole(nurseId,date,role)) return false; // 位置優先為強制，連鎖補位也不例外
   if(!homeMatch&&doc.prefs.allowSupport===false) return false;
   if(!wouldExceedConsec(nurseId,date,fullSched)) return false; // 其餘鐵則皆通過，代表不是連班卡關，判定不可行
 
@@ -1891,6 +1904,7 @@ function repairAndFillSlot(newSched, fullSched, dates, date, shift, roleIdx){
     if(violatesDtoNOrder(doc.id,date,shift,fullSched)) return false;
     if(violatesNtoDOrder(doc.id,date,shift,fullSched)) return false;
     if(avoidBlocked(doc.id,date,fullSched)) return false; // 「不能同時上班」硬性限制
+    if(rolePrefBlocksRole(doc.id,date,role)) return false; // 位置優先為強制
     return true;
   };
 
@@ -2548,18 +2562,43 @@ function tryFillOneEmptyForNurse(nurseId,date,newSched,fullSched){
   }
   return false;
 }
-// nooff：某對在適用日不可同時放假 → 兩人當天都沒上班時，盡量讓其中一人補進空缺上班。
+// 「不能同時放假」為強制：當天沒有空缺格時，改為把別人(C)從既有職位換下來、由配對其中一人頂上。
+// 職位仍然有人(不製造空班)，只是把那一天的班從 C 轉給 a/b。不動鎖定格、不製造孤立單班。
+function tryTakeOverSlotForNurse(nurseId,date,newSched,fullSched){
+  if(isAssignedThatDay(nurseId,date,newSched)) return true;
+  const ds=newSched[date]; if(!ds) return false;
+  const home=getNurseShiftTypeAtDate(nurseId,date);
+  const order=[home,...SHIFTS.filter(s=>s!==home)];
+  for(const sh of order){
+    const arr=ds[sh]; const roles=ds.roles[sh]; if(!arr) continue;
+    for(let i=0;i<arr.length;i++){
+      const occupant=arr[i];
+      if(!occupant||occupant===nurseId) continue;
+      if(isWorkLocked(date,sh,i)) continue;                       // 預上班/位置鎖定不可動
+      if(moveWouldIsolate(occupant,nurseId,date,newSched)) continue; // 不製造孤立單班
+      const role=roles[i];
+      arr[i]=null;                                                // 暫時空出來再判定資格
+      const ok = home===sh
+        ? (canWork(nurseId,date,sh,role,fullSched)||canWorkForce(nurseId,date,sh,role,fullSched))
+        : canWorkSupport(nurseId,date,sh,role,fullSched);
+      if(ok){ arr[i]=nurseId; return true; }
+      arr[i]=occupant;                                            // 不適任→還原
+    }
+  }
+  return false;
+}
+// nooff：某對在適用日【不可】同時放假 → 兩人當天都沒上班時，先補空缺；沒有空缺就把別人換下來，
+// 確保至少一人上班(強制)。唯一不強拉的情況：該人當天有預假OFF或不在職。
 function enforceNoOffTogether(newSched,fullSched,dates){
   for(const r of pairRulesOfType('nooff')){
     for(const d of dates){
       if(!pairRuleActiveOn(r,d)) continue;
       if(isAssignedThatDay(r.a,d,newSched)||isAssignedThatDay(r.b,d,newSched)) continue; // 已有一人上班
-      // 兩人都休：優先讓「非預假OFF、當天在職」的一方補班
-      for(const nid of [r.a,r.b]){
-        if(offBlocked(nid,d)) continue;        // 預假OFF尊重，不強拉
-        if(!isEmployedOnDate(nid,d)) continue;
-        if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)) break;
-      }
+      const cands=[r.a,r.b].filter(nid=>!offBlocked(nid,d)&&isEmployedOnDate(nid,d));
+      let done=false;
+      for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)){done=true;break;} }
+      if(done) continue;
+      for(const nid of cands){ if(tryTakeOverSlotForNurse(nid,d,newSched,fullSched)){done=true;break;} }
     }
   }
 }
@@ -2910,12 +2949,27 @@ function scheduleQuality(newSched,y,m){
     if(shiftTypesInMonth(doc.id,monthAnchor,newSched).size>=3) threeShiftTypes++;
     if(monthTransitionCount(doc.id,monthAnchor,newSched)>MAX_TRANSITIONS) transitionExcess++;
   }
-  return {empty,longLeaveMiss,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
+  // 強制的配對限制(不能同時上班／不能同時放假)未達成的天數。偶爾會因更高階的鐵則
+  // (例如兩人當天都已達連班上限)而無解，故納入評分，讓多次嘗試優先選出 0 違反的那份。
+  // 「要同時上班」屬盡量達成，不列入此硬性計分。
+  let pairViolations=0;
+  for(const r of (state.pairRules||[])){
+    if(r.type==='mustwork') continue;
+    for(const dd of dates){
+      if(!pairRuleActiveOn(r,dd)) continue;
+      const aOn=isAssignedThatDay(r.a,dd,newSched), bOn=isAssignedThatDay(r.b,dd,newSched);
+      if(r.type==='nowork'&&aOn&&bOn) pairViolations++;
+      else if(r.type==='nooff'&&!aOn&&!bOn) pairViolations++;
+    }
+  }
+  return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
   if(q.empty!==best.empty) return q.empty<best.empty;
   if(q.longLeaveMiss!==best.longLeaveMiss) return q.longLeaveMiss<best.longLeaveMiss;
+  // 強制配對限制違反天數(僅次於空班與指定休假天數)
+  if(q.pairViolations!==best.pairViolations) return q.pairViolations<best.pairViolations;
   if(q.isolated!==best.isolated) return q.isolated<best.isolated;
   // 原則：一個月最多2種班別——被排到3種班別的人數越少越好(排在孤立單班之後、年資之前)。
   if(q.threeShiftTypes!==best.threeShiftTypes) return q.threeShiftTypes<best.threeShiftTypes;
@@ -2971,7 +3025,7 @@ async function autoSchedule(){
     usedAttempts=attempt+1;
     // 達到理想(零空班、長假天數精準命中、無孤立單班、最少班者為資深、最多班者為資淺、
     // 班數全距<=1)即提早停止
-    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.isolated===0&&bestQ.threeShiftTypes===0&&bestQ.transitionExcess===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
+    if(bestQ.empty===0&&bestQ.longLeaveMiss===0&&bestQ.pairViolations===0&&bestQ.isolated===0&&bestQ.threeShiftTypes===0&&bestQ.transitionExcess===0&&bestQ.seniorityViolations===0&&bestQ.seniorityInversions===0&&bestQ.spread<=1) break;
   }
   if(showProg){ overlay.classList.remove('show'); }
 
@@ -2983,6 +3037,8 @@ async function autoSchedule(){
     showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${usedAttempts} 種排法取最佳解)，維持空班。`,'warn');
   } else if(bestQ.longLeaveMiss>0){
     showToast(`⚠ 指定休假天數未完全達成：「不在預假限制天數人員」的休假天數與設定值合計差 ${bestQ.longLeaveMiss} 天。通常是為了「不留空班」或受連班上限/孤立單班等鐵則所限(已嘗試 ${usedAttempts} 種排法取最接近解)，請至統計報表確認。`,'warn');
+  } else if(bestQ.pairViolations>0){
+    showToast(`⚠ 強制配對限制有 ${bestQ.pairViolations} 天未達成（不能同時上班／不能同時放假）。通常是當天兩人都已達連班上限等更高階鐵則所致，請至統計報表查看是哪幾天。`,'warn');
   } else if(bestQ.seniorityViolations>0){
     showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
   } else if(bestQ.spread>3){
@@ -3453,6 +3509,21 @@ function saveDoc(){
   const wrInput=document.getElementById('doc-workrange').value;
   const wr=parseWorkRangeInput(wrInput,dim);
   if(wrInput.trim()&&!wr){showToast('工作日期格式錯誤，請用「開始-結束」例如 1-18','warn');return;}
+  if(rolePref&&type==='full'){
+    // 該班別必須真的有這個位置(例如大夜班沒有「重症」，選了會導致此人幾乎排不到班)。
+    if(!getRoleTemplate(shiftRadio.value).includes(LEVEL_ROLE[rolePref])){
+      showToast(`❌ ${shiftRadio.value}班沒有「${LEVEL_ROLE[rolePref]}」這個位置，無法設定；請改選該班別有的位置`,'warn');
+      return;
+    }
+    // 同一個班別的同一個位置只能由一個人選(例如白班不可以兩個人同時選 L／組長)。
+    const dup=state.doctors.find(o=>o.id&&o.id!==id&&o.type==='full'
+      &&getNurseShiftType(o.id,state.year,state.month)===shiftRadio.value
+      &&getRolePref(o.id,state.year,state.month)===rolePref);
+    if(dup){
+      showToast(`❌ ${shiftRadio.value}班的「${LEVEL_ROLE[rolePref]}」位置已由 ${dup.name} 選走；同一班別同一位置只能一個人`,'warn');
+      return;
+    }
+  }
   pushUndo();
   if(id){
     const d=state.doctors.find(x=>x.id===id);
