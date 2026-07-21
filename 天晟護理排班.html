@@ -1588,6 +1588,19 @@ function scoreNurse(nurseId, date, shift, role, sched){
     const consec=consecDaysBefore(nurseId,date,sched);
     if(consec>=4) score-=(consec-3)*4;
   }
+  // 配對限制第2筆以後為「盡量」：不硬擋，但在greedy評分給偏好，讓班表自然分配時就傾向滿足。
+  // (第1筆強制的 nowork 已由 canWork 的 avoidBlocked 硬擋、nooff 已由 enforceNoOffTogether 強制處理，
+  //  這裡不再重複；mustwork 不分第幾筆都只是盡量。)
+  for(const r of (state.pairRules||[])){
+    if(r.a!==nurseId&&r.b!==nurseId) continue;
+    if(!pairRuleActiveOn(r,date)) continue;
+    if(isForcedPairRule(r)&&r.type!=='mustwork') continue;
+    const other=r.a===nurseId?r.b:r.a;
+    const otherOn=isAssignedThatDay(other,date,sched);
+    if(r.type==='nowork'&&otherOn) score-=10;      // 對方已上班→今天盡量別排我
+    else if(r.type==='nooff'&&!otherOn) score+=5;  // 對方目前沒班→我上班可滿足「不同時放假」
+    else if(r.type==='mustwork'&&otherOn) score+=6;// 對方已上班→盡量一起上
+  }
   return score;
 }
 
@@ -4278,7 +4291,9 @@ function renderMasterGrid(){
   const allDates=monthDates(y,m);
   // 點選護理師時，日期欄只顯示該人有上班的日期(篩選)，方便一眼看出排班日；
   // 再點一次(或改點日期)取消篩選、還原顯示全部日期。月合計欄一律以整月為準，不受篩選影響。
-  const dates=_mgSelNurse?(allDates.filter(d=>shiftOfNurseOnDate(_mgSelNurse,d))||[]):allDates;
+  // 點到整月沒班的人(如管理職)時保留全部日期，避免日期欄整排消失、看起來像壞掉。
+  const selDates=_mgSelNurse?allDates.filter(d=>shiftOfNurseOnDate(_mgSelNurse,d)):allDates;
+  const dates=selDates.length?selDates:allDates;
   const visibleDates=dates.length?dates:allDates;
   const dowNames=['一','二','三','四','五','六','日'];
   let thead=`<tr><th class="nm">護理師</th>`+visibleDates.map(d=>{
@@ -4359,6 +4374,11 @@ function renderMasterGrid(){
     return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong>${doc.type==='full'&&manualDays>0?`<span style="font-size:9px;color:#78909c" title="行政班H/特班D12,N12 共${manualDays}天(不計入總班數，但算上班日)">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?holOff:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
+  // 工作總表與月班總表是同一份資料的兩種檢視：所有資料異動流程都會重繪月班總表，
+  // 但使用者可能正停留在工作總表(復原/清空/載入/雲端同步皆可從表頭觸發)，
+  // 此時順帶重繪工作總表，避免顯示過期內容。非停留時不重繪(切進分頁時本來就會重繪)。
+  const wkPane=document.getElementById('tab-work');
+  if(wkPane&&wkPane.classList.contains('active')) renderWorkGrid();
 }
 // ============================================================
 // 工作總表：每格顯示該人當天實際擔任的「位置代號」(A1/檢/A2/B/A3/流)，
@@ -4387,7 +4407,9 @@ function renderWorkGrid(){
   // 換月後若原本反白的是別的月份的日期，先清掉，避免篩不到人整張表看起來像沒反應。
   if(_wkSelDate&&!allDates.includes(_wkSelDate)) _wkSelDate=null;
   // 點人名 → 只留他有上班的日期欄；點日期 → 只留當天有上班的人(依D→E→N排列)。
-  const dates=_wkSelNurse?allDates.filter(d=>shiftOfNurseOnDate(_wkSelNurse,d)):allDates;
+  // 點到整月沒班的人(如管理職)時保留全部日期，避免日期欄整排消失、看起來像壞掉。
+  const selDates=_wkSelNurse?allDates.filter(d=>shiftOfNurseOnDate(_wkSelNurse,d)):allDates;
+  const dates=selDates.length?selDates:allDates;
   const dowNames=['一','二','三','四','五','六','日'];
 
   const thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
@@ -4408,18 +4430,20 @@ function renderWorkGrid(){
   const rows=finalRoster.map(doc=>{
     // 統計一律以整月計算，不受上面的欄位篩選影響。
     const cnt={}; WORK_ROLE_CODES.forEach(r=>cnt[r]=0);
-    let total=0, holWork=0, offCount=0;
+    // 定義與月班總表一致：總班數/假日班只算一般班(D/E/N)；H行政班與D12/N12特班
+    // 另計為 manualDays(顯示 +N行)，算上班日、因此不算放假。
+    let total=0, holWork=0, offCount=0, manualDays=0;
     if(doc.type==='full'){
       for(const d of allDates){
         if(!isEmployedOnDate(doc.id,d)) continue;
         const sh=shiftOfNurseOnDate(doc.id,d);
         if(!sh){ offCount++; continue; }
-        total++;
-        if(isHoliday(d)) holWork++;
         if(SHIFTS.includes(sh)){
+          total++;
+          if(isHoliday(d)) holWork++;
           const role=roleOfNurseOnDate(doc.id,d,sh);
           if(role&&cnt[role]!==undefined) cnt[role]++;
-        }
+        } else manualDays++;
       }
     }
     const rowSel=_wkSelNurse===doc.id;
@@ -4449,7 +4473,7 @@ function renderWorkGrid(){
     return `<tr class="${rowSel?'wk-row-active':''}">`
       +`<td class="${nmClass}" onclick="wkSelectNurse('${doc.id}')" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>`
       +cells+roleSums
-      +`<td class="wk-sum wk-sep">${doc.type==='full'?total:'-'}</td>`
+      +`<td class="wk-sum wk-sep">${doc.type==='full'?total:'-'}${doc.type==='full'&&manualDays>0?`<span style="font-size:8px;color:#78909c" title="行政班H/特班D12,N12 共${manualDays}天(不計入總班數，但算上班日)">+${manualDays}行</span>`:''}</td>`
       +`<td class="wk-sum">${doc.type==='full'?offCount:'-'}</td>`
       +`<td class="wk-sum">${doc.type==='full'?holWork:'-'}</td></tr>`;
   }).join('');
@@ -5088,6 +5112,57 @@ async function exportExcel(){
       else if(colNumber>3){
         const sh=shiftOfCol[colNumber-1];
         if(sh&&cell.value) xlsxFillFont(cell,XLSX_FILL[sh]);
+      }
+    });
+  }
+
+  // ---- 分頁3：工作總表(位置代號＋班別底色，與畫面一致) ----
+  const ws3=wb.addWorksheet(`工作總表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',xSplit:1,ySplit:1}]});
+  const WK_FILL={D:{fg:'FFFFE9A3',font:'FF8A4B00'},E:{fg:'FFC9E2FB',font:'FF0D47A1'},N:{fg:'FFE2C9F0',font:'FF4A148C'},
+    H:{fg:'FFCFD8DC',font:'FF263238'},S:{fg:'FFFFC27A',font:'FF8A3B00'},OFF:{fg:'FFF4F6F7',font:'FFB8BEC2'},NA:{fg:'FFD5D8DA',font:'FF8E9799'}};
+  const header3=['護理師',...dates.map(d=>`${parseInt(d.slice(-2))}(${dowNames[getDOW(d)]})`),
+    ...WORK_ROLE_CODES.map(r=>ROLE_ABBR[r]),'總班數','放假數','假日班'];
+  const hRow3=ws3.addRow(header3);
+  hRow3.eachCell((cell,colNumber)=>{
+    cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders; cell.font={bold:true};
+    if(colNumber>1&&colNumber<=1+dates.length&&isHoliday(dates[colNumber-2])) xlsxFillFont(cell,XLSX_FILL.HOL_HEAD);
+    else cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}};
+  });
+  ws3.getColumn(1).width=14;
+  for(let i=0;i<dates.length;i++) ws3.getColumn(2+i).width=5;
+  for(let i=0;i<WORK_ROLE_CODES.length+3;i++) ws3.getColumn(2+dates.length+i).width=7;
+
+  for(const doc of sortedRoster(y,m)){
+    const cnt={}; WORK_ROLE_CODES.forEach(r=>cnt[r]=0);
+    let total=0, holWork=0, offCount=0;
+    const rowVals=[doc.name+(doc.type==='head'?'(管理)':'')];
+    const cellShift=[]; // 每格所屬班別，供上色
+    for(const d of dates){
+      if(doc.type!=='full'){ rowVals.push(''); cellShift.push(null); continue; }
+      if(!isEmployedOnDate(doc.id,d)){ rowVals.push('－'); cellShift.push('NA'); continue; }
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(!sh){ offCount++; rowVals.push('OFF'); cellShift.push('OFF'); continue; }
+      let code=sh;
+      if(SHIFTS.includes(sh)){
+        total++; if(isHoliday(d)) holWork++;
+        const role=roleOfNurseOnDate(doc.id,d,sh);
+        if(role){ code=ROLE_ABBR[role]||role; if(cnt[role]!==undefined) cnt[role]++; }
+        cellShift.push(sh);
+      } else cellShift.push(sh==='H'?'H':'S');
+      rowVals.push(code);
+    }
+    rowVals.push(...WORK_ROLE_CODES.map(r=>doc.type==='full'&&cnt[r]?cnt[r]:'-'));
+    rowVals.push(doc.type==='full'?total:'-', doc.type==='full'?offCount:'-', doc.type==='full'?holWork:'-');
+    const row=ws3.addRow(rowVals);
+    row.eachCell((cell,colNumber)=>{
+      cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders;
+      if(colNumber===1){ cell.alignment={horizontal:'left',vertical:'middle'}; cell.font={bold:true}; return; }
+      if(colNumber<=1+dates.length){
+        const k=cellShift[colNumber-2];
+        if(k&&WK_FILL[k]) xlsxFillFont(cell,WK_FILL[k]);
+        if(k==='OFF') cell.font={color:{argb:WK_FILL.OFF.font}}; // OFF不加粗
+      } else {
+        cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8F8'}};
       }
     });
   }
