@@ -340,7 +340,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     </table>
     <div style="margin-top:16px;background:#fff;border-radius:6px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
       <h3 style="font-size:13px;margin-bottom:10px;color:#0d5c4a">🔗 配對限制設定（誰與誰）</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。<b style="color:#c0392b">「不能同時上班」與「不能同時放假」皆為強制</b>（不能同時放假＝當天至少一人上班，必要時會把別人換下來讓其中一人頂上，但不會硬拉有預假OFF的人）；「要同時上班」為盡量達成。未能達成者會在統計報表列出。</p>
+      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。<b style="color:#c0392b">「不能同時上班」與「不能同時放假」皆為強制</b>（不能同時放假＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數」等軟性規則。<b style="color:#c0392b">唯一例外是兩人當天都登記了預假</b>，此時才准許同時休假。手動把兩人都改成OFF會被擋下）；「要同時上班」為盡量達成。未能達成者會在統計報表列出。</p>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <select id="pair-doc1" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
         <select id="pair-type" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
@@ -491,7 +491,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li>新增／編輯護理師：姓名、顏色、預設班別、階級（L／T／A2／B）、性別、年資（資深／資淺）、是否可支援。</li>
         <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
-        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>與<b>不能同時放假</b>皆為<b style="color:#c0392b">強制</b>（不能同時放假＝當天至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，但不會硬拉當天有預假OFF的人）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
+        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>與<b>不能同時放假</b>皆為<b style="color:#c0392b">強制</b>（不能同時放假＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數／指定休假天數」等軟性規則，排上後該格會鎖定不再被挪走。<b style="color:#c0392b">唯一例外：兩人當天都登記了預假</b>——只有一人有預假時，另一人仍會被強制排班。在月班總表或當日視窗手動把兩人都改成OFF會被系統擋下）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
         <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月固定上哪個位置（可選自己的階級或更低階級）。<b style="color:#c0392b">設定後為強制</b>——這個人只要上班就一定被排在該位置，不會出現在其他位置（例如 L 級選「T」＝整月只上檢傷）。<b>同一班別的同一個位置只能一個人選</b>（例如白班不可兩人同選 L／組長），重複選會被擋下。</li>
       </ul>
 
@@ -1191,6 +1191,24 @@ function offBlocked(nurseId,date){
   const prs=(state.preRequests[date]||[]).filter(r=>r.docId===nurseId);
   return prs.some(pr=>pr.type==='OFF');
 }
+// 「不能同時放假」為強制規則。唯一容許的例外：兩人在該日【都】登記了預假OFF
+// ——那是使用者自己批准的同日休假，系統不該再硬拉其中一人上班。
+// 回傳「若 nurseId 於該日放假」會違規的配對對象清單(不看 nurseId 自己現在有沒有上班，
+// 因此可在真正改動班表之前先拿來擋手動編輯)。
+function nooffConflictsIfOff(nurseId,dateStr,sched){
+  const s=sched||state.schedule;
+  const out=[];
+  for(const r of pairRulesOfType('nooff')){
+    if(r.a!==nurseId&&r.b!==nurseId) continue;
+    if(!pairRuleActiveOn(r,dateStr)) continue;
+    const other=r.a===nurseId?r.b:r.a;
+    if(!isEmployedOnDate(nurseId,dateStr)||!isEmployedOnDate(other,dateStr)) continue;
+    if(isAssignedThatDay(other,dateStr,s)) continue;                     // 對方有上班就沒問題
+    if(offBlocked(nurseId,dateStr)&&offBlocked(other,dateStr)) continue; // 兩人同日預假＝唯一例外
+    out.push(other);
+  }
+  return out;
+}
 // 鐵則：大夜(N)後休一天、緊接著上白班(D)絕對禁止(N-OFF-D)，即使休息時數已足夠。
 function violatesNOffD(nurseId,date,shift,sched){
   if(shift!=='D') return false;
@@ -1297,6 +1315,8 @@ function shiftTypesInMonth(nurseId,dateStr,sched){
 }
 // 保底補空班時暫時放行(「不留空班」為最高鐵則，優先於「一個月最多2種班別」與「轉班次數上限」)。
 let _bypassShiftVariety=false;
+// 「不能同時放假」最後一段強制嘗試時開啟：允許把人換下來即使會讓對方變成孤立單班。
+let _bypassPairIsolation=false;
 // 指派 shift 給 nurse 是否會使該月一般班別種類數超過2(已有2種、又要新增第3種)。
 function wouldExceed2ShiftTypes(nurseId,dateStr,shift,sched){
   if(!SHIFTS.includes(shift)) return false; // 特殊班D12/N12不列入此限
@@ -2641,7 +2661,9 @@ function tryTakeOverSlotForNurse(nurseId,date,newSched,fullSched){
       const occupant=arr[i];
       if(!occupant||occupant===nurseId) continue;
       if(isWorkLocked(date,sh,i)) continue;                       // 預上班/位置鎖定不可動
-      if(moveWouldIsolate(occupant,nurseId,date,newSched)) continue; // 不製造孤立單班
+      // 規則優先序：「不能同時放假」為強制，位階高於「不製造孤立單班」，
+      // 因此最後一段強制嘗試(_bypassPairIsolation)時允許承擔孤立單班的代價。
+      if(!_bypassPairIsolation && moveWouldIsolate(occupant,nurseId,date,newSched)) continue;
       const role=roles[i];
       arr[i]=null;                                                // 暫時空出來再判定資格
       const ok = home===sh
@@ -2654,18 +2676,49 @@ function tryTakeOverSlotForNurse(nurseId,date,newSched,fullSched){
   return false;
 }
 // nooff：某對在適用日【不可】同時放假 → 兩人當天都沒上班時，先補空缺；沒有空缺就把別人換下來，
-// 確保至少一人上班(強制)。唯一不強拉的情況：該人當天有預假OFF或不在職。
+// 確保至少一人上班(強制)。唯一不強拉的情況：兩人當天【都】有預假OFF(使用者自己批准的同日休假)，
+// 或該人不在職。只有一人有預假時，仍會強制把另一人排上班。
+//
+// 四段式，一段比一段強硬，因為使用者要求本規則是強制而非盡力：
+//   1) 補當天既有空缺格
+//   2) 把別人從既有職位換下來、由配對其中一人頂上(職位仍有人，不製造空班)
+//   3) 放寬軟性規則(一個月最多2種班別／轉班次數／指定休假天數上限)後再跑一次 1、2
+//   4) 成功後把該格鎖定(_workLocks)，避免後續的公平性/年資平衡步驟又把人挪走
 function enforceNoOffTogether(newSched,fullSched,dates){
   for(const r of pairRulesOfType('nooff')){
     for(const d of dates){
       if(!pairRuleActiveOn(r,d)) continue;
       if(isAssignedThatDay(r.a,d,newSched)||isAssignedThatDay(r.b,d,newSched)) continue; // 已有一人上班
+      const bothPreOff=offBlocked(r.a,d)&&offBlocked(r.b,d);
+      if(bothPreOff) continue;                                            // 唯一例外：同日預假
       const cands=[r.a,r.b].filter(nid=>!offBlocked(nid,d)&&isEmployedOnDate(nid,d));
-      let done=false;
-      for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)){done=true;break;} }
-      if(done) continue;
-      for(const nid of cands){ if(tryTakeOverSlotForNurse(nid,d,newSched,fullSched)){done=true;break;} }
+      const attempt=()=>{
+        for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)) return nid; }
+        for(const nid of cands){ if(tryTakeOverSlotForNurse(nid,d,newSched,fullSched)) return nid; }
+        return null;
+      };
+      let placed=attempt();
+      if(!placed){
+        // 放寬軟性規則再試一次(硬鐵則：預假OFF／在職／休息時數／連上天數上限／N-OFF-D／
+        // 支援矩陣／不能同時上班／角色階級資格 仍然全部成立，不會為了本規則去破壞它們)。
+        _bypassShiftVariety=true;
+        try{ placed=attempt(); }finally{ _bypassShiftVariety=false; }
+      }
+      if(!placed){
+        // 最後手段：連「不製造孤立單班」也放寬(本規則位階較高)。
+        _bypassShiftVariety=true; _bypassPairIsolation=true;
+        try{ placed=attempt(); }finally{ _bypassShiftVariety=false; _bypassPairIsolation=false; }
+      }
+      if(placed) lockNurseCellOnDate(placed,d,newSched);
     }
+  }
+}
+// 把某人在某日已排定的那一格加入 _workLocks，之後的平衡/挪動步驟都不得再動它。
+function lockNurseCellOnDate(nurseId,date,sched){
+  const ds=sched[date]; if(!ds) return;
+  for(const sh of SHIFTS){
+    const idx=(ds[sh]||[]).indexOf(nurseId);
+    if(idx>=0){ _workLocks.add(cellKey(date,sh,idx)); return; }
   }
 }
 // mustwork：某對在適用日要同時上班 → 只有一人上班時，盡量把另一人補進空缺一起上。
@@ -2946,6 +2999,10 @@ function generateScheduleAttempt(y,m,dates){
   // (上限已由 canWork*/longLeaveBlocksMore 擋住，這裡主要補「班數不足＝休假變多」的情況。)
   enforceLongLeaveExactDays(newSched, fullSched, dates);
 
+  // 「不能同時放假」為強制，且優先於休假天數收斂：上一步為了湊足休假天數可能又把人拿掉，
+  // 因此最後再跑一次把它補回來(這次補上的格子會被鎖定，之後不再有步驟會動到)。
+  enforceNoOffTogether(newSched, fullSched, dates);
+
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
@@ -3025,7 +3082,8 @@ function scheduleQuality(newSched,y,m){
       if(!pairRuleActiveOn(r,dd)) continue;
       const aOn=isAssignedThatDay(r.a,dd,newSched), bOn=isAssignedThatDay(r.b,dd,newSched);
       if(r.type==='nowork'&&aOn&&bOn) pairViolations++;
-      else if(r.type==='nooff'&&!aOn&&!bOn) pairViolations++;
+      // 兩人當天都有預假OFF是「不能同時放假」唯一容許的例外，不算違反、不扣分
+      else if(r.type==='nooff'&&!aOn&&!bOn&&!(offBlocked(r.a,dd)&&offBlocked(r.b,dd))) pairViolations++;
     }
   }
   return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
@@ -3388,6 +3446,25 @@ function _draftRemoveSpecial(shift,idx){
 function confirmDayModal(){
   if(!_dayDraftDate||!_dayDraft) return;
   if(isCurrentMonthLocked()){ showToast('🔒 本月已完成，班表無法修改','warn'); cancelDayModal(); return; } // 保底(視窗開著時才完成本月的情況)
+  // 「不能同時放假」為強制：先用草稿模擬這一天存檔後的結果，若有配對兩人都被排成休假就擋下。
+  {
+    const d=_dayDraftDate;
+    const draftDay={D:_dayDraft.D,E:_dayDraft.E,N:_dayDraft.N,
+      D12:(_dayDraft.D12||[]).filter(Boolean),N12:(_dayDraft.N12||[]).filter(Boolean),H:(_dayDraft.H||[]).filter(Boolean)};
+    const sim={...state.schedule,[d]:draftDay};
+    const bad=[];
+    for(const r of pairRulesOfType('nooff')){
+      if(!pairRuleActiveOn(r,d)) continue;
+      if(!isEmployedOnDate(r.a,d)||!isEmployedOnDate(r.b,d)) continue;
+      if(isAssignedThatDay(r.a,d,sim)||isAssignedThatDay(r.b,d,sim)) continue;
+      if(offBlocked(r.a,d)&&offBlocked(r.b,d)) continue; // 兩人同日預假＝唯一例外
+      bad.push(`${getDocName(r.a)}／${getDocName(r.b)}`);
+    }
+    if(bad.length){
+      showToast(`❌ ${bad.join('、')} 設定為「不能同時放假」，${d} 兩人都沒有上班，無法儲存。若當天確實都要休，請先為兩人登記同一天的預假。`,'warn');
+      return;
+    }
+  }
   pushUndo();
   const ds=ensureDay(_dayDraftDate);
   ds.roles={D:[..._dayDraft.roles.D],E:[..._dayDraft.roles.E],N:[..._dayDraft.roles.N]};
@@ -3956,7 +4033,8 @@ function renderStats(){
       const aOn=isAssignedThatDay(r.a,dd,state.schedule), bOn=isAssignedThatDay(r.b,dd,state.schedule);
       if(r.type==='nowork'&&aOn&&bOn) bad.push(dd.slice(8));
       else if(r.type==='mustwork'&&aOn!==bOn) bad.push(dd.slice(8));
-      else if(r.type==='nooff'&&!aOn&&!bOn) bad.push(dd.slice(8));
+      // 兩人同日預假＝使用者自己批准的例外，不列為違反
+      else if(r.type==='nooff'&&!aOn&&!bOn&&!(offBlocked(r.a,dd)&&offBlocked(r.b,dd))) bad.push(dd.slice(8));
     }
     if(bad.length) viols.push(`⚠ 配對限制未達成：${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]} ${getDocName(r.b)}（${bad.length}天：${bad.slice(0,10).join('、')}${bad.length>10?'…':''}號）`);
   }
@@ -4469,6 +4547,16 @@ function updateMasterCell(nurseId,dateStr,rawVal){
     showToast('請輸入 D、E、N、D12、N12、H(行政班)、時數數字(如6.5)、班別+批修時數(如D2、E0)，或留空(代表OFF)','warn');
     renderMasterGrid();
     return;
+  }
+  // 「不能同時放假」為強制：手動把人改成OFF時，若配對對象當天也沒上班就直接擋下，
+  // 唯一放行的情況是兩人當天都已登記預假OFF(使用者自己批准的同日休假)。
+  if(!val){
+    const conf=nooffConflictsIfOff(nurseId,dateStr);
+    if(conf.length){
+      showToast(`❌ ${getDocName(nurseId)} 與 ${conf.map(getDocName).join('、')} 設定為「不能同時放假」，${dateStr} 對方也沒上班。若兩人當天確實都要休，請先為兩人登記同一天的預假。`,'warn');
+      renderMasterGrid();
+      return;
+    }
   }
   // 鎖定/解除鎖定唯一入口是雙擊(unlockManualCell)；這裡輸入/刪除本身「不會」新增鎖定，
   // 但若這一格「原本就已鎖定」，則維持鎖定並同步更新為新輸入的內容，避免鎖定內容與畫面顯示不一致。
