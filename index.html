@@ -140,10 +140,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .wk-S{background:#ffc27a;color:#8a3b00;}
 .wk-OFF{background:#f4f6f7;color:#b8bec2;font-weight:400;}
 .wk-NA{background:#d5d8da;color:#8e9799;}
-/* 假日欄位：表頭紅底，欄位左右紅細線形成整條色帶；假日的OFF另外淡紅標示(＝有休到假日) */
+/* 假日欄位：表頭紅底 ＋ 欄位左右紅細線形成整條色帶。
+   注意不能用 border：本表是 border-collapse:collapse，相鄰兩格共用一條邊，
+   顏色由瀏覽器擇一(左邊那格的灰色會勝出)，紅線會整條偏掉一欄；
+   改用 inset box-shadow 逐格自己畫，位置才會剛好落在假日欄的左右兩側。 */
 #work-table th.wk-hol{background:#b03a2e;}
-#work-table td.wk-hol-col{border-left:1px solid #eda79f;border-right:1px solid #eda79f;}
-#work-table td.wk-OFF.wk-hol-col{background:#fdeceb;color:#e79a94;}
+#work-table td.wk-hol-col{box-shadow:inset 1px 0 0 #e08b82,inset -1px 0 0 #e08b82;}
 /* 右側統計欄 */
 #work-table th.wk-sum,#work-table td.wk-sum{background:#f5f8f8;color:#37474f;font-weight:700;width:32px;min-width:32px;}
 #work-table th.wk-sum{background:#12705c;color:#fff;}
@@ -154,7 +156,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table tr.wk-row-active td.nm .color-dot{box-shadow:0 0 0 1px #fff;}
 #work-table th.wk-col-active{background:#f9a825!important;color:#3e2723!important;}
 #work-table td.wk-col-active{box-shadow:inset 2px 0 0 #0d5c4a,inset -2px 0 0 #0d5c4a;}
-#work-table .wk-glow{box-shadow:inset 0 0 0 2px #f9a825;}
+#work-table th.wk-glow,#work-table td.wk-glow{box-shadow:inset 0 0 0 2px #f9a825;}
 #work-table td.nm.wk-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
