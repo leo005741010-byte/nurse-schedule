@@ -184,7 +184,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 <div id="header">
   <h1>🏥 天晟護理排班系統</h1>
   <button class="nav-btn" onclick="changeMonth(-1)">&#9664; 上月</button>
-  <button id="month-label" class="nav-btn" onclick="jumpMonth()" style="font-size:16px;font-weight:600;min-width:90px;padding:5px 10px;cursor:pointer" title="點擊跳至指定年月"></button>
+  <button id="month-label" class="nav-btn" onclick="openMonthPicker()" style="font-size:16px;font-weight:600;min-width:90px;padding:5px 10px;cursor:pointer" title="點擊選擇月份"></button>
   <button class="nav-btn" onclick="changeMonth(1)">下月 &#9654;</button>
   <button class="action-btn btn-green" onclick="autoSchedule()">⚡ 自動排班</button>
   <button id="btn-lock" class="action-btn" style="background:#757575;color:#fff" onclick="toggleLock()">✅ 完成本月</button>
@@ -259,7 +259,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <div style="display:flex;align-items:center;gap:8px;">
         <strong style="font-size:12px">當月班別設定月份：</strong>
         <button onclick="changeNurseMonth(-1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9664;</button>
-        <button id="nurse-month-label" onclick="jumpNurseMonth()" title="點擊快速輸入年月" style="font-weight:700;min-width:80px;text-align:center;padding:4px 8px;border:1px solid #0d5c4a;border-radius:4px;background:#fff;color:#0d5c4a;cursor:pointer"></button>
+        <button id="nurse-month-label" onclick="openMonthPicker()" title="點擊選擇月份" style="font-weight:700;min-width:80px;text-align:center;padding:4px 8px;border:1px solid #0d5c4a;border-radius:4px;background:#fff;color:#0d5c4a;cursor:pointer"></button>
         <button onclick="changeNurseMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
         <span style="font-size:11px;color:#888">（開啟某月時會自動將班別設定存成當月獨立紀錄，之後修改互不影響）</span>
         <button class="action-btn btn-orange" onclick="resetMonthToLastMonth()" style="font-size:11px">↺ 重設為沿用上月</button>
@@ -320,7 +320,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           <div class="pr-cal-wrap">
             <div class="pr-cal-nav">
               <button onclick="prCalPrev()">&#9664;</button>
-              <span id="pr-cal-title"></span>
+              <span id="pr-cal-title" onclick="openMonthPicker()" title="點擊選擇月份" style="cursor:pointer;text-decoration:underline dotted"></span>
               <button onclick="prCalNext()">&#9654;</button>
             </div>
             <div id="pr-cal-grid" class="pr-cal-grid"></div>
@@ -342,7 +342,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <div style="display:flex;align-items:center;gap:10px;margin-top:16px;margin-bottom:6px;flex-wrap:wrap">
         <h3 style="margin:0">預假/預班清單</h3>
         <button onclick="changePRListMonth(-1)" style="padding:2px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">&#9664;</button>
-        <button id="pr-list-month-label" onclick="jumpPRListMonth()" title="點擊快速輸入年月" style="font-size:13px;font-weight:700;min-width:80px;text-align:center;padding:3px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer"></button>
+        <button id="pr-list-month-label" onclick="openMonthPicker()" title="點擊選擇月份" style="font-size:13px;font-weight:700;min-width:80px;text-align:center;padding:3px 8px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer"></button>
         <button onclick="changePRListMonth(1)" style="padding:2px 8px;border:1px solid #ccc;border-radius:4px;cursor:pointer;background:#fff">&#9654;</button>
       </div>
       <div id="pre-req-list">
@@ -359,7 +359,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;">
       <strong>統計月份：</strong>
       <button onclick="changeStatsMonth(-1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9664;</button>
-      <span id="stats-month" style="font-weight:700;min-width:80px;text-align:center"></span>
+      <button id="stats-month" onclick="openMonthPicker()" title="點擊選擇月份" style="font-weight:700;min-width:80px;text-align:center;padding:4px 8px;border:1px solid #0d5c4a;border-radius:4px;background:#fff;color:#0d5c4a;cursor:pointer"></button>
       <button onclick="changeStatsMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
       <button class="action-btn btn-blue" onclick="renderStats()">重新計算</button>
     </div>
@@ -559,6 +559,20 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <button class="btn-secondary" onclick="closeModal('nurse-modal')">取消</button>
       <button class="btn-primary" onclick="saveDoc()">儲存</button>
     </div>
+  </div>
+</div>
+
+<!-- ======= 月份選擇器(所有分頁共用，選定後全系統月份一起同步) ======= -->
+<div id="month-picker-modal" class="modal-overlay">
+  <div class="modal" style="max-width:340px">
+    <h2>選擇月份</h2>
+    <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin:10px 0 14px">
+      <button class="nav-btn" onclick="mpShiftYear(-1)" style="padding:4px 12px">&#9664;</button>
+      <span id="mp-year" style="font-size:18px;font-weight:700;color:#0d5c4a;min-width:80px;text-align:center"></span>
+      <button class="nav-btn" onclick="mpShiftYear(1)" style="padding:4px 12px">&#9654;</button>
+    </div>
+    <div id="mp-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px"></div>
+    <div class="modal-actions"><button class="btn-secondary" onclick="closeModal('month-picker-modal')">取消</button></div>
   </div>
 </div>
 
@@ -921,28 +935,12 @@ function updateLockBtn(){
 function toggleDocFilter(docId){ _filterDocId=(_filterDocId===docId)?null:docId; renderCalendar(); }
 let _prListYear = new Date().getFullYear();
 let _prListMonth = new Date().getMonth();
-function changePRListMonth(delta){
-  _prListMonth+=delta;
-  if(_prListMonth<0){_prListMonth=11;_prListYear--;}
-  if(_prListMonth>11){_prListMonth=0;_prListYear++;}
-  renderPRList();
-}
-function jumpPRListMonth(){
-  const input=prompt('輸入年月 (格式 YYYY-MM)：',`${_prListYear}-${String(_prListMonth+1).padStart(2,'0')}`);
-  if(!input) return;
-  const mt=input.match(/^(\d{4})-(\d{1,2})$/);
-  if(!mt){showToast('格式錯誤','warn');return;}
-  _prListYear=parseInt(mt[1]); _prListMonth=parseInt(mt[2])-1;
-  renderPRList();
-}
+// 各分頁的上/下月按鈕一律走 setGlobalMonth，確保所有分頁月份同步(定義於後段)。
+function changePRListMonth(delta){ setGlobalMonth(state.year,state.month+delta); }
+function jumpPRListMonth(){ openMonthPicker(); }
 let _statsYear = new Date().getFullYear();
 let _statsMonth = new Date().getMonth();
-function changeStatsMonth(delta){
-  _statsMonth+=delta;
-  if(_statsMonth<0){_statsMonth=11;_statsYear--;}
-  if(_statsMonth>11){_statsMonth=0;_statsYear++;}
-  renderStats();
-}
+function changeStatsMonth(delta){ setGlobalMonth(state.year,state.month+delta); }
 
 // ============================================================
 // DATE HELPERS
@@ -3265,7 +3263,7 @@ function cancelDayModal(){ _dayDraft=null; _dayDraftDate=null; closeModal('day-m
 // 不再各自獨立——不論從頁首或本頁的箭頭/跳轉切換，都會連動所有分頁，
 // 兩處月份數字保證一致，不會再出現各分頁顯示不同月份的情形。
 function changeNurseMonth(delta){ changeMonth(delta); }
-function jumpNurseMonth(){ jumpMonth(); }
+function jumpNurseMonth(){ openMonthPicker(); }
 // 將某月的班別設定「實體化」為明確紀錄：只要該月尚未有任何一筆設定，
 // 就把每位護理師當下會沿用(最近一次設定)的班別，直接寫成這個月自己的設定。
 // 這樣一開始檢視/編輯某個月時，資料就是完整、獨立的一份快照——
@@ -3464,8 +3462,8 @@ function prShortLabel(pr){
 let _prCalYear=new Date().getFullYear();
 let _prCalMonth=new Date().getMonth();
 let _prSelectedDates=new Set(); // 已選取的日期(不需連續)
-function prCalPrev(){ _prCalMonth--; if(_prCalMonth<0){_prCalMonth=11;_prCalYear--;} renderPRCalGrid(); }
-function prCalNext(){ _prCalMonth++; if(_prCalMonth>11){_prCalMonth=0;_prCalYear++;} renderPRCalGrid(); }
+function prCalPrev(){ setGlobalMonth(state.year,state.month-1); }
+function prCalNext(){ setGlobalMonth(state.year,state.month+1); }
 function renderPRCalGrid(){
   const title=document.getElementById('pr-cal-title');
   if(title) title.textContent=`${_prCalYear}年${_prCalMonth+1}月`;
@@ -4258,33 +4256,41 @@ function closeModal(id){ document.getElementById(id).classList.remove('show'); r
 // 頁首月份導覽為全域元件(各分頁都看得到)，改變月份時其他分頁(護理師設定／預假預班／
 // 統計報表)所用的年月變數與畫面都要一併同步，否則使用者若正停留在該分頁，切換月份會
 // 看起來「沒有反應」(背景變數其實已更新，只是畫面沒重繪)。
-function syncOtherTabsToCurrentMonth(){
-  _prListYear=state.year; _prListMonth=state.month;
-  _statsYear=state.year; _statsMonth=state.month;
-  renderNurseTable();
-  renderPRList();
-  renderPRCalGrid();
-  renderStats();
-}
-function changeMonth(delta){
-  state.month+=delta;
-  if(state.month<0){state.month=11;state.year--;}
-  if(state.month>11){state.month=0;state.year++;}
-  syncOtherTabsToCurrentMonth();
-  renderCalendar();
-  renderMasterGrid();
+// 全系統唯一的月份切換入口：不論從表頭、護理師設定、預假小月曆、預假清單或統計報表切換，
+// 一律把所有分頁的月份設成同一個月並全部重繪，避免各分頁顯示不同月份而看錯資料。
+function setGlobalMonth(yy,mm){
+  while(mm<0){mm+=12;yy--;}
+  while(mm>11){mm-=12;yy++;}
+  state.year=yy; state.month=mm;
+  _prListYear=yy; _prListMonth=mm;
+  _statsYear=yy;  _statsMonth=mm;
+  _prCalYear=yy;  _prCalMonth=mm;
+  renderCalendar(); renderMasterGrid(); renderNurseTable();
+  renderPRList(); renderPRCalGrid(); renderStats();
   updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
-function jumpMonth(){
-  const input=prompt('輸入年月 (格式 YYYY-MM)：',`${state.year}-${String(state.month+1).padStart(2,'0')}`);
-  if(!input) return;
-  const mt=input.match(/^(\d{4})-(\d{1,2})$/);
-  if(!mt){showToast('格式錯誤','warn');return;}
-  state.year=parseInt(mt[1]); state.month=parseInt(mt[2])-1;
-  syncOtherTabsToCurrentMonth();
-  renderCalendar();
-  renderMasterGrid();
-  updateUndoBtn(); updateRedoBtn(); updateLockBtn();
+function syncOtherTabsToCurrentMonth(){ setGlobalMonth(state.year,state.month); }
+function changeMonth(delta){ setGlobalMonth(state.year,state.month+delta); }
+// ---- 月份選擇器(月曆式，取代原本輸入 YYYY-MM 的文字框) ----
+let _mpYear=null;
+function openMonthPicker(){
+  _mpYear=state.year;
+  renderMonthPicker();
+  document.getElementById('month-picker-modal').classList.add('show');
+}
+function mpShiftYear(d){ _mpYear+=d; renderMonthPicker(); }
+function renderMonthPicker(){
+  const ye=document.getElementById('mp-year'); if(ye) ye.textContent=`${_mpYear}年`;
+  const grid=document.getElementById('mp-grid'); if(!grid) return;
+  grid.innerHTML='';
+  for(let i=0;i<12;i++){
+    const isCur=(_mpYear===state.year&&i===state.month);
+    const b=document.createElement('button');
+    b.textContent=`${i+1}月`;
+    b.style.cssText=`padding:9px 0;border-radius:5px;cursor:pointer;font-size:13px;font-weight:700;border:1px solid #0d5c4a;background:${isCur?'#0d5c4a':'#e6f5f1'};color:${isCur?'#fff':'#0d5c4a'}`;
+    b.onclick=()=>{ const pick=i; document.getElementById('month-picker-modal').classList.remove('show'); setGlobalMonth(_mpYear,pick); };
+    grid.appendChild(b);
+  }
 }
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
