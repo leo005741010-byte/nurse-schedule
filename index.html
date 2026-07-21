@@ -119,6 +119,21 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .mg-N{background:#f3e5f5;color:#6a1b9a;font-weight:700;}
 .mg-D12,.mg-N12{background:#ffe0b2;color:#e65100;font-weight:700;box-shadow:inset 0 0 0 1px #f9a825;}
 .mg-H{background:#eceff1;color:#37474f;font-weight:700;box-shadow:inset 0 0 0 1px #78909c;}
+/* 工作總表：格內顯示位置代號，底色區分 D/E/N/H/特班/OFF */
+.wk-legend{display:inline-block;padding:1px 8px;border:1px solid #ccc;border-radius:4px;font-size:11px;font-weight:700;color:#333;}
+#work-table td.wk{padding:2px 0;text-align:center;font-size:11px;font-weight:700;min-width:30px;}
+.wk-D{background:#ffe9a3;color:#8a4b00;}
+.wk-E{background:#c9e2fb;color:#0d47a1;}
+.wk-N{background:#e2c9f0;color:#4a148c;}
+.wk-H{background:#cfd8dc;color:#263238;}
+.wk-S{background:#ffc27a;color:#8a3b00;}
+.wk-OFF{background:#f1f3f4;color:#b0b0b0;font-weight:400;}
+.wk-NA{background:#d0d0d0;color:#999;}
+#work-table th.wk-hol,#work-table td.wk-hol-col{box-shadow:inset 0 -2px 0 #ef9a9a;}
+#work-table td.nm{text-align:left;font-weight:700;font-size:13px;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:1;}
+#work-table th.nm{white-space:nowrap;position:sticky;left:0;top:0;z-index:2;}
+#work-table th.dt{white-space:nowrap;font-size:11px;}
+#work-table tbody tr:hover td.wk{filter:brightness(0.94);}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
 .mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
@@ -211,6 +226,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
 <div id="tabs">
   <div class="tab active" onclick="switchTab('master')">🗂 月班總表</div>
+  <div class="tab" onclick="switchTab('work')">🧾 工作總表</div>
   <div class="tab" onclick="switchTab('schedule')">📅 排班表</div>
   <div class="tab" onclick="switchTab('nurses')">👩‍⚕️ 護理師設定</div>
   <div class="tab" onclick="switchTab('prereq')">📝 預假/預班</div>
@@ -250,6 +266,29 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div id="tab-master" class="tab-pane active">
     <div class="stats-wrap">
       <table id="master-table"><thead id="master-thead"></thead><tbody id="master-tbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ======= 工作總表(顯示每天實際擔任的位置代號，底色區分D/E/N/OFF) ======= -->
+  <div id="tab-work" class="tab-pane">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">
+      <strong style="color:#0d5c4a">位置代號：</strong>
+      <span class="wk-legend">A1 組長</span>
+      <span class="wk-legend">檢 檢傷</span>
+      <span class="wk-legend">A2 重症</span>
+      <span class="wk-legend">B 留觀</span>
+      <span class="wk-legend">A3 支援</span>
+      <span class="wk-legend">流 流動</span>
+      <strong style="color:#0d5c4a;margin-left:10px">底色：</strong>
+      <span class="wk-legend" style="background:#ffe9a3;border-color:#e0a800">D 白班</span>
+      <span class="wk-legend" style="background:#c9e2fb;border-color:#1976d2">E 小夜</span>
+      <span class="wk-legend" style="background:#e2c9f0;border-color:#8e24aa">N 大夜</span>
+      <span class="wk-legend" style="background:#cfd8dc;border-color:#607d8b">H 行政</span>
+      <span class="wk-legend" style="background:#ffc27a;border-color:#ef6c00">D12/N12</span>
+      <span class="wk-legend" style="background:#f1f3f4;border-color:#bdbdbd">OFF 休假</span>
+    </div>
+    <div class="stats-wrap">
+      <table id="work-table"><thead id="work-thead"></thead><tbody id="work-tbody"></tbody></table>
     </div>
   </div>
 
@@ -589,7 +628,9 @@ const ROLES = {
   E:['組長','檢傷','重症','留觀','留觀','流動'],
   N:['組長','檢傷','留觀','留觀'],
 };
-const ROLE_ABBR = {組長:'組',檢傷:'檢',重症:'重',留觀:'留',流動:'流',支援:'援'};
+// 位置代號(單位實際使用的代號)：組長=A1、檢傷=檢、重症=A2、支援=A3、留觀=B、流動=流。
+// 內部資料仍以中文角色名為鍵(不更動既有班表資料)，這裡只負責畫面顯示的代號。
+const ROLE_ABBR = {組長:'A1',檢傷:'檢',重症:'A2',留觀:'B',流動:'流',支援:'A3'};
 // 各班別每種角色的預設人數(供使用者於「角色人數設定」自訂調整，初始值取自 ROLES 現行結構)。
 const ROLE_ORDER=['組長','檢傷','重症','留觀','流動'];
 function defaultRoleCounts(){
@@ -4105,7 +4146,7 @@ function renderMasterGrid(){
     const thClass=['dt',wknd?'wknd':'',colSel?'mg-col-active':'',selNurseWorked?'mg-glow':''].filter(Boolean).join(' ');
     const emptyWarn=dateHasEmptySlot(d)?`<span title="本日仍有一般班(D/E/N)空缺" style="color:#ffeb3b">⚠</span>`:'';
     return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}${emptyWarn}<br>${dowNames[dow]}</th>`;
-  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
+  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th title="當月國定/例假日中放假的天數">假日休</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
   // 備註列：獨立一整列、每個日期各一格，比原本擠在日期表頭裡的小輸入框好填寫、好看清楚。
@@ -4113,7 +4154,7 @@ function renderMasterGrid(){
     const note=(state.dayNotes&&state.dayNotes[d])||'';
     return `<td class="dt" style="padding:1px"><input type="text" class="mg-note-row-input" placeholder="備註" value="${escAttr(note)}" onchange="updateDayNote('${d}',this.value)" title="${note?escAttr(note):'自由備註，如ACLS、評鑑等'}"></td>`;
   }).join('');
-  const noteRow=`<tr class="mg-note-row"><td class="nm" style="color:#888">備註</td>${noteCells}<td></td><td></td><td></td><td></td></tr>`;
+  const noteRow=`<tr class="mg-note-row"><td class="nm" style="color:#888">備註</td>${noteCells}<td></td><td></td><td></td><td></td><td></td></tr>`;
 
   // 點選日期時，人名列只顯示該日有上班的人(篩選)，方便一眼看出當天在班名單；
   // 再點一次(或改點護理師)取消篩選、還原顯示全部人員。
@@ -4126,13 +4167,13 @@ function renderMasterGrid(){
 
     // 月合計一律以整月計算，不受欄位篩選影響。總班數只算一般班(D/E/N)；行政班(H)與特班(D12/N12)
     // 另外算成 manualDays，不計入總班數，但仍算「有上班的日子」，因此會減少放假數(讓休假天數公平)。
-    let den=0, manualDays=0, holCount=0, empDays=0;
+    let den=0, manualDays=0, holCount=0, empDays=0, holOff=0;
     if(doc.type==='full'){
       for(const d of allDates){
         if(!isEmployedOnDate(doc.id,d)) continue;
         empDays++;
         const sh=shiftOfNurseOnDate(doc.id,d);
-        if(!sh) continue;
+        if(!sh){ if(isHoliday(d)) holOff++; continue; } // 假日沒班＝假日休
         if(SHIFTS.includes(sh)){ den++; if(isHoliday(d)) holCount++; }
         else manualDays++; // H行政班／D12/N12特班
       }
@@ -4173,9 +4214,56 @@ function renderMasterGrid(){
     if(prevCode==='OFF') prevTitle='上個月月底排班：最後一天休假';
     else if(prevCode){ const mch=prevCode.match(/^(\d+)(\D+)$/); if(mch) prevTitle=`上個月月底排班：最後連${mch[1]}天上班，最後一天為${mch[2]}班`; }
     const prevBadge=prevCode?`<span style="font-size:9px;color:#888;font-weight:400;margin-left:4px" title="${prevTitle}">[${prevCode}]</span>`:'';
-    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong>${doc.type==='full'&&manualDays>0?`<span style="font-size:9px;color:#78909c" title="行政班H/特班D12,N12 共${manualDays}天(不計入總班數，但算上班日)">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
+    return `<tr class="${rowSel?'mg-row-active':''}"><td class="${nmClass}" onclick="mgSelectNurse('${doc.id}')" style="cursor:pointer" title="${nmTitle}"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}${prevBadge}</td>${cells}<td><strong>${doc.type==='full'?total:'-'}</strong>${doc.type==='full'&&manualDays>0?`<span style="font-size:9px;color:#78909c" title="行政班H/特班D12,N12 共${manualDays}天(不計入總班數，但算上班日)">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?holOff:'-'}</td><td>${doc.type==='full'?hourTotal:'-'}h</td></tr>`;
   }).join('');
   document.getElementById('master-tbody').innerHTML=noteRow+rows;
+}
+// ============================================================
+// 工作總表：每格顯示該人當天實際擔任的「位置代號」(A1/檢/A2/B/A3/流)，
+// 底色區分班別(D/E/N/H/特班/OFF)，右側統計各位置的天數。唯讀檢視用。
+// ============================================================
+const WORK_ROLE_CODES=['組長','檢傷','重症','留觀','支援','流動'];
+function workShiftClass(sh){
+  if(!sh) return 'wk-OFF';
+  if(sh==='H') return 'wk-H';
+  if(SPECIAL_SHIFTS.includes(sh)) return 'wk-S';
+  return 'wk-'+sh;
+}
+function renderWorkGrid(){
+  const y=state.year, m=state.month;
+  const dates=monthDates(y,m);
+  const dowNames=['一','二','三','四','五','六','日'];
+  const thead=`<tr><th class="nm">護理師</th>`+dates.map(d=>{
+    const hol=isHoliday(d);
+    return `<th class="dt${hol?' wknd wk-hol':''}">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
+  }).join('')+WORK_ROLE_CODES.map(r=>`<th title="${r}">${ROLE_ABBR[r]}</th>`).join('')+`<th>總班數</th></tr>`;
+  document.getElementById('work-thead').innerHTML=thead;
+
+  const rows=sortedRoster(y,m).map(doc=>{
+    const cnt={}; WORK_ROLE_CODES.forEach(r=>cnt[r]=0);
+    let total=0;
+    const cells=dates.map(d=>{
+      const hol=isHoliday(d);
+      const holCls=hol?' wk-hol-col':'';
+      if(doc.type!=='full') return `<td class="wk${holCls}"></td>`;
+      if(!isEmployedOnDate(doc.id,d)) return `<td class="wk wk-NA${holCls}">－</td>`;
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(!sh) return `<td class="wk wk-OFF${holCls}">OFF</td>`;
+      total++;
+      let code='';
+      if(SHIFTS.includes(sh)){
+        const role=roleOfNurseOnDate(doc.id,d,sh);
+        if(role){ code=ROLE_ABBR[role]||role; if(cnt[role]!==undefined) cnt[role]++; }
+        else code=sh;
+      } else {
+        code=sh; // H / D12 / N12 直接顯示班別代號
+      }
+      return `<td class="wk ${workShiftClass(sh)}${holCls}" title="${d.slice(5)} ${sh}${code?' '+code:''}">${code}</td>`;
+    }).join('');
+    const sums=WORK_ROLE_CODES.map(r=>`<td>${doc.type==='full'&&cnt[r]?cnt[r]:'-'}</td>`).join('');
+    return `<tr><td class="nm"><span class="color-dot" style="background:${doc.color}"></span> ${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}${sums}<td><strong>${doc.type==='full'?total:'-'}</strong></td></tr>`;
+  }).join('');
+  document.getElementById('work-tbody').innerHTML=rows;
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
@@ -4371,7 +4459,7 @@ function setGlobalMonth(yy,mm){
   _prListYear=yy; _prListMonth=mm;
   _statsYear=yy;  _statsMonth=mm;
   _prCalYear=yy;  _prCalMonth=mm;
-  renderCalendar(); renderMasterGrid(); renderNurseTable();
+  renderCalendar(); renderMasterGrid(); renderWorkGrid(); renderNurseTable();
   renderPRList(); renderPRCalGrid(); renderStats();
   updateUndoBtn(); updateRedoBtn(); updateLockBtn();
 }
@@ -4401,7 +4489,7 @@ function renderMonthPicker(){
 function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
-  const idx={master:0,schedule:1,nurses:2,prereq:3,stats:4,help:5}[name];
+  const idx={master:0,work:1,schedule:2,nurses:3,prereq:4,stats:5,help:6}[name];
   document.querySelectorAll('.tab')[idx].classList.add('active');
   document.getElementById('tab-'+name).classList.add('active');
   // 注意：各分頁的年月導覽只在網頁「一開啟」時與排班表同步一次(見 window.onload)，
@@ -4409,6 +4497,7 @@ function switchTab(name){
   // 一切回排班表分頁再切回來，畫面又被強制跳回排班表當時的月份，
   // 造成「明明設定好了，一切換分頁又跑掉」的錯覺(其實資料沒壞，只是畫面被切走)。
   if(name==='master') renderMasterGrid();
+  if(name==='work') renderWorkGrid();
   if(name==='nurses') renderNurseTable();
   if(name==='prereq'){ renderPRList(); renderPRCalGrid(); }
   if(name==='stats') renderStats();
@@ -4725,7 +4814,7 @@ async function exportExcel(){
 
   // ---- 分頁1：月班總表 ----
   const ws1=wb.addWorksheet(`月班總表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',xSplit:1,ySplit:1}]});
-  const header1=['護理師',...dates.map(d=>`${parseInt(d.slice(-2))}(${dowNames[getDOW(d)]})`),'總班數','放假數','假日班數'];
+  const header1=['護理師',...dates.map(d=>`${parseInt(d.slice(-2))}(${dowNames[getDOW(d)]})`),'總班數','放假數','假日班數','假日休'];
   const hRow1=ws1.addRow(header1);
   hRow1.eachCell((cell,colNumber)=>{
     cell.alignment={horizontal:'center',vertical:'middle'};
@@ -4741,10 +4830,10 @@ async function exportExcel(){
   });
   ws1.getColumn(1).width=14;
   for(let i=0;i<dates.length;i++) ws1.getColumn(2+i).width=5;
-  ws1.getColumn(2+dates.length).width=8; ws1.getColumn(3+dates.length).width=8; ws1.getColumn(4+dates.length).width=9;
+  ws1.getColumn(2+dates.length).width=8; ws1.getColumn(3+dates.length).width=8; ws1.getColumn(4+dates.length).width=9; ws1.getColumn(5+dates.length).width=8;
 
   for(const doc of sortedRoster(y,m)){
-    let den=0, manualDays=0, holCount=0, empDays=0;
+    let den=0, manualDays=0, holCount=0, empDays=0, holOff=0;
     const rowVals=[doc.name+(doc.type==='head'?'(管理)':'')];
     for(const d of dates){
       if(doc.type!=='full'){ rowVals.push(''); continue; }
@@ -4752,10 +4841,10 @@ async function exportExcel(){
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
       if(sh){ if(SHIFTS.includes(sh)){den++; if(isHoliday(d)) holCount++;} else manualDays++; rowVals.push(sh); }
-      else{ rowVals.push('OFF'); }
+      else{ if(isHoliday(d)) holOff++; rowVals.push('OFF'); }
     }
     const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):'';
-    rowVals.push(doc.type==='full'?(manualDays>0?`${den}(+${manualDays}行)`:den):'', offCount, doc.type==='full'?holCount:'');
+    rowVals.push(doc.type==='full'?(manualDays>0?`${den}(+${manualDays}行)`:den):'', offCount, doc.type==='full'?holCount:'', doc.type==='full'?holOff:'');
     const row=ws1.addRow(rowVals);
     row.eachCell((cell,colNumber)=>{
       cell.alignment={horizontal:'center',vertical:'middle'};
@@ -4822,7 +4911,7 @@ function generatePDF(){
     const isHol=isHoliday(d);
     const bgCol=isHol?'background:#fde8e8;':'';
     return `<th style="${bgCol}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
-  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>總時數</th></tr>`;
+  }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th>假日休</th><th>總時數</th></tr>`;
   // 假日班別的底色需與平日班別不同(方便一眼辨識)，但字的顏色維持跟平日一樣(不因假日改變)。
   // 因此不能單純疊加「假日底色」再蓋上「班別底色」(inline style同屬性後者會直接覆蓋前者，
   // 假日底色等於白疊，之前就是這樣才會看不出來)，改為底色與字色分開組合。
@@ -4830,7 +4919,7 @@ function generatePDF(){
   const SHIFT_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5',D12:'#ffe0b2',N12:'#ffe0b2',H:'#eceff1'};
   const SHIFT_BG_HOL={D:'#ffcc80',E:'#90caf9',N:'#ce93d8',D12:'#ffb74d',N12:'#ffb74d',H:'#cfd8dc'};
   const mgRows=sortedRoster(y,m).map(doc=>{
-    let den=0, manualDays=0, holCount=0, empDays=0;
+    let den=0, manualDays=0, holCount=0, empDays=0, holOff=0;
     const cells=dates.map(d=>{
       const wknd=isHoliday(d);
       const holBg=wknd?'background:#fde8e8;':'';
@@ -4841,13 +4930,14 @@ function generatePDF(){
       const adj=getHourAdjust(doc.id,d);
       const adjBadge=adj!==null?`<div style="font-size:7px;font-weight:700;color:#e65100">${adj}h</div>`:'';
       if(sh){ if(SHIFTS.includes(sh)){den++; if(wknd) holCount++;} else manualDays++; const bg=wknd?SHIFT_BG_HOL[sh]:SHIFT_BG[sh]; return `<td style="background:${bg};color:${SHIFT_COLOR[sh]};font-weight:700">${sh}${adjBadge}</td>`; }
+      if(wknd) holOff++;
       const offReq=(state.preRequests[d]||[]).some(pr=>pr.docId===doc.id&&pr.type==='OFF');
       if(offReq) return `<td style="${holBg}background:#fdecea;color:#c0392b;font-weight:700">OFF${adjBadge}</td>`;
       return `<td style="${holBg}color:#bbb">OFF${adjBadge}</td>`;
     }).join('');
     const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):0;
     const hrs=doc.type==='full'?calcNurseTotalHours(doc.id,dates):null;
-    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?den:'-'}</b>${doc.type==='full'&&manualDays>0?`<span style="font-size:7px;color:#78909c">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${hrs!==null?hrs+'h':'-'}</td></tr>`;
+    return `<tr><td style="text-align:left">${doc.name}</td>${cells}<td><b>${doc.type==='full'?den:'-'}</b>${doc.type==='full'&&manualDays>0?`<span style="font-size:7px;color:#78909c">+${manualDays}行</span>`:''}</td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holCount:'-'}</td><td>${doc.type==='full'?holOff:'-'}</td><td>${hrs!==null?hrs+'h':'-'}</td></tr>`;
   }).join('');
 
   // --- 排班表 (角色格式) ---
