@@ -340,7 +340,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     </table>
     <div style="margin-top:16px;background:#fff;border-radius:6px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,.1)">
       <h3 style="font-size:13px;margin-bottom:10px;color:#0d5c4a">🔗 配對限制設定（誰與誰）</h3>
-      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。<b style="color:#c0392b">「不能同時上班」與「不能同時放假」皆為強制</b>（不能同時放假＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數」等軟性規則。<b style="color:#c0392b">唯一例外是兩人當天都登記了預假</b>，此時才准許同時休假。手動把兩人都改成OFF會被擋下）；「要同時上班」為盡量達成。未能達成者會在統計報表列出。</p>
+      <p style="font-size:11px;color:#888;margin-bottom:10px">可設定兩位護理師的關係。日期留空＝整月每天都適用；填日期＝只在該區間內適用（以目前檢視月份為準）。<b style="color:#c0392b">配對限制同時要求太多會互相打架、排不出班，因此只有清單第1筆是「強制」，第2筆以後一律只是「盡量達成」</b>（排得到就排，排不到不強求，也不會擋你手動編輯）。想換哪一筆強制，按該筆的「設為強制」把它移到第1筆即可。<br>強制那筆若是「不能同時放假」＝當天一定至少一人上班，沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數」等軟性規則；<b style="color:#c0392b">唯一例外是兩人當天都登記了預假</b>，此時才准許同時休假，手動把兩人都改成OFF會被擋下。「要同時上班」一律只是盡量達成。未能達成者會在統計報表列出。</p>
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
         <select id="pair-doc1" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px"></select>
         <select id="pair-type" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:12px">
@@ -491,7 +491,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li>新增／編輯護理師：姓名、顏色、預設班別、階級（L／T／A2／B）、性別、年資（資深／資淺）、是否可支援。</li>
         <li><b>年資</b>會影響放假分配（見下方排班原則）。<b>階級</b>決定可擔任哪些角色。</li>
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
-        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b>不能同時上班</b>與<b>不能同時放假</b>皆為<b style="color:#c0392b">強制</b>（不能同時放假＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數／指定休假天數」等軟性規則，排上後該格會鎖定不再被挪走。<b style="color:#c0392b">唯一例外：兩人當天都登記了預假</b>——只有一人有預假時，另一人仍會被強制排班。在月班總表或當日視窗手動把兩人都改成OFF會被系統擋下）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
+        <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b style="color:#c0392b">只有清單第1筆是強制</b>，第2筆以後一律只是<b>盡量達成</b>——因為同時要求多組配對會互相打架、根本排不出班。想換哪一筆強制，按該筆的<b>「設為強制」</b>移到第1筆即可；清單上每筆都會標示<b style="color:#c0392b">強制</b>或<b>盡量</b>。強制那筆若是<b>不能同時放假</b>＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數／指定休假天數／不製造孤立單班」等軟性規則，排上後該格會鎖定不再被挪走。<b style="color:#c0392b">唯一例外：兩人當天都登記了預假</b>——只有一人有預假時，另一人仍會被強制排班。在月班總表或當日視窗手動把兩人都改成OFF會被系統擋下（盡量型的則不會擋）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
         <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月固定上哪個位置（可選自己的階級或更低階級）。<b style="color:#c0392b">設定後為強制</b>——這個人只要上班就一定被排在該位置，不會出現在其他位置（例如 L 級選「T」＝整月只上檢傷）。<b>同一班別的同一個位置只能一個人選</b>（例如白班不可兩人同選 L／組長），重複選會被擋下。</li>
       </ul>
 
@@ -1177,9 +1177,16 @@ function pairRuleActiveOn(rule,date){
   return true;
 }
 function pairRulesOfType(type){ return (state.pairRules||[]).filter(r=>r.type===type); }
+// 使用者要求：配對限制同時要求太多會互相打架、排不出班，因此【只有清單第1筆是強制】，
+// 第2筆以後一律只是「盡量達成」——排得到就排，排不到不擋、不視為違反、也不擋手動編輯。
+// 想換哪一筆強制，可在清單上按「設為強制」把它移到第1筆。
+function forcedPairRule(){ return (state.pairRules||[])[0]||null; }
+function isForcedPairRule(rule){ return !!rule && (state.pairRules||[])[0]===rule; }
 // nowork 為硬性：某人於 date 上班時，若有 nowork 對象當天也上班則擋下。
 function avoidBlocked(nurseId,date,sched){
-  for(const r of pairRulesOfType('nowork')){
+  const forced=forcedPairRule();
+  if(!forced||forced.type!=='nowork') return false; // 只有第1筆是強制；不是nowork就沒有硬擋
+  for(const r of [forced]){
     if(r.a!==nurseId&&r.b!==nurseId) continue;
     if(!pairRuleActiveOn(r,date)) continue;
     const other=r.a===nurseId?r.b:r.a;
@@ -1198,7 +1205,9 @@ function offBlocked(nurseId,date){
 function nooffConflictsIfOff(nurseId,dateStr,sched){
   const s=sched||state.schedule;
   const out=[];
-  for(const r of pairRulesOfType('nooff')){
+  const forced=forcedPairRule();
+  if(!forced||forced.type!=='nooff') return out; // 只有清單第1筆是強制，才擋手動編輯
+  for(const r of [forced]){
     if(r.a!==nurseId&&r.b!==nurseId) continue;
     if(!pairRuleActiveOn(r,dateStr)) continue;
     const other=r.a===nurseId?r.b:r.a;
@@ -2686,30 +2695,36 @@ function tryTakeOverSlotForNurse(nurseId,date,newSched,fullSched){
 //   4) 成功後把該格鎖定(_workLocks)，避免後續的公平性/年資平衡步驟又把人挪走
 function enforceNoOffTogether(newSched,fullSched,dates){
   for(const r of pairRulesOfType('nooff')){
+    const forced=isForcedPairRule(r); // 只有清單第1筆會動用強硬手段，其餘只是盡量
     for(const d of dates){
       if(!pairRuleActiveOn(r,d)) continue;
       if(isAssignedThatDay(r.a,d,newSched)||isAssignedThatDay(r.b,d,newSched)) continue; // 已有一人上班
       const bothPreOff=offBlocked(r.a,d)&&offBlocked(r.b,d);
       if(bothPreOff) continue;                                            // 唯一例外：同日預假
       const cands=[r.a,r.b].filter(nid=>!offBlocked(nid,d)&&isEmployedOnDate(nid,d));
-      const attempt=()=>{
-        for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)) return nid; }
-        for(const nid of cands){ if(tryTakeOverSlotForNurse(nid,d,newSched,fullSched)) return nid; }
-        return null;
-      };
-      let placed=attempt();
-      if(!placed){
-        // 放寬軟性規則再試一次(硬鐵則：預假OFF／在職／休息時數／連上天數上限／N-OFF-D／
-        // 支援矩陣／不能同時上班／角色階級資格 仍然全部成立，不會為了本規則去破壞它們)。
-        _bypassShiftVariety=true;
-        try{ placed=attempt(); }finally{ _bypassShiftVariety=false; }
+      // 盡量型(第2筆以後)只用最溫和的方式：補當天既有空缺，補不到就算了，不擠掉別人。
+      let placed=null;
+      for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)){ placed=nid; break; } }
+      if(!placed&&forced){
+        const attempt=()=>{
+          for(const nid of cands){ if(tryFillOneEmptyForNurse(nid,d,newSched,fullSched)) return nid; }
+          for(const nid of cands){ if(tryTakeOverSlotForNurse(nid,d,newSched,fullSched)) return nid; }
+          return null;
+        };
+        placed=attempt();
+        if(!placed){
+          // 放寬軟性規則再試一次(硬鐵則：預假OFF／在職／休息時數／連上天數上限／N-OFF-D／
+          // 支援矩陣／不能同時上班／角色階級資格 仍然全部成立，不會為了本規則去破壞它們)。
+          _bypassShiftVariety=true;
+          try{ placed=attempt(); }finally{ _bypassShiftVariety=false; }
+        }
+        if(!placed){
+          // 最後手段：連「不製造孤立單班」也放寬(本規則位階較高)。
+          _bypassShiftVariety=true; _bypassPairIsolation=true;
+          try{ placed=attempt(); }finally{ _bypassShiftVariety=false; _bypassPairIsolation=false; }
+        }
       }
-      if(!placed){
-        // 最後手段：連「不製造孤立單班」也放寬(本規則位階較高)。
-        _bypassShiftVariety=true; _bypassPairIsolation=true;
-        try{ placed=attempt(); }finally{ _bypassShiftVariety=false; _bypassPairIsolation=false; }
-      }
-      if(placed) lockNurseCellOnDate(placed,d,newSched);
+      if(placed&&forced) lockNurseCellOnDate(placed,d,newSched); // 只鎖強制那筆，盡量型不占用鎖定
     }
   }
 }
@@ -3078,6 +3093,7 @@ function scheduleQuality(newSched,y,m){
   let pairViolations=0;
   for(const r of (state.pairRules||[])){
     if(r.type==='mustwork') continue;
+    if(!isForcedPairRule(r)) continue; // 第2筆以後屬「盡量」，達不到不計為違反
     for(const dd of dates){
       if(!pairRuleActiveOn(r,dd)) continue;
       const aOn=isAssignedThatDay(r.a,dd,newSched), bOn=isAssignedThatDay(r.b,dd,newSched);
@@ -3453,7 +3469,8 @@ function confirmDayModal(){
       D12:(_dayDraft.D12||[]).filter(Boolean),N12:(_dayDraft.N12||[]).filter(Boolean),H:(_dayDraft.H||[]).filter(Boolean)};
     const sim={...state.schedule,[d]:draftDay};
     const bad=[];
-    for(const r of pairRulesOfType('nooff')){
+    const forced=forcedPairRule();
+    for(const r of (forced&&forced.type==='nooff')?[forced]:[]){ // 只有清單第1筆是強制
       if(!pairRuleActiveOn(r,d)) continue;
       if(!isEmployedOnDate(r.a,d)||!isEmployedOnDate(r.b,d)) continue;
       if(isAssignedThatDay(r.a,d,sim)||isAssignedThatDay(r.b,d,sim)) continue;
@@ -3570,12 +3587,31 @@ function renderPairRules(){
   const list=state.pairRules||[];
   box.innerHTML=list.length?list.map((r,i)=>{
     const rangeStr=(r.start||r.end)?`（${(r.start||'').slice(5)}～${(r.end||'').slice(5)}）`:'（整段適用）';
+    // 只有第1筆是強制(要同時上班本來就只是盡量，不掛強制標籤)。
+    const forced=i===0&&r.type!=='mustwork';
+    const badge=forced
+      ? `<span style="background:#c0392b;color:#fff;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:700" title="清單第1筆為強制：自動排班會用盡手段達成，手動編輯違反時會被擋下">強制</span>`
+      : `<span style="background:#eceff1;color:#607d8b;border-radius:3px;padding:1px 6px;font-size:10px;font-weight:700" title="盡量達成：排得到就排，排不到不強求，也不會擋你手動編輯">盡量</span>`;
+    const promote=(i>0&&r.type!=='mustwork')
+      ? `<button class="btn-sm" style="background:#0d5c4a;color:#fff" onclick="promotePairRule(${i})" title="把這筆移到第1筆，改由它作為強制規則">設為強制</button>`
+      : '';
     return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px">
+      ${badge}
       <span style="color:${PAIR_TYPE_COLOR[r.type]||'#333'};font-weight:700">${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]||r.type} ${getDocName(r.b)}</span>
       <span style="color:#888">${rangeStr}</span>
+      ${promote}
       <button class="btn-sm btn-del" onclick="removePairRule(${i})">移除</button>
     </div>`;
   }).join(''):'<div style="color:#999;font-size:11px">尚無設定</div>';
+}
+// 把第i筆移到最前面 → 改由它成為唯一的強制規則。
+function promotePairRule(i){
+  if(i<=0||!state.pairRules||i>=state.pairRules.length) return;
+  pushUndo();
+  const [r]=state.pairRules.splice(i,1);
+  state.pairRules.unshift(r);
+  autoSave(); renderPairRules();
+  showToast(`✅ 已改為強制：${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]} ${getDocName(r.b)}（其餘皆為盡量達成）`);
 }
 function addPairRule(){
   const a=document.getElementById('pair-doc1').value, b=document.getElementById('pair-doc2').value;
@@ -4036,7 +4072,10 @@ function renderStats(){
       // 兩人同日預假＝使用者自己批准的例外，不列為違反
       else if(r.type==='nooff'&&!aOn&&!bOn&&!(offBlocked(r.a,dd)&&offBlocked(r.b,dd))) bad.push(dd.slice(8));
     }
-    if(bad.length) viols.push(`⚠ 配對限制未達成：${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]} ${getDocName(r.b)}（${bad.length}天：${bad.slice(0,10).join('、')}${bad.length>10?'…':''}號）`);
+    if(bad.length){
+      const tag=isForcedPairRule(r)?'【強制】':'【盡量】';
+      viols.push(`⚠ 配對限制未達成${tag}：${getDocName(r.a)} ${PAIR_TYPE_LABEL[r.type]} ${getDocName(r.b)}（${bad.length}天：${bad.slice(0,10).join('、')}${bad.length>10?'…':''}號）`);
+    }
   }
   document.getElementById('stats-violations').innerHTML=viols.length
     ?`<div class="alert alert-warn"><strong>提醒事項：</strong><br>${viols.map(v=>`• ${v}`).join('<br>')}</div>`
