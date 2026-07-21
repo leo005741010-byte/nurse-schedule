@@ -299,8 +299,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <span class="wk-legend">檢 檢傷</span>
       <span class="wk-legend">A2 重症</span>
       <span class="wk-legend">B 留觀</span>
-      <span class="wk-legend">A3 支援</span>
-      <span class="wk-legend">流 流動</span>
+      <span class="wk-legend">A3 流動</span>
+      <span class="wk-legend">支 支援</span>
       <strong style="color:#0d5c4a;margin-left:10px">底色：</strong>
       <span class="wk-legend" style="background:#ffe9a3;border-color:#e0a800">D 白班</span>
       <span class="wk-legend" style="background:#c9e2fb;border-color:#1976d2">E 小夜</span>
@@ -651,9 +651,9 @@ const ROLES = {
   E:['組長','檢傷','重症','留觀','留觀','流動'],
   N:['組長','檢傷','留觀','留觀'],
 };
-// 位置代號(單位實際使用的代號)：組長=A1、檢傷=檢、重症=A2、支援=A3、留觀=B、流動=流。
+// 位置代號(單位實際使用的代號)：組長=A1、檢傷=檢、重症=A2、留觀=B、流動=A3、支援=支。
 // 內部資料仍以中文角色名為鍵(不更動既有班表資料)，這裡只負責畫面顯示的代號。
-const ROLE_ABBR = {組長:'A1',檢傷:'檢',重症:'A2',留觀:'B',流動:'流',支援:'A3'};
+const ROLE_ABBR = {組長:'A1',檢傷:'檢',重症:'A2',留觀:'B',流動:'A3',支援:'支'};
 // 各班別每種角色的預設人數(供使用者於「角色人數設定」自訂調整，初始值取自 ROLES 現行結構)。
 const ROLE_ORDER=['組長','檢傷','重症','留觀','流動'];
 function defaultRoleCounts(){
@@ -4245,7 +4245,7 @@ function renderMasterGrid(){
 // 工作總表：每格顯示該人當天實際擔任的「位置代號」(A1/檢/A2/B/A3/流)，
 // 底色區分班別(D/E/N/H/特班/OFF)，右側統計各位置的天數。唯讀檢視用。
 // ============================================================
-const WORK_ROLE_CODES=['組長','檢傷','重症','留觀','支援','流動'];
+const WORK_ROLE_CODES=['組長','檢傷','重症','留觀','流動','支援'];
 function workShiftClass(sh){
   if(!sh) return 'wk-OFF';
   if(sh==='H') return 'wk-H';
