@@ -310,7 +310,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           <label style="font-size:12px;font-weight:700;color:#555;padding-top:3px">不在預假限制天數人員：</label>
           <div id="long-leave-list" style="display:flex;flex-wrap:wrap;gap:6px;flex:1"></div>
         </div>
-        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數，這是「當月休假總天數」的精確目標(已包含既有預假，例如填16天代表整月休假就是16天)，自動排班會把班數收斂到此目標，不建立實際OFF日期</div>
+        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數——這是<b style="color:#c0392b">強制</b>的「當月休假總天數」(已包含既有預假，例如填16天代表整月休假就是<b>剛好16天，不可多也不可少</b>)，自動排班會把工作日數鎖定為「在職天數−休假天數」，不建立實際OFF日期。<br>※唯一例外：若少排這些班會造成<b>空班</b>(不留空班為最高鐵則)，才會允許超出，並在排班完成時提示。</div>
       </div>
       <h3 style="margin-bottom:8px">新增預假/預班</h3>
       <div class="pr-form">
@@ -435,7 +435,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <ul class="help-ul">
         <li>選護理師 → 在小月曆上<b>點選日期</b>（可連點多個不連續日期，再點一次取消）→ 選類型 → 按「新增」。</li>
         <li>類型：<b>當天OFF</b>（預假）、<b>排D／E／N班</b>（預班，指定當天一定上某班）。預班會被鎖定，自動排班一定照排。</li>
-        <li>可設定每人每月最多預假天數、其中假日上限。「不在預假限制天數人員」可填當月休假總天數目標，自動排班會把班數收斂到此目標。</li>
+        <li>可設定每人每月最多預假天數、其中假日上限。</li>
+        <li><b>「不在預假限制天數人員」填的休假天數為<span style="color:#c0392b">強制</span></b>：填幾天就<b>剛好休幾天，不可多也不可少</b>（例如填16天＝整月休假剛好16天，已含既有預假）。自動排班會把工作日數鎖定為「在職天數−休假天數」；H行政班／D12/N12特班也算工作日，所以有H的人一般班會相應減少。<br>唯一例外：若硬要達成會造成<b>空班</b>（不留空班為最高鐵則），才允許超出，並在排班完成時明確提示差幾天。</li>
       </ul>
 
       <h3 class="help-h3">📈 五、統計報表</h3>
@@ -1297,6 +1298,33 @@ function moveWouldIsolate(giverId,takerId,date,sched){
   if(isAssignedThatDay(giverId,next,sched)&&_neighborShiftState(giverId,addDays(date,2),sched)==='off') return true;
   return false;
 }
+// 「不在預假限制天數人員」若填了當月休假天數，該數字為【強制】目標：休假天數必須剛好等於它，
+// 不可多也不可少 → 當月工作日數必須剛好 =(在職天數 − 休假天數)。
+// 這裡做「上限」把關：一旦已達目標工作日數就不得再被排班(避免休假變少)；
+// 不足的部分由 enforceLongLeaveExactDays 補滿(避免休假變多)。
+function monthWorkDayCount(nurseId,y,m,sched){
+  const pref=`${y}-${String(m+1).padStart(2,'0')}`;
+  let n=0;
+  for(const d of Object.keys(sched)){
+    if(!d.startsWith(pref)) continue;
+    if(isAssignedThatDay(nurseId,d,sched)) n++;
+  }
+  return n;
+}
+function longLeaveWorkTarget(nurseId,y,m){
+  if(!isLongLeaveExempt(nurseId,y,m)) return null;
+  const leaveDays=getNurseLongLeaveDays(nurseId,y,m);
+  if(!leaveDays) return null;
+  let empDays=0;
+  for(const d of monthDates(y,m)) if(isEmployedOnDate(nurseId,d)) empDays++;
+  return Math.max(0,empDays-leaveDays);
+}
+function longLeaveBlocksMore(nurseId,date,sched){
+  const{y,m}=ymFromDate(date);
+  const target=longLeaveWorkTarget(nurseId,y,m); // 絕大多數人為 null，直接短路、不影響效能
+  if(target===null) return false;
+  return monthWorkDayCount(nurseId,y,m,sched)>=target;
+}
 function canWork(nurseId, date, shift, role, sched){
   const doc=state.doctors.find(d=>d.id===nurseId);
   if(!doc||doc.type!=='full') return false;
@@ -1311,6 +1339,7 @@ function canWork(nurseId, date, shift, role, sched){
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
+  if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
   return true;
 }
 // 強制排班用：休息時數／連續上班天數上限／班別指派／階級資格／在職日期／N-OFF-D／
@@ -1329,6 +1358,7 @@ function canWorkForce(nurseId, date, shift, role, sched){
   if(violatesNOffD(nurseId,date,shift,sched)) return false;
   if(violatesDtoNOrder(nurseId,date,shift,sched)) return false;
   if(violatesNtoDOrder(nurseId,date,shift,sched)) return false;
+  if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
   return true;
 }
 // 跨班別支援用：休假天數平衡機制專用，允許護理師支援非當月本班別的班次，
@@ -1355,6 +1385,7 @@ function canWorkSupport(nurseId, date, shift, role, sched){
   // 原則：一個月轉班(換班別)次數不超過4次。支援跨班別是轉班的來源，故在此把關
   // (同樣在保底補空班階段放行)。
   if(!_bypassShiftVariety && wouldExceedTransitions(nurseId,date,shift,sched)) return false;
+  if(!_bypassShiftVariety && longLeaveBlocksMore(nurseId,date,sched)) return false; // 指定休假天數為強制，已達工作日上限不得再排(僅保底補空班時放行，不留空班仍最優先)
   return true;
 }
 
@@ -2806,6 +2837,10 @@ function generateScheduleAttempt(y,m,dates){
   enforceNoOffTogether(newSched, fullSched, dates);
   enforceMustWorkTogether(newSched, fullSched, dates);
 
+  // 指定休假天數為【強制】：上面幾個收尾步驟可能又把這些人的班數挪動，故在最後再收斂一次。
+  // (上限已由 canWork*/longLeaveBlocksMore 擋住，這裡主要補「班數不足＝休假變多」的情況。)
+  enforceLongLeaveExactDays(newSched, fullSched, dates);
+
   // 鐵則保底：確認每筆預上班都在班(理論上鎖定機制已保證，此為最後防線)。
   enforceWorkPreRequests(newSched, dates);
 
@@ -2947,7 +2982,7 @@ async function autoSchedule(){
   if(bestQ.empty>0){
     showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${usedAttempts} 種排法取最佳解)，維持空班。`,'warn');
   } else if(bestQ.longLeaveMiss>0){
-    showToast(`排班完成，但「不在預假限制天數人員」中有人受限於連班上限/孤立單班等鐵則，休假天數與設定值誤差共${bestQ.longLeaveMiss}天(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
+    showToast(`⚠ 指定休假天數未完全達成：「不在預假限制天數人員」的休假天數與設定值合計差 ${bestQ.longLeaveMiss} 天。通常是為了「不留空班」或受連班上限/孤立單班等鐵則所限(已嘗試 ${usedAttempts} 種排法取最接近解)，請至統計報表確認。`,'warn');
   } else if(bestQ.seniorityViolations>0){
     showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
   } else if(bestQ.spread>3){
