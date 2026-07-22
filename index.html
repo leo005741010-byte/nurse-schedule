@@ -133,6 +133,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table tbody tr:nth-child(even) td.nm{background:#fafbfb;}
 #work-table tbody tr:hover td.nm{background:#e8f5f1;}
 #work-table tbody tr:hover td.wk{filter:brightness(.95);}
+#work-table input.wk-in{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:0;letter-spacing:.3px;}
+#work-table input.wk-in:focus{outline:2px solid #0d5c4a;outline-offset:-2px;background:#fff;}
+#work-table td.wk-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
+.wk-cellwarn{position:absolute;top:0;left:1px;font-size:7px;line-height:1;color:#c0392b;pointer-events:none;}
+.wk-daywarn{color:#ffd54f;font-size:9px;}
 .wk-D{background:#ffe9a3;color:#8a4b00;}
 .wk-E{background:#c9e2fb;color:#0d47a1;}
 .wk-N{background:#e2c9f0;color:#4a148c;}
@@ -310,7 +315,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <span class="wk-legend" style="background:#cfd8dc;border-color:#607d8b">H 行政</span>
       <span class="wk-legend" style="background:#ffc27a;border-color:#ef6c00">D12/N12</span>
       <span class="wk-legend" style="background:#f1f3f4;border-color:#bdbdbd">OFF 休假</span>
-      <span class="wk-hint">💡 點人名＝只看他的上班日；點日期＝只看當天在班的人(依D→E→N排列)，再點一次還原</span>
+      <span class="wk-hint">💡 格子可直接輸入位置代號(A1／T或檢／A2／B／A3／支)更改位置；點人名＝只看他的上班日；點日期＝只看當天在班的人(依D→E→N排列)，再點一次還原</span>
     </div>
     <div class="stats-wrap">
       <table id="work-table"><thead id="work-thead"></thead><tbody id="work-tbody"></tbody></table>
@@ -4385,6 +4390,81 @@ function renderMasterGrid(){
 // 底色區分班別(D/E/N/H/特班/OFF)，右側統計各位置的天數。唯讀檢視用。
 // ============================================================
 const WORK_ROLE_CODES=['組長','檢傷','重症','留觀','流動','支援'];
+// 工作總表可直接輸入的位置代號 → 角色名。檢傷除了打「檢」，也接受打「T」(該位置的階級代號)。
+const WORK_CODE_TO_ROLE={A1:'組長',T:'檢傷','檢':'檢傷',A2:'重症',B:'留觀',A3:'流動','流':'流動','支':'支援'};
+// 該日某班別「目前實際的位置組成」是否與『角色人數設定』相符。
+// 手動改位置時只換人不換格，理論上不會跑掉；但既有班表可能是舊設定產生的，
+// 或使用者事後改了角色人數設定，此時就會不符，於日期表頭標示❗提醒。
+function dayRolesMismatch(dateStr){
+  const ds=state.schedule[dateStr]; if(!ds||!ds.roles) return null;
+  // 有D12/N12(12小時特班)的日子，一般班的格數會被 syncDayRolesForSpecialShift 收斂掉，
+  // 本來就不會等於角色人數設定，不算不符。
+  if((ds.D12&&ds.D12.length)||(ds.N12&&ds.N12.length)) return null;
+  for(const sh of SHIFTS){
+    const want=getRoleTemplate(sh), got=[...(ds.roles[sh]||[])];
+    if(want.length!==got.length) return sh;
+    const w=[...want].sort(), g=got.sort();
+    for(let i=0;i<w.length;i++) if(w[i]!==g[i]) return sh;
+  }
+  return null;
+}
+// 工作總表格內輸入位置代號：只換「這個人擔任的位置」，不動班別、不動當天的位置組成。
+// 作法是與同班別中原本擔任該位置的人互換位置(對方也要有資格)；若該位置有空格則直接移過去。
+function updateWorkCell(nurseId,dateStr,rawVal){
+  if(isCurrentMonthLocked()){ showToast('🔒 本月已完成，班表無法修改','warn'); renderWorkGrid(); return; }
+  const raw=(rawVal||'').trim().toUpperCase();
+  const ds=state.schedule[dateStr];
+  // 找出這個人當天在哪一個一般班(D/E/N)的第幾格
+  let shift=null, idx=-1;
+  if(ds) for(const sh of SHIFTS){ const i=(ds[sh]||[]).indexOf(nurseId); if(i>=0){ shift=sh; idx=i; break; } }
+  if(!shift){ showToast('⚠ 此人當天沒有一般班(D/E/N)，請先在月班總表指派班別再設定位置','warn'); renderWorkGrid(); return; }
+  if(!raw){ renderWorkGrid(); return; }                     // 清空＝不變更(位置不能是空的)
+  const role=WORK_CODE_TO_ROLE[raw];
+  if(!role){ showToast(`請輸入位置代號：A1(組長)、T或檢(檢傷)、A2(重症)、B(留觀)、A3(流動)、支(支援)`,'warn'); renderWorkGrid(); return; }
+  if(ds.roles[shift][idx]===role){ renderWorkGrid(); return; } // 沒變
+
+  const doc=state.doctors.find(x=>x.id===nurseId);
+  // 鐵則1：階級資格。不能上的位置就是不能打。
+  if(!roleAllowed(doc.prefs.level,role)){
+    showToast(`❌ ${doc.name}的階級為${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level}，不能擔任「${role}(${ROLE_ABBR[role]})」`,'warn');
+    renderWorkGrid(); return;
+  }
+  // 鐵則2：位置優先為強制，設定後只能待在該位置。
+  if(rolePrefBlocksRole(nurseId,dateStr,role)){
+    const{y,m}=ymFromDate(dateStr);
+    const pref=getRolePref(nurseId,y,m);
+    showToast(`❌ ${doc.name}本月設定了「位置優先：${LEVEL_ROLE[pref]}」為強制，不能改成「${role}」。要改請先到護理師設定取消位置優先。`,'warn');
+    renderWorkGrid(); return;
+  }
+  // 目標位置在同一個班別中的格子：優先找空格，其次找目前占用者
+  const targets=[];
+  ds.roles[shift].forEach((r,i)=>{ if(r===role&&i!==idx) targets.push(i); });
+  if(!targets.length){
+    showToast(`⚠ ${dateStr} 的${shift}班沒有「${role}(${ROLE_ABBR[role]})」這個位置，請先到排班表的「角色人數設定」調整`,'warn');
+    renderWorkGrid(); return;
+  }
+  let ti=targets.find(i=>!ds[shift][i]);
+  if(ti===undefined){
+    // 全部有人 → 找一個「對方也能接手我原本位置」的人互換
+    const myRole=ds.roles[shift][idx];
+    ti=targets.find(i=>{
+      const other=ds[shift][i];
+      const od=state.doctors.find(x=>x.id===other);
+      return od&&roleAllowed(od.prefs.level,myRole)&&!rolePrefBlocksRole(other,dateStr,myRole);
+    });
+    if(ti===undefined){
+      showToast(`⚠ 「${role}(${ROLE_ABBR[role]})」的人都無法接手${doc.name}原本的「${ds.roles[shift][idx]}」(階級或位置優先不符)，無法互換`,'warn');
+      renderWorkGrid(); return;
+    }
+  }
+  pushUndo();
+  const other=ds[shift][ti];
+  ds[shift][ti]=nurseId;
+  ds[shift][idx]=other||null;   // 空格則原位變空
+  autoSave();
+  renderWorkGrid(); renderMasterGrid(); renderCalendar();
+  showToast(other?`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}，與${getDocName(other)}互換位置`:`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}`);
+}
 function workShiftClass(sh){
   if(!sh) return 'wk-OFF';
   if(sh==='H') return 'wk-H';
@@ -4417,7 +4497,10 @@ function renderWorkGrid(){
     const colSel=_wkSelDate===d;
     const selNurseWorked=_wkSelNurse&&shiftOfNurseOnDate(_wkSelNurse,d);
     const cls=['dt',hol?'wknd wk-hol':'',colSel?'wk-col-active':'',selNurseWorked?'wk-glow':''].filter(Boolean).join(' ');
-    return `<th class="${cls}" onclick="wkSelectDate('${d}')" style="cursor:pointer" title="點擊只顯示此日有上班的人">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
+    // 該日的位置組成與「角色人數設定」不符 → 標❗提醒
+    const mm=dayRolesMismatch(d);
+    const warn=mm?`<span class="wk-daywarn" title="${d} 的${mm}班位置組成與『角色人數設定』不符（應為 ${shiftRoleSummary(mm)}）">❗</span>`:'';
+    return `<th class="${cls}" onclick="wkSelectDate('${d}')" style="cursor:pointer" title="點擊只顯示此日有上班的人">${parseInt(d.slice(-2))}${warn}<br>${dowNames[getDOW(d)]}</th>`;
   }).join('')
    +WORK_ROLE_CODES.map((r,i)=>`<th class="wk-sum${i===0?' wk-sep':''}" title="當月擔任「${r}」的天數">${ROLE_ABBR[r]}</th>`).join('')
    +`<th class="wk-sum wk-sep">總班數</th><th class="wk-sum">放假數</th><th class="wk-sum" title="當月假日中有上班的天數">假日班</th></tr>`;
@@ -4456,12 +4539,20 @@ function renderWorkGrid(){
       if(!isEmployedOnDate(doc.id,d)) return `<td class="wk wk-NA${extra}">－</td>`;
       const sh=shiftOfNurseOnDate(doc.id,d);
       if(!sh) return `<td class="wk wk-OFF${extra}">OFF</td>`;
-      let code=sh; // H / D12 / N12 直接顯示班別代號
-      if(SHIFTS.includes(sh)){
-        const role=roleOfNurseOnDate(doc.id,d,sh);
-        code=role?(ROLE_ABBR[role]||role):sh;
-      }
-      return `<td class="wk ${workShiftClass(sh)}${extra}" title="${d.slice(5)} ${sh}班${code!==sh?'／'+code:''}">${code}</td>`;
+      if(!SHIFTS.includes(sh)) // H / D12 / N12 沒有位置概念，直接顯示班別代號、不可編輯
+        return `<td class="wk ${workShiftClass(sh)}${extra}" title="${d.slice(5)} ${sh}班">${sh}</td>`;
+      const role=roleOfNurseOnDate(doc.id,d,sh);
+      const code=role?(ROLE_ABBR[role]||role):sh;
+      // 階級不符警示(與月班總表同一套判定)
+      const bad=role&&!roleAllowed(doc.prefs.level,role);
+      const warnTitle=bad?`⚠ ${doc.name}(${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level})不符合「${role}」的階級要求；`:'';
+      return `<td class="wk ${workShiftClass(sh)}${extra}${bad?' wk-role-warn':''}" style="position:relative">`
+        +`<input type="text" maxlength="2" value="${escAttr(code)}" class="wk-in"`
+        +` oninput="this.dataset.dirty='1'"`
+        +` onblur="if(this.dataset.dirty){this.dataset.dirty='';updateWorkCell('${doc.id}','${d}',this.value);}"`
+        +` onkeydown="if(event.key==='Enter')this.blur()"`
+        +` title="${warnTitle}${d.slice(5)} ${sh}班。可直接輸入位置代號：A1(組長)、T或檢(檢傷)、A2(重症)、B(留觀)、A3(流動)、支(支援)；階級不符或已設位置優先者不可更改">`
+        +`${bad?`<span class="wk-cellwarn">❗</span>`:''}</td>`;
     }).join('');
 
     const roleSums=WORK_ROLE_CODES.map((r,i)=>{
