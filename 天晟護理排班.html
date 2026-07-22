@@ -2807,7 +2807,16 @@ function generateScheduleAttempt(y,m,dates){
   const newSched={};
   for(const d of dates){
     const existing=state.schedule[d]||{};
-    const roles=existing.roles||{D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
+    // 一律以目前「角色人數設定」重建當天D/E/N的位置組成，【不沿用】既有roles——
+    // 既有資料可能含手動加開的支援格(在月班總表對額外的人打E時會自動加開一格)或格數
+    // 已跑掉的舊資料；若沿用，自動排班會把多出來的格子當成固定需求(例如某天7人上E)，
+    // 同時把人力抽去填它、造成其他班別空缺，而且之後每次重排都會複製同樣的錯誤。
+    // 手動加開屬於單日人工調整，自動排班重排整月時應回歸標準組成。
+    // 例外：有D12/N12特班的日子，一般班格數已被收斂(特班取代一般班結構)，維持既有收斂結果。
+    const hasSpecial=(existing.D12&&existing.D12.length>0)||(existing.N12&&existing.N12.length>0);
+    const roles=hasSpecial
+      ? (existing.roles||{D:[],E:[],N:[]})
+      : {D:getRoleTemplate('D'),E:getRoleTemplate('E'),N:getRoleTemplate('N')};
     // D12/N12(12小時特殊班)為手動排列、不參與自動排班，故直接沿用既有指派、原樣帶入結果，
     // 不可被自動排班的產生過程覆蓋或遺失；isAssignedThatDay等忙碌檢查會讀到這裡的資料，
     // 讓一般D/E/N的排班自動避開這些已佔用12小時班的人。
@@ -4320,7 +4329,9 @@ function renderMasterGrid(){
     const selNurseWorked=_mgSelNurse&&shiftOfNurseOnDate(_mgSelNurse,d);
     const thClass=['dt',wknd?'wknd':'',colSel?'mg-col-active':'',selNurseWorked?'mg-glow':''].filter(Boolean).join(' ');
     const emptyWarn=dateHasEmptySlot(d)?`<span title="本日仍有一般班(D/E/N)空缺" style="color:#ffeb3b">⚠</span>`:'';
-    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}${emptyWarn}<br>${dowNames[dow]}</th>`;
+    const mmSh=dayRolesMismatch(d);
+    const mmWarn=mmSh?`<span title="${d} 的${mmSh}班位置組成與『角色人數設定』不符（應為 ${shiftRoleSummary(mmSh)}）。通常是曾手動多排/少排人所致；按自動排班會回歸標準組成。" style="color:#ffab91">❗</span>`:'';
+    return `<th class="${thClass}" onclick="mgSelectDate('${d}')" style="cursor:pointer" title="點擊反白此日期">${parseInt(d.slice(-2))}${emptyWarn}${mmWarn}<br>${dowNames[dow]}</th>`;
   }).join('')+`<th>總班數</th><th>放假數</th><th>假日班數</th><th title="當月國定/例假日中放假的天數">假日休</th><th>總時數</th></tr>`;
   document.getElementById('master-thead').innerHTML=thead;
 
