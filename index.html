@@ -210,7 +210,14 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .pr-cal-cell.range-start.range-end{border-radius:4px;}
 .pr-cal-hint{font-size:11px;color:#555;margin-top:5px;min-height:16px;}
 .pr-cal-selected{font-size:12px;color:#0d5c4a;font-weight:600;margin-top:3px;min-height:16px;}
-#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:6px;font-size:13px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 18px;border-radius:6px;font-size:13px;z-index:2000;opacity:0;pointer-events:none;transition:opacity .3s;max-width:min(92vw,900px);text-align:center;line-height:1.5;}
+#toast.sticky{pointer-events:auto;cursor:pointer;}
+#sched-result{margin:0 0 8px;}
+#sched-result .sr-box{display:flex;align-items:flex-start;gap:10px;padding:9px 12px;border-radius:6px;font-size:13px;line-height:1.6;}
+#sched-result .sr-warn{background:#fdecea;border:1px solid #e57373;color:#8e2b21;}
+#sched-result .sr-ok{background:#e8f5e9;border:1px solid #81c784;color:#1b5e20;}
+#sched-result .sr-x{margin-left:auto;flex:none;background:transparent;border:none;font-size:15px;font-weight:700;cursor:pointer;color:inherit;opacity:.6;padding:0 2px;line-height:1;}
+#sched-result .sr-x:hover{opacity:1;}
 #toast.show{opacity:0.95;}
 #toast.warn{background:#c0392b;}
 #sched-progress-overlay{position:fixed;inset:0;background:rgba(13,92,74,.82);z-index:3000;display:none;flex-direction:column;align-items:center;justify-content:center;color:#fff;}
@@ -252,6 +259,10 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div id="sched-progress-text">排班計算中…</div>
   <div id="sched-progress-sub" style="font-size:12px;opacity:.8;margin-top:4px"></div>
 </div>
+
+<!-- 排班結果常駐橫幅：自動排班的提醒訊息會留在這裡，直到使用者按✕或下次排班為止
+     (原本只用會自動消失的toast，訊息長時常來不及看完) -->
+<div id="sched-result"></div>
 
 <div id="tabs">
   <div class="tab active" onclick="switchTab('master')">🗂 月班總表</div>
@@ -3191,19 +3202,21 @@ async function autoSchedule(){
   autoSave();
   renderCalendar();
   switchTab('master');
-  if(bestQ.empty>0){
-    showToast(`排班完成，${bestQ.empty} 個職位即使連鎖調整仍無法排入(人力總量不足；已嘗試 ${usedAttempts} 種排法取最佳解)，維持空班。`,'warn');
-  } else if(bestQ.longLeaveMiss>0){
-    showToast(`⚠ 指定休假天數未完全達成：「不在預假限制天數人員」的休假天數與設定值合計差 ${bestQ.longLeaveMiss} 天。通常是為了「不留空班」或受連班上限/孤立單班等鐵則所限(已嘗試 ${usedAttempts} 種排法取最接近解)，請至統計報表確認。`,'warn');
-  } else if(bestQ.pairViolations>0){
-    showToast(`⚠ 強制配對限制有 ${bestQ.pairViolations} 天未達成（不能同時上班／不能同時放假）。通常是當天兩人都已達連班上限等更高階鐵則所致，請至統計報表查看是哪幾天。`,'warn');
-  } else if(bestQ.seniorityViolations>0){
-    showToast(`排班完成，但受限於連班上限/孤立單班/N不能貼D等鐵則，休假最多者有${bestQ.maxOffNotSenior}位資淺、上最多班者有${bestQ.maxShiftNotJunior}位資深仍未能符合資深/資淺原則(已嘗試 ${usedAttempts} 種排法取最接近解)。`,'warn');
-  } else if(bestQ.spread>3){
-    // 班數全距超過鐵則的3：通常是「不能同時上班」等硬性配對限制或人力結構造成的數學上限，
-    // 引擎已取最接近解，但必須讓使用者知道休假天數落差偏大、以及可能的原因。
-    showToast(`排班完成(零空班)，但班數全距為 ${bestQ.spread}(超過鐵則的3)。通常因「不能同時上班」配對、長區間限制或人力結構所致，屬結構上限，請檢視統計報表確認休假分布。`,'warn');
+  // 排班結果訊息可能很長，只用會自動消失的toast常常來不及看完。
+  // 改為同時寫進頁籤列上方的常駐橫幅(按✕或下次排班才消失)，toast 也改為點一下才關。
+  const msgs=[];
+  if(bestQ.empty>0) msgs.push(`❌ <b>${bestQ.empty} 個職位無法排入</b>：即使連鎖調整仍排不進去(人力總量不足)，維持空班。`);
+  if(bestQ.longLeaveMiss>0) msgs.push(`⚠ <b>指定休假天數未完全達成</b>：「不在預假限制天數人員」的休假天數與設定值合計差 ${bestQ.longLeaveMiss} 天。通常是為了「不留空班」或受連班上限/孤立單班等鐵則所限。`);
+  if(bestQ.pairViolations>0) msgs.push(`⚠ <b>強制配對限制有 ${bestQ.pairViolations} 天未達成</b>：通常是當天兩人都已達連班上限等更高階鐵則所致，請至統計報表查看是哪幾天。`);
+  if(bestQ.seniorityViolations>0) msgs.push(`⚠ <b>資深/資淺原則未完全符合</b>：休假最多者有 ${bestQ.maxOffNotSenior} 位資淺、上最多班者有 ${bestQ.maxShiftNotJunior} 位資深，受連班上限/孤立單班/N不能貼D等鐵則所限。`);
+  if(bestQ.spread>3) msgs.push(`⚠ <b>班數全距為 ${bestQ.spread}</b>(超過鐵則的3)：通常因「不能同時上班」配對、長區間限制或人力結構所致，屬結構上限，請檢視統計報表確認休假分布。`);
+  const attemptsNote=`<br><span style="opacity:.75;font-size:12px">已嘗試 ${usedAttempts} 種排法取最佳解。`;
+  if(msgs.length){
+    setSchedResult(`<b>排班完成，但有 ${msgs.length} 項提醒：</b><br>`+msgs.map(m=>'• '+m).join('<br>')
+      +attemptsNote+`詳細未達成日期請看「📈 統計報表」。</span>`,'warn');
+    showToast(`排班完成，有 ${msgs.length} 項提醒(詳見上方紅色訊息)。點此關閉。`,'warn',true);
   } else {
+    setSchedResult(`✅ <b>自動排班完成，已全數排滿</b>，且空班/孤立單班/配對限制/資深資淺/班數全距皆符合。${attemptsNote}</span>`,'ok');
     showToast('✅ 自動排班完成，已全數排滿！','ok');
   }
 }
@@ -4754,12 +4767,22 @@ function updateMasterCell(nurseId,dateStr,rawVal){
 // ============================================================
 // UI HELPERS
 // ============================================================
-function showToast(msg,type='ok'){
+// sticky=true：訊息不自動消失，點一下才關(排班結果等長訊息用，避免來不及看完)。
+function showToast(msg,type='ok',sticky=false){
   const t=document.getElementById('toast');
   t.textContent=msg;
-  t.className='show'+(type==='warn'?' warn':'');
+  t.className='show'+(type==='warn'?' warn':'')+(sticky?' sticky':'');
   clearTimeout(t._timer);
-  t._timer=setTimeout(()=>{t.className='';},2200);
+  t.onclick=sticky?()=>{t.className='';t.onclick=null;}:null;
+  if(!sticky) t._timer=setTimeout(()=>{t.className='';},2200);
+}
+// 排班結果常駐橫幅：留在頁籤列上方直到使用者按✕或下次排班，切換分頁也看得到。
+function setSchedResult(msg,type){
+  const box=document.getElementById('sched-result'); if(!box) return;
+  if(!msg){ box.innerHTML=''; return; }
+  const cls=type==='warn'?'sr-warn':'sr-ok';
+  box.innerHTML=`<div class="sr-box ${cls}"><span>${msg}</span>`
+    +`<button class="sr-x" onclick="setSchedResult('')" title="關閉這則訊息">✕</button></div>`;
 }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); renderCalendar(); }
 // 頁首月份導覽為全域元件(各分頁都看得到)，改變月份時其他分頁(護理師設定／預假預班／
