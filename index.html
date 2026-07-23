@@ -133,6 +133,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table tbody tr:nth-child(even) td.nm{background:#fafbfb;}
 #work-table tbody tr:hover td.nm{background:#e8f5f1;}
 #work-table tbody tr:hover td.wk{filter:brightness(.95);}
+/* 滑鼠移到某列時，灰色底一路連到最右邊的統計欄(位置天數/總班數/放假數/假日班)，
+   方便沿著同一列看到這個人這個月各項統計(尤其假日班幾班)。 */
+#work-table tbody tr:hover td.wk-sum{background:#dfe7e5!important;}
 #work-table input.wk-in{width:100%;box-sizing:border-box;border:none;background:transparent;text-align:center;font:inherit;font-weight:700;color:inherit;padding:0;letter-spacing:.3px;}
 #work-table input.wk-in:focus{outline:2px solid #0d5c4a;outline-offset:-2px;background:#fff;}
 #work-table td.wk-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
