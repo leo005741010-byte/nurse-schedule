@@ -869,6 +869,19 @@ function sortedRoster(y,m){
 // 因跨班別支援的人當天實際上的班可能跟他整月的當月班別不同，若仍照整月分組會讓
 // 同一天同班別的人排序看起來錯亂。順序：D→D12→E→N12→N，組內再依階級 L→T→A2→B。
 const SHIFT_SORT_ORDER={D:0,D12:1,E:2,N12:3,N:4};
+// 工作總表點日期時的排序：先班別(D→E→N)，同班別內再依實際位置 A1→檢→A2→A3→B→支。
+const WORK_POS_ORDER={組長:0,檢傷:1,重症:2,流動:3,留觀:4,支援:5};
+function sortRosterForWorkDate(list,dateStr){
+  return [...list].sort((a,b)=>{
+    const sa=shiftOfNurseOnDate(a.id,dateStr), sb=shiftOfNurseOnDate(b.id,dateStr);
+    const oa=SHIFT_SORT_ORDER[sa]??9, ob=SHIFT_SORT_ORDER[sb]??9;
+    if(oa!==ob) return oa-ob;
+    const ra=roleOfNurseOnDate(a.id,dateStr,sa), rb=roleOfNurseOnDate(b.id,dateStr,sb);
+    const pa=WORK_POS_ORDER[ra]??9, pb=WORK_POS_ORDER[rb]??9;
+    if(pa!==pb) return pa-pb;
+    return (LEVEL_ORDER[a.prefs&&a.prefs.level]??9)-(LEVEL_ORDER[b.prefs&&b.prefs.level]??9);
+  });
+}
 function sortRosterForDate(list,dateStr){
   return [...list].sort((a,b)=>{
     const oa=SHIFT_SORT_ORDER[shiftOfNurseOnDate(a.id,dateStr)]??9;
@@ -4543,7 +4556,7 @@ function renderWorkGrid(){
   document.getElementById('work-thead').innerHTML=thead;
 
   const roster=sortedRoster(y,m);
-  const visibleRoster=_wkSelDate?sortRosterForDate(roster.filter(doc=>shiftOfNurseOnDate(doc.id,_wkSelDate)),_wkSelDate):roster;
+  const visibleRoster=_wkSelDate?sortRosterForWorkDate(roster.filter(doc=>shiftOfNurseOnDate(doc.id,_wkSelDate)),_wkSelDate):roster;
   const finalRoster=visibleRoster.length?visibleRoster:roster;
 
   const rows=finalRoster.map(doc=>{
