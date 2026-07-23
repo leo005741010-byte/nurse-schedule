@@ -163,6 +163,14 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table td.wk-col-active{box-shadow:inset 2px 0 0 #0d5c4a,inset -2px 0 0 #0d5c4a;}
 #work-table th.wk-glow,#work-table td.wk-glow{box-shadow:inset 0 0 0 2px #f9a825;}
 #work-table td.nm.wk-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
+/* 上方位置代號按鈕：可點、被選時亮起；表格中對應位置的格子也一起反白 */
+.wk-legend-btn{cursor:pointer;user-select:none;transition:all .12s;}
+.wk-legend-btn:hover{border-color:#0d5c4a;}
+.wk-legend-btn.wk-legend-on{background:#0d5c4a!important;color:#fff!important;border-color:#0d5c4a!important;box-shadow:0 0 0 2px #a5d6c7;}
+#work-table td.wk.wk-hipos{box-shadow:inset 0 0 0 2px #0d5c4a;filter:brightness(1.03);}
+#work-table td.wk.wk-hipos .wk-in{color:#0d5c4a;text-shadow:0 0 1px rgba(13,92,74,.35);}
+/* 有反白時，未被選中的一般班格子稍微淡化，讓被選位置更突出(OFF/未在職不淡化) */
+#work-table.wk-hi-active td.wk:not(.wk-hipos):not(.wk-OFF):not(.wk-NA){opacity:.42;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
 .mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
@@ -313,12 +321,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div id="tab-work" class="tab-pane">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">
       <strong style="color:#0d5c4a">位置代號：</strong>
-      <span class="wk-legend">A1 組長</span>
-      <span class="wk-legend">檢 檢傷</span>
-      <span class="wk-legend">A2 重症</span>
-      <span class="wk-legend">B 留觀</span>
-      <span class="wk-legend">A3 流動</span>
-      <span class="wk-legend">支 支援</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('組長')" title="點一下把所有 A1(組長) 格子亮起來，再點取消">A1 組長</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('檢傷')" title="點一下把所有 檢(檢傷) 格子亮起來，再點取消">檢 檢傷</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('重症')" title="點一下把所有 A2(重症) 格子亮起來，再點取消">A2 重症</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('留觀')" title="點一下把所有 B(留觀) 格子亮起來，再點取消">B 留觀</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('流動')" title="點一下把所有 A3(流動) 格子亮起來，再點取消">A3 流動</span>
+      <span class="wk-legend wk-legend-btn" onclick="wkHiPos('支援')" title="點一下把所有 支(支援) 格子亮起來，再點取消">支 支援</span>
       <strong style="color:#0d5c4a;margin-left:10px">底色：</strong>
       <span class="wk-legend" style="background:#ffe9a3;border-color:#e0a800">D 白班</span>
       <span class="wk-legend" style="background:#c9e2fb;border-color:#1976d2">E 小夜</span>
@@ -4524,6 +4532,8 @@ function workShiftClass(sh){
 }
 // 反白選取狀態與月班總表各自獨立(兩張表可分別看不同的人/日期，互不干擾)。
 let _wkSelNurse=null, _wkSelDate=null;
+let _wkHiPos=null; // 上方位置代號被點選時，要在表格中反白的位置(角色名)
+function wkHiPos(role){ _wkHiPos=(_wkHiPos===role)?null:role; renderWorkGrid(); }
 function wkSelectNurse(nurseId){
   _wkSelNurse=(_wkSelNurse===nurseId)?null:nurseId; _wkSelDate=null;
   renderWorkGrid();
@@ -4594,8 +4604,9 @@ function renderWorkGrid(){
       const code=role?(ROLE_ABBR[role]||role):sh;
       // 階級不符警示(與月班總表同一套判定)
       const bad=role&&!roleAllowed(doc.prefs.level,role);
+      const hiPos=_wkHiPos&&role===_wkHiPos?' wk-hipos':''; // 上方點選的位置代號 → 反白
       const warnTitle=bad?`⚠ ${doc.name}(${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level})不符合「${role}」的階級要求；`:'';
-      return `<td class="wk ${workShiftClass(sh)}${extra}${bad?' wk-role-warn':''}" style="position:relative">`
+      return `<td class="wk ${workShiftClass(sh)}${extra}${bad?' wk-role-warn':''}${hiPos}" style="position:relative">`
         +`<input type="text" maxlength="2" value="${escAttr(code)}" class="wk-in"`
         +` oninput="this.dataset.dirty='1'"`
         +` onblur="if(this.dataset.dirty){this.dataset.dirty='';updateWorkCell('${doc.id}','${d}',this.value);}"`
@@ -4618,6 +4629,11 @@ function renderWorkGrid(){
       +`<td class="wk-sum">${doc.type==='full'?holWork:'-'}</td></tr>`;
   }).join('');
   document.getElementById('work-tbody').innerHTML=rows;
+  // 反映目前被點亮的位置代號按鈕(對應 _wkHiPos)
+  document.querySelectorAll('.wk-legend-btn').forEach(el=>{
+    el.classList.toggle('wk-legend-on', !!_wkHiPos && el.getAttribute('onclick')===`wkHiPos('${_wkHiPos}')`);
+  });
+  document.getElementById('work-table').classList.toggle('wk-hi-active', !!_wkHiPos);
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
