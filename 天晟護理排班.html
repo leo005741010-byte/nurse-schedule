@@ -4468,13 +4468,11 @@ function updateWorkCell(nurseId,dateStr,rawVal){
     showToast(`❌ ${doc.name}的階級為${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level}，不能擔任「${role}(${ROLE_ABBR[role]})」`,'warn');
     renderWorkGrid(); return;
   }
-  // 鐵則2：位置優先為強制，設定後只能待在該位置。
-  if(rolePrefBlocksRole(nurseId,dateStr,role)){
-    const{y,m}=ymFromDate(dateStr);
-    const pref=getRolePref(nurseId,y,m);
-    showToast(`❌ ${doc.name}本月設定了「位置優先：${LEVEL_ROLE[pref]}」為強制，不能改成「${role}」。要改請先到護理師設定取消位置優先。`,'warn');
-    renderWorkGrid(); return;
-  }
+  // 位置優先(rolePrefBlocksRole)只約束「自動排班」；使用者手動更改一律允許覆蓋，
+  // 只保留階級鐵則。若這次手動改與此人的位置優先不同，事後給一句提醒(不擋)。
+  const{y:_py,m:_pm}=ymFromDate(dateStr);
+  const _pref=getRolePref(nurseId,_py,_pm);
+  const overridePref=_pref&&role!==LEVEL_ROLE[_pref];
   // 目標位置在同一個班別中的格子：優先找空格，其次找目前占用者
   const targets=[];
   ds.roles[shift].forEach((r,i)=>{ if(r===role&&i!==idx) targets.push(i); });
@@ -4489,10 +4487,10 @@ function updateWorkCell(nurseId,dateStr,rawVal){
     ti=targets.find(i=>{
       const other=ds[shift][i];
       const od=state.doctors.find(x=>x.id===other);
-      return od&&roleAllowed(od.prefs.level,myRole)&&!rolePrefBlocksRole(other,dateStr,myRole);
+      return od&&roleAllowed(od.prefs.level,myRole); // 手動互換只看階級，不受對方位置優先限制
     });
     if(ti===undefined){
-      showToast(`⚠ 「${role}(${ROLE_ABBR[role]})」的人都無法接手${doc.name}原本的「${ds.roles[shift][idx]}」(階級或位置優先不符)，無法互換`,'warn');
+      showToast(`⚠ 「${role}(${ROLE_ABBR[role]})」的人階級都無法接手${doc.name}原本的「${ds.roles[shift][idx]}」，無法互換`,'warn');
       renderWorkGrid(); return;
     }
   }
@@ -4502,7 +4500,8 @@ function updateWorkCell(nurseId,dateStr,rawVal){
   ds[shift][idx]=other||null;   // 空格則原位變空
   autoSave();
   renderWorkGrid(); renderMasterGrid(); renderCalendar();
-  showToast(other?`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}，與${getDocName(other)}互換位置`:`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}`);
+  const prefNote=overridePref?`（註：本月位置優先為${LEVEL_ROLE[_pref]}，已手動覆蓋；下次自動排班仍會依位置優先）`:'';
+  showToast((other?`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}，與${getDocName(other)}互換位置`:`✅ ${dateStr} ${doc.name}改為${ROLE_ABBR[role]}`)+prefNote);
 }
 function workShiftClass(sh){
   if(!sh) return 'wk-OFF';
