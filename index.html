@@ -165,12 +165,15 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table td.nm.wk-glow{background:#f9a825!important;color:#3e2723!important;box-shadow:none;}
 /* 上方位置代號按鈕：可點、被選時亮起；表格中對應位置的格子也一起反白 */
 .wk-legend-btn{cursor:pointer;user-select:none;transition:all .12s;}
-.wk-legend-btn:hover{border-color:#0d5c4a;}
-.wk-legend-btn.wk-legend-on{background:#0d5c4a!important;color:#fff!important;border-color:#0d5c4a!important;box-shadow:0 0 0 2px #a5d6c7;}
-#work-table td.wk.wk-hipos{box-shadow:inset 0 0 0 2px #0d5c4a;filter:brightness(1.03);}
-#work-table td.wk.wk-hipos .wk-in{color:#0d5c4a;text-shadow:0 0 1px rgba(13,92,74,.35);}
-/* 有反白時，未被選中的一般班格子稍微淡化，讓被選位置更突出(OFF/未在職不淡化) */
-#work-table.wk-hi-active td.wk:not(.wk-hipos):not(.wk-OFF):not(.wk-NA){opacity:.42;}
+.wk-legend-btn:hover{border-color:#0d5c4a;filter:brightness(.97);}
+/* 被選中的代號按鈕：加深綠外框並保留自身底色(底色按鈕才看得出是哪一種) */
+.wk-legend-btn.wk-legend-on{outline:2px solid #0d5c4a;outline-offset:1px;box-shadow:0 0 0 2px #a5d6c7;font-weight:800;}
+/* 反白的格子(位置或班別)：綠內框＋提亮 */
+#work-table td.wk.wk-hipos,#work-table td.wk.wk-hishift{box-shadow:inset 0 0 0 2px #0d5c4a;filter:brightness(1.03);}
+#work-table td.wk.wk-hipos .wk-in,#work-table td.wk.wk-hishift .wk-in{color:#0d5c4a;text-shadow:0 0 1px rgba(13,92,74,.35);}
+/* 有反白時，未被選中的所有格子(含OFF、右側統計欄)一律淡化，讓被選的一路突出到最右邊 */
+#work-table.wk-hi-active td.wk:not(.wk-hipos):not(.wk-hishift){opacity:.38;}
+#work-table.wk-hi-active td.wk-sum{opacity:.38;}
 .mg-OFF{background:#fdecea;color:#c0392b;font-weight:700;}
 .mg-manual{box-shadow:inset 0 0 0 2px #6a1b9a;}
 .mg-role-warn{outline:2px solid #c0392b;outline-offset:-2px;}
@@ -328,13 +331,13 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <span class="wk-legend wk-legend-btn" onclick="wkHiPos('流動')" title="點一下把所有 A3(流動) 格子亮起來，再點取消">A3 流動</span>
       <span class="wk-legend wk-legend-btn" onclick="wkHiPos('支援')" title="點一下把所有 支(支援) 格子亮起來，再點取消">支 支援</span>
       <strong style="color:#0d5c4a;margin-left:10px">底色：</strong>
-      <span class="wk-legend" style="background:#ffe9a3;border-color:#e0a800">D 白班</span>
-      <span class="wk-legend" style="background:#c9e2fb;border-color:#1976d2">E 小夜</span>
-      <span class="wk-legend" style="background:#e2c9f0;border-color:#8e24aa">N 大夜</span>
-      <span class="wk-legend" style="background:#cfd8dc;border-color:#607d8b">H 行政</span>
-      <span class="wk-legend" style="background:#ffc27a;border-color:#ef6c00">D12/N12</span>
-      <span class="wk-legend" style="background:#f1f3f4;border-color:#bdbdbd">OFF 休假</span>
-      <span class="wk-hint">💡 格子可直接輸入位置代號(A1／T或檢／A2／B／A3／支)更改位置；點人名＝只看他的上班日；點日期＝只看當天在班的人(依D→E→N排列)，再點一次還原</span>
+      <span class="wk-legend wk-legend-btn" style="background:#ffe9a3;border-color:#e0a800" onclick="wkHiShift('D')" title="點一下把所有 D(白班) 格子亮起來，再點取消">D 白班</span>
+      <span class="wk-legend wk-legend-btn" style="background:#c9e2fb;border-color:#1976d2" onclick="wkHiShift('E')" title="點一下把所有 E(小夜) 格子亮起來，再點取消">E 小夜</span>
+      <span class="wk-legend wk-legend-btn" style="background:#e2c9f0;border-color:#8e24aa" onclick="wkHiShift('N')" title="點一下把所有 N(大夜) 格子亮起來，再點取消">N 大夜</span>
+      <span class="wk-legend wk-legend-btn" style="background:#cfd8dc;border-color:#607d8b" onclick="wkHiShift('H')" title="點一下把所有 H(行政) 格子亮起來，再點取消">H 行政</span>
+      <span class="wk-legend wk-legend-btn" style="background:#ffc27a;border-color:#ef6c00" onclick="wkHiShift('S')" title="點一下把所有 D12/N12 格子亮起來，再點取消">D12/N12</span>
+      <span class="wk-legend wk-legend-btn" style="background:#f1f3f4;border-color:#bdbdbd" onclick="wkHiShift('OFF')" title="點一下把所有 OFF(休假) 格子亮起來，再點取消">OFF 休假</span>
+      <span class="wk-hint">💡 點上方「位置代號」或「底色」任一顆，表格中對應的格子會整片亮起(其餘淡化)；格子可直接輸入位置代號(A1／T或檢／A2／B／A3／支)更改位置；點人名＝只看他的上班日；點日期＝只看當天在班的人</span>
     </div>
     <div class="stats-wrap">
       <table id="work-table"><thead id="work-thead"></thead><tbody id="work-tbody"></tbody></table>
@@ -4532,8 +4535,12 @@ function workShiftClass(sh){
 }
 // 反白選取狀態與月班總表各自獨立(兩張表可分別看不同的人/日期，互不干擾)。
 let _wkSelNurse=null, _wkSelDate=null;
-let _wkHiPos=null; // 上方位置代號被點選時，要在表格中反白的位置(角色名)
-function wkHiPos(role){ _wkHiPos=(_wkHiPos===role)?null:role; renderWorkGrid(); }
+let _wkHiPos=null;   // 上方「位置代號」被點選 → 反白該位置(角色名)
+let _wkHiShift=null; // 上方「底色」被點選 → 反白該班別(D/E/N/H/S特班/OFF)
+function wkHiPos(role){ _wkHiShift=null; _wkHiPos=(_wkHiPos===role)?null:role; renderWorkGrid(); }
+function wkHiShift(key){ _wkHiPos=null; _wkHiShift=(_wkHiShift===key)?null:key; renderWorkGrid(); }
+// 某格的班別反白鍵：OFF/H/特班(S)/D/E/N
+function wkShiftKeyOf(sh){ return !sh?'OFF':(sh==='H'?'H':(SPECIAL_SHIFTS.includes(sh)?'S':sh)); }
 function wkSelectNurse(nurseId){
   _wkSelNurse=(_wkSelNurse===nurseId)?null:nurseId; _wkSelDate=null;
   renderWorkGrid();
@@ -4597,16 +4604,17 @@ function renderWorkGrid(){
       if(doc.type!=='full') return `<td class="wk${extra}"></td>`;
       if(!isEmployedOnDate(doc.id,d)) return `<td class="wk wk-NA${extra}">－</td>`;
       const sh=shiftOfNurseOnDate(doc.id,d);
-      if(!sh) return `<td class="wk wk-OFF${extra}">OFF</td>`;
+      const hiSh=_wkHiShift&&wkShiftKeyOf(sh)===_wkHiShift?' wk-hishift':''; // 上方點選的底色 → 反白
+      if(!sh) return `<td class="wk wk-OFF${extra}${hiSh}">OFF</td>`;
       if(!SHIFTS.includes(sh)) // H / D12 / N12 沒有位置概念，直接顯示班別代號、不可編輯
-        return `<td class="wk ${workShiftClass(sh)}${extra}" title="${d.slice(5)} ${sh}班">${sh}</td>`;
+        return `<td class="wk ${workShiftClass(sh)}${extra}${hiSh}" title="${d.slice(5)} ${sh}班">${sh}</td>`;
       const role=roleOfNurseOnDate(doc.id,d,sh);
       const code=role?(ROLE_ABBR[role]||role):sh;
       // 階級不符警示(與月班總表同一套判定)
       const bad=role&&!roleAllowed(doc.prefs.level,role);
       const hiPos=_wkHiPos&&role===_wkHiPos?' wk-hipos':''; // 上方點選的位置代號 → 反白
       const warnTitle=bad?`⚠ ${doc.name}(${LEVEL_LABEL[doc.prefs.level]||doc.prefs.level})不符合「${role}」的階級要求；`:'';
-      return `<td class="wk ${workShiftClass(sh)}${extra}${bad?' wk-role-warn':''}${hiPos}" style="position:relative">`
+      return `<td class="wk ${workShiftClass(sh)}${extra}${bad?' wk-role-warn':''}${hiPos}${hiSh}" style="position:relative">`
         +`<input type="text" maxlength="2" value="${escAttr(code)}" class="wk-in"`
         +` oninput="this.dataset.dirty='1'"`
         +` onblur="if(this.dataset.dirty){this.dataset.dirty='';updateWorkCell('${doc.id}','${d}',this.value);}"`
@@ -4631,9 +4639,11 @@ function renderWorkGrid(){
   document.getElementById('work-tbody').innerHTML=rows;
   // 反映目前被點亮的位置代號按鈕(對應 _wkHiPos)
   document.querySelectorAll('.wk-legend-btn').forEach(el=>{
-    el.classList.toggle('wk-legend-on', !!_wkHiPos && el.getAttribute('onclick')===`wkHiPos('${_wkHiPos}')`);
+    const oc=el.getAttribute('onclick');
+    const on=(!!_wkHiPos && oc===`wkHiPos('${_wkHiPos}')`)||(!!_wkHiShift && oc===`wkHiShift('${_wkHiShift}')`);
+    el.classList.toggle('wk-legend-on', on);
   });
-  document.getElementById('work-table').classList.toggle('wk-hi-active', !!_wkHiPos);
+  document.getElementById('work-table').classList.toggle('wk-hi-active', !!_wkHiPos||!!_wkHiShift);
 }
 // 移除該人於該日「所有」手動鎖定(WORK_D/E/N預班或OFF)，供改班/雙擊解鎖等情境共用。
 function clearManualPin(nurseId,dateStr){
