@@ -124,9 +124,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 /* ===== 工作總表：格內顯示位置代號，底色區分 D/E/N/H/特班/OFF ===== */
 .wk-legend{display:inline-block;padding:2px 9px;border:1px solid #ccc;border-radius:10px;font-size:11px;font-weight:700;color:#333;line-height:1.5;}
 .wk-hint{font-size:11px;color:#78909c;margin-left:auto;}
-/* 說明文字改收進滑鼠移上去才顯示的小圖示，預設畫面上不再有一整排文字 */
-.info-ic{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#eceff1;color:#78909c;font-size:11px;font-style:normal;cursor:help;flex-shrink:0;}
-.info-ic:hover{background:#cfd8dc;color:#37474f;}
 #work-table{border-collapse:collapse;background:#fff;font-size:10px;box-shadow:0 1px 5px rgba(0,0,0,.12);}
 #work-table th,#work-table td{border:1px solid #e3e6e8;padding:3px 4px;text-align:center;white-space:nowrap;}
 #work-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;z-index:3;padding:4px 2px;line-height:1.3;font-weight:700;}
@@ -310,13 +307,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
           </select>
         </div>
         <div class="split-control">
-          <label>最多連上：</label>
+          <label title="N-OFF-D不可出現；同班次不可全為男性；支援規則：D→E、E→D/N、N→E(上月D轉N者於本月第一個N班前可先上D)；休假天數落在4個相鄰數字，資深&gt;大夜&gt;資淺；休假最多者必為資深、上最多班者必為資淺；不可OFF-上1天班-OFF">最多連上：</label>
           D<input type="number" id="max-consec-D" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.D=parseInt(this.value)||5;autoSave();">
           E<input type="number" id="max-consec-E" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.E=parseInt(this.value)||5;autoSave();">
           N<input type="number" id="max-consec-N" min="1" style="width:40px" onchange="pushUndo();state.maxConsecByShift.N=parseInt(this.value)||4;autoSave();">
           <span>天（可自行填選，無上限）</span>
         </div>
-        <span class="info-ic" title="N-OFF-D不可出現；同班次不可全為男性；支援規則：D→E、E→D/N、N→E(上月D轉N者於本月第一個N班前可先上D)；休假天數落在4個相鄰數字，資深&gt;大夜&gt;資淺；休假最多者必為資深、上最多班者必為資淺；不可OFF-上1天班-OFF">ⓘ</span>
       </div>
       <div id="doc-legend"></div>
     </div>
@@ -333,7 +329,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <!-- ======= 工作總表(顯示每天實際擔任的位置代號，底色區分D/E/N/OFF) ======= -->
   <div id="tab-work" class="tab-pane">
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px;font-size:12px">
-      <strong style="color:#0d5c4a">位置代號：</strong>
+      <strong style="color:#0d5c4a" title="點上方「位置代號」或「底色」任一顆，表格中對應的格子會整片亮起(其餘淡化)；格子可直接輸入位置代號(A1／T或檢／A2／B／A3／支)更改位置；點人名＝只看他的上班日；點日期＝只看當天在班的人">位置代號：</strong>
       <span class="wk-legend wk-legend-btn" onclick="wkHiPos('組長')" title="點一下把所有 A1(組長) 格子亮起來，再點取消">A1 組長</span>
       <span class="wk-legend wk-legend-btn" onclick="wkHiPos('檢傷')" title="點一下把所有 檢(檢傷) 格子亮起來，再點取消">檢 檢傷</span>
       <span class="wk-legend wk-legend-btn" onclick="wkHiPos('重症')" title="點一下把所有 A2(重症) 格子亮起來，再點取消">A2 重症</span>
@@ -347,7 +343,6 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <span class="wk-legend wk-legend-btn" style="background:#cfd8dc;border-color:#607d8b" onclick="wkHiShift('H')" title="點一下把所有 H(行政) 格子亮起來，再點取消">H 行政</span>
       <span class="wk-legend wk-legend-btn" style="background:#ffc27a;border-color:#ef6c00" onclick="wkHiShift('S')" title="點一下把所有 D12/N12 格子亮起來，再點取消">D12/N12</span>
       <span class="wk-legend wk-legend-btn" style="background:#f1f3f4;border-color:#bdbdbd" onclick="wkHiShift('OFF')" title="點一下把所有 OFF(休假) 格子亮起來，再點取消">OFF 休假</span>
-      <span class="info-ic" title="點上方「位置代號」或「底色」任一顆，表格中對應的格子會整片亮起(其餘淡化)；格子可直接輸入位置代號(A1／T或檢／A2／B／A3／支)更改位置；點人名＝只看他的上班日；點日期＝只看當天在班的人">💡</span>
     </div>
     <div class="stats-wrap">
       <table id="work-table"><thead id="work-thead"></thead><tbody id="work-tbody"></tbody></table>
@@ -358,11 +353,10 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
   <div id="tab-nurses" class="tab-pane">
     <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
       <div style="display:flex;align-items:center;gap:8px;">
-        <strong style="font-size:12px">當月班別設定月份：</strong>
+        <strong style="font-size:12px" title="開啟某月時會自動將班別設定存成當月獨立紀錄，之後修改互不影響">當月班別設定月份：</strong>
         <button onclick="changeNurseMonth(-1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9664;</button>
         <button id="nurse-month-label" onclick="openMonthPicker()" title="點擊選擇月份" style="font-weight:700;min-width:80px;text-align:center;padding:4px 8px;border:1px solid #0d5c4a;border-radius:4px;background:#fff;color:#0d5c4a;cursor:pointer"></button>
         <button onclick="changeNurseMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
-        <span class="info-ic" title="開啟某月時會自動將班別設定存成當月獨立紀錄，之後修改互不影響">ⓘ</span>
         <button class="action-btn btn-orange" onclick="resetMonthToLastMonth()" style="font-size:11px">↺ 重設為沿用上月</button>
       </div>
       <button class="action-btn btn-green" onclick="openNurseModal()">+ 新增護理師</button>
@@ -401,17 +395,15 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <div id="pre-req-panel">
       <div style="margin-bottom:12px;background:#f5f9f8;padding:8px 12px;border-radius:6px">
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px">
-          <label style="font-size:12px;font-weight:700;color:#555">每人每月最多預假天數：</label>
+          <label style="font-size:12px;font-weight:700;color:#555" title="僅限「當天OFF」類型；預上班(排D/E/N班)不受此限">每人每月最多預假天數：</label>
           <input type="number" id="max-off-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="pushUndo();state.maxOffDays=this.value?parseInt(this.value):null;autoSave();">
           <label style="font-size:12px;font-weight:700;color:#555;margin-left:10px">其中假日最多：</label>
           <input type="number" id="max-off-holiday-days" min="0" style="width:70px;padding:4px 7px;border:1px solid #ddd;border-radius:4px;font-size:12px" placeholder="不限制" onchange="pushUndo();state.maxOffHolidayDays=this.value?parseInt(this.value):null;autoSave();">
-          <span style="font-size:11px;color:#888">天（僅限「當天OFF」類型；預上班(排D/E/N班)不受此限）</span>
         </div>
         <div style="display:flex;align-items:flex-start;gap:8px;flex-wrap:wrap">
-          <label style="font-size:12px;font-weight:700;color:#555;padding-top:3px">不在預假限制天數人員：</label>
+          <label style="font-size:12px;font-weight:700;color:#555;padding-top:3px" title="勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數——這是強制的「當月休假總天數」(已包含既有預假，例如填16天代表整月休假就是剛好16天，不可多也不可少)，自動排班會把工作日數鎖定為「在職天數−休假天數」，不建立實際OFF日期。※唯一例外：若少排這些班會造成空班(不留空班為最高鐵則)，才會允許超出，並在排班完成時提示。">不在預假限制天數人員：</label>
           <div id="long-leave-list" style="display:flex;flex-wrap:wrap;gap:6px;flex:1"></div>
         </div>
-        <div style="font-size:11px;color:#888;margin-top:4px">勾選的護理人員本月新增預假將不受上述天數上限限制；勾選後可填入當月休假天數——這是<b style="color:#c0392b">強制</b>的「當月休假總天數」(已包含既有預假，例如填16天代表整月休假就是<b>剛好16天，不可多也不可少</b>)，自動排班會把工作日數鎖定為「在職天數−休假天數」，不建立實際OFF日期。<br>※唯一例外：若少排這些班會造成<b>空班</b>(不留空班為最高鐵則)，才會允許超出，並在排班完成時提示。</div>
       </div>
       <h3 style="margin-bottom:8px">新增預假/預班</h3>
       <div class="pr-form">
@@ -647,16 +639,14 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="check-row"><input type="checkbox" id="doc-allow-support"><label for="doc-allow-support">可跳班支援其他班別 (勾選才能在休假天數平衡時跨班別支援)</label></div>
-    <div class="form-row"><label id="doc-rolepref-title">位置優先(當月)</label>
+    <div class="form-row"><label id="doc-rolepref-title" title="設定後為強制：這個人只要上班就一定排在該位置，不會被排到其他位置(例如 L 級選「T」＝整月只上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。※同一班別的同一個位置只能一個人選(例如白班不可以兩個人都選 L／組長)，重複選會被擋下。">位置優先(當月)</label>
       <select id="doc-rolepref"></select>
     </div>
-    <span class="info-ic" title="設定後為強制：這個人只要上班就一定排在該位置，不會被排到其他位置(例如 L 級選「T」＝整月只上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。※同一班別的同一個位置只能一個人選(例如白班不可以兩個人都選 L／組長)，重複選會被擋下。">ⓘ</span>
-    <h3 id="doc-modal-workrange-title">當月工作日期</h3>
+    <h3 id="doc-modal-workrange-title" title="各班別最多連上天數請至「排班表」頁籤設定(D/E/N分別設定，可自行填選)。流動與支援位置任何階級皆可上。">當月工作日期</h3>
     <div class="form-row">
       <label>日期區間</label>
       <input type="text" id="doc-workrange" placeholder="" title="留空＝全月，例：1-18(18號離職)、12-31(12號到職)" style="width:280px">
     </div>
-    <span class="info-ic" title="各班別最多連上天數請至「排班表」頁籤設定(D/E/N分別設定，可自行填選)。流動與支援位置任何階級皆可上。">ⓘ</span>
     <div class="modal-actions">
       <button class="btn-secondary" onclick="closeModal('nurse-modal')">取消</button>
       <button class="btn-primary" onclick="saveDoc()">儲存</button>
