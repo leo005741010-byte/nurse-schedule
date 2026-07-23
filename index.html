@@ -3320,7 +3320,10 @@ function renderCalendar(){
       const short=filled<roles.length;
       const block=document.createElement('div');
       block.className='shift-block';
-      const rows=roles.map((role,i)=>{
+      // 兩欄顯示的順序依位置排(A1→檢→A2→A3→B→B)：左上A1右上檢、左中A2右中A3、最下兩格B。
+      // 只調整顯示順序，不動底層 arr/roles 的索引(編輯/鎖定仍以原索引為準)。
+      const order=roles.map((role,i)=>({role,i})).sort((a,b)=>(WORK_POS_ORDER[a.role]??9)-(WORK_POS_ORDER[b.role]??9));
+      const rows=order.map(({role,i})=>{
         const nid=arr[i];
         const abbr=ROLE_ABBR[role]||role[0];
         if(!nid) return `<div class="role-row"><span class="role-abbr">${abbr}</span><span class="role-name empty-role">空缺</span></div>`;
