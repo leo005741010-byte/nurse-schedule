@@ -50,9 +50,11 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .tag-N{background:#f3e5f5;color:#6a1b9a;border:1px solid #ce93d8;}
 .shift-cnt{font-size:9px;color:#888;}
 .shift-cnt.short{color:#c0392b;font-weight:700;}
-.role-row{display:flex;align-items:center;gap:3px;font-size:9px;line-height:14px;}
-.role-abbr{width:12px;height:12px;flex-shrink:0;border-radius:2px;background:#eee;color:#666;font-weight:700;text-align:center;font-size:8px;line-height:12px;}
-.role-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px;border-radius:2px;font-weight:700;}
+/* 每個班別下的位置改成兩排(兩欄)顯示，善用格子寬度、也讓每欄的名字可以放大 */
+.role-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 4px;}
+.role-row{display:flex;align-items:center;gap:3px;font-size:12px;line-height:18px;min-width:0;}
+.role-abbr{width:16px;height:16px;flex-shrink:0;border-radius:2px;background:#eee;color:#666;font-weight:700;text-align:center;font-size:10px;line-height:16px;}
+.role-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 4px;border-radius:2px;font-weight:700;font-size:12px;}
 .role-name.empty-role{color:#bbb;font-style:italic;background:#f9f9f9;border:1px dashed #ddd;font-weight:400;}
 .pr-badge-row{margin-top:2px;display:flex;flex-wrap:wrap;gap:1px;}
 .pr-badge{font-size:8px;background:#9b59b6;color:#fff;padding:1px 3px;border-radius:2px;}
@@ -3328,7 +3330,7 @@ function renderCalendar(){
         const lk=isPosLocked(dateStr,si.shift,nid)?'🔒':'';
         return `<div class="role-row"><span class="role-abbr" style="background:${nu.color}22;color:${nu.color}">${abbr}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color};${dim}${hl}" title="${role} ${nu.name}${lk?' (位置已鎖定)':''}">${lk}${nu.name}</span></div>`;
       }).join('');
-      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag ${si.tagClass}">${si.shift}</span><span class="shift-cnt${short?' short':''}">${filled}/${roles.length}</span></div>${rows}`;
+      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag ${si.tagClass}">${si.shift}</span><span class="shift-cnt${short?' short':''}">${filled}/${roles.length}</span></div><div class="role-grid">${rows}</div>`;
       cell.appendChild(block);
     }
 
@@ -3345,7 +3347,7 @@ function renderCalendar(){
         const nu=state.doctors.find(x=>x.id===nid); if(!nu) return '';
         return `<div class="role-row"><span class="role-abbr" style="background:${stl.bg};color:${stl.fg}">${stl.tag}</span><span class="role-name" style="background:${nu.color}22;border:1px solid ${nu.color}70;color:${nu.color}" title="${nu.name}">${nu.name}</span></div>`;
       }).join('');
-      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag" style="background:${stl.bg};color:${stl.fg};border:1px solid ${stl.bd}">${sh}</span><span class="shift-cnt">${arr.length}人</span></div>${rows}`;
+      block.innerHTML=`<div class="shift-block-hd"><span class="slot-tag" style="background:${stl.bg};color:${stl.fg};border:1px solid ${stl.bd}">${sh}</span><span class="shift-cnt">${arr.length}人</span></div><div class="role-grid">${rows}</div>`;
       cell.appendChild(block);
     }
 
