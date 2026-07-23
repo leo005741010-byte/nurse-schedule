@@ -108,9 +108,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #stats-table th{background:#0d5c4a;color:#fff;padding:6px 8px;text-align:center;white-space:nowrap;}
 #stats-table td{padding:5px 8px;border-bottom:1px solid #eee;text-align:center;}
 #stats-table tr:hover td{background:#f0faf7;}
-#master-table{border-collapse:collapse;background:#fff;font-size:10px;}
+#master-table{border-collapse:collapse;background:#fff;font-size:12px;}
 #master-table th,#master-table td{border:1px solid #ddd;padding:3px 4px;text-align:center;white-space:nowrap;}
-#master-table th.dt,#master-table td.dt{width:40px;max-width:40px;padding:2px 1px;}
+#master-table th.dt,#master-table td.dt{width:40px;min-width:40px;max-width:40px;padding:2px 1px;}
 #master-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;}
 #master-table td.nm{text-align:left;font-weight:700;font-size:13px;position:sticky;left:0;background:#fff;z-index:1;}
 #master-table th.nm{position:sticky;left:0;top:0;z-index:2;}
@@ -124,13 +124,13 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 /* ===== 工作總表：格內顯示位置代號，底色區分 D/E/N/H/特班/OFF ===== */
 .wk-legend{display:inline-block;padding:2px 9px;border:1px solid #ccc;border-radius:10px;font-size:11px;font-weight:700;color:#333;line-height:1.5;}
 .wk-hint{font-size:11px;color:#78909c;margin-left:auto;}
-#work-table{border-collapse:collapse;background:#fff;font-size:10px;box-shadow:0 1px 5px rgba(0,0,0,.12);}
+#work-table{border-collapse:collapse;background:#fff;font-size:12px;box-shadow:0 1px 5px rgba(0,0,0,.12);}
 #work-table th,#work-table td{border:1px solid #e3e6e8;padding:3px 4px;text-align:center;white-space:nowrap;}
 #work-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;z-index:3;padding:4px 2px;line-height:1.3;font-weight:700;}
 #work-table th.wknd{background:#b03a2e;}
-#work-table th.dt{width:34px;min-width:34px;font-size:10px;}
-#work-table td.wk{width:34px;min-width:34px;padding:3px 0;font-size:11px;font-weight:700;letter-spacing:.3px;}
-#work-table td.nm{text-align:left;font-weight:700;font-size:12.5px;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:2;padding-right:8px;cursor:pointer;}
+#work-table th.dt{width:40px;min-width:40px;font-size:12px;padding:2px 1px;}
+#work-table td.wk{width:40px;min-width:40px;padding:2px 1px;font-size:12px;font-weight:700;letter-spacing:.3px;}
+#work-table td.nm{text-align:left;font-weight:700;font-size:13px;white-space:nowrap;position:sticky;left:0;background:#fff;z-index:2;padding-right:8px;cursor:pointer;}
 #work-table th.nm{white-space:nowrap;position:sticky;left:0;top:0;z-index:4;text-align:left;padding-left:8px;}
 #work-table tbody tr:nth-child(even) td.nm{background:#fafbfb;}
 #work-table tbody tr:hover td.nm{background:#e8f5f1;}
@@ -157,7 +157,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #work-table th.wk-hol{background:#b03a2e;}
 #work-table td.wk-hol-col{box-shadow:inset 1px 0 0 #e08b82,inset -1px 0 0 #e08b82;}
 /* 右側統計欄 */
-#work-table th.wk-sum,#work-table td.wk-sum{background:#f5f8f8;color:#37474f;font-weight:700;width:32px;min-width:32px;}
+#work-table th.wk-sum,#work-table td.wk-sum{background:#f5f8f8;color:#37474f;font-weight:700;width:36px;min-width:36px;font-size:12px;}
 #work-table th.wk-sum{background:#12705c;color:#fff;}
 #work-table th.wk-sep,#work-table td.wk-sep{border-left:2px solid #0d5c4a;}
 #work-table td.wk-zero{color:#c3cacd;font-weight:400;}
@@ -191,6 +191,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #master-table td.mg-col-active{border-left:2px solid #0d5c4a;border-right:2px solid #0d5c4a;}
 #master-table .mg-glow{box-shadow:inset 0 0 0 2px #f9a825;}
 #master-table tr.mg-note-row td{background:#fffde7;}
+#work-table tr.mg-note-row td{background:#fffde7;}
+#work-table tr.mg-note-row td.nm{background:#f5f5f5;font-weight:700;}
+#work-table tr.mg-note-row td.wk-sum{background:#fffde7;}
 #master-table tr.mg-note-row td.nm{background:#f5f5f5;font-weight:700;}
 .mg-note-row-input{width:100%;box-sizing:border-box;border:1px dashed #d0a24c;border-radius:2px;background:transparent;color:#7a5b00;font-size:9px;font-weight:600;text-align:center;padding:3px 1px;}
 .mg-note-row-input::placeholder{color:#c9b98a;}
@@ -4639,7 +4642,14 @@ function renderWorkGrid(){
       +`<td class="wk-sum">${doc.type==='full'?offCount:'-'}</td>`
       +`<td class="wk-sum">${doc.type==='full'?holWork:'-'}</td></tr>`;
   }).join('');
-  document.getElementById('work-tbody').innerHTML=rows;
+  // 備註列：與月班總表相同，每個日期一格可自由填寫，資料共用 state.dayNotes(兩表互通)。
+  const noteCells=dates.map(d=>{
+    const note=(state.dayNotes&&state.dayNotes[d])||'';
+    return `<td class="dt" style="padding:1px"><input type="text" class="mg-note-row-input" placeholder="備註" value="${escAttr(note)}" onchange="updateDayNote('${d}',this.value)" title="${note?escAttr(note):'自由備註，如ACLS、評鑑等'}"></td>`;
+  }).join('');
+  const sumPad='<td class="wk-sum"></td>'.repeat(WORK_ROLE_CODES.length+3);
+  const noteRow=`<tr class="mg-note-row"><td class="nm" style="color:#888">備註</td>${noteCells}${sumPad}</tr>`;
+  document.getElementById('work-tbody').innerHTML=noteRow+rows;
   // 反映目前被點亮的位置代號按鈕(對應 _wkHiPos)
   document.querySelectorAll('.wk-legend-btn').forEach(el=>{
     const oc=el.getAttribute('onclick');
