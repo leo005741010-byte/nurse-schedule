@@ -463,7 +463,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       <table id="stats-table">
         <thead>
           <tr>
-            <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th>
+            <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th title="當月擔任組長(A1)的天數">A1天數</th><th title="12小時特班 D12+N12 合計天數">D12/N12</th><th title="行政班(H)天數">H班數</th><th>總班數</th><th>總時數</th>
             <th>假日班數</th><th>轉班次</th><th>最長連班</th><th title="當月最短的一段連續上班天數；為1天(且前後都休)會紅底標示，方便抓出孤立單班">最短連上</th>
           </tr>
         </thead>
@@ -548,7 +548,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>✅ 完成本月</b>：本月班表排定後按此鈕（需輸入密碼），標記為完成——完成後所有班表都不能修改（月班總表、排班表編輯、自動排班、清空、還原重做、載入都會被擋下）。再按一次輸入密碼即可取消完成、恢復編輯。</li>
         <li><b>↩ 還原／↪ 重做</b>：可回復上一步操作。</li>
         <li><b>💾 儲存／📂 載入</b>：儲存會把目前所有資料（班表／護理師／預假／設定）存成一個檔案；載入可從先前儲存的檔案完整回復（會覆蓋目前資料）。<b>建議每次大幅調整前先按儲存保平安</b>，也可用來把資料搬到另一台電腦。</li>
-        <li><b>匯出</b>：CSV、Excel（月班總表＋排班表＋工作總表）、PDF（月班總表＋排班表＋工作總表＋統計＋預假清單）。</li>
+        <li><b>匯出</b>：CSV、Excel（月班總表＋排班表＋工作總表＋統計報表）、PDF（月班總表＋排班表＋工作總表＋統計＋預假清單）。月班總表的休假：<b>預假為大寫OFF</b>（橘底），一般休假為小寫off。</li>
         <li><b>☁️ 雲端</b>：資料自動同步；不同裝置開同一網址即共用。</li>
       </ul>
 
@@ -4076,7 +4076,7 @@ function renderStats(){
   }
   const dates=monthDates(_statsYear,_statsMonth);
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0,a1:0,sp:0,h:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
@@ -4086,10 +4086,20 @@ function renderStats(){
         const s=st[nid];
         s[shift]++;
         if(hol) s.hol++;
+        // A1(組長)天數
+        const role=ds.roles&&ds.roles[shift]&&ds.roles[shift][i];
+        if(role==='組長') s.a1++;
         // 轉班：相鄰兩個有上班的日子只要班別不同就算一次(不限D↔N)。
         if(s.lastShift&&s.lastShift!==shift) s.transitions++;
         s.lastShift=shift;
       });
+    }
+    // 手動班別天數：D12/N12合計為特班(sp)，H為行政班
+    for(const sh of MANUAL_SHIFTS){
+      for(const nid of (ds[sh]||[])){
+        if(!nid||!st[nid]) continue;
+        if(sh==='H') st[nid].h++; else st[nid].sp++;
+      }
     }
   }
   const singleDayIslands=[];
@@ -4115,6 +4125,7 @@ function renderStats(){
     return `<tr>
       <td style="text-align:left"><span class="color-dot" style="background:${doc.color};vertical-align:middle;margin-right:4px"></span>${doc.name}</td>
       <td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
+      <td>${s.a1||'-'}</td><td>${s.sp||'-'}</td><td>${s.h||'-'}</td>
       <td><strong>${total}</strong></td><td>${hrs}h</td>
       <td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
       <td${s.islandDates&&s.islandDates.length?' style="background:#fdecea;color:#c0392b;font-weight:700" title="有只上一天班(前後都休)：'+s.islandDates.join('、')+'號"':''}>${s.consecMin?s.consecMin+'天':'-'}</td>
@@ -5309,7 +5320,7 @@ async function exportExcel(){
       empDays++;
       const sh=shiftOfNurseOnDate(doc.id,d);
       if(sh){ if(SHIFTS.includes(sh)){den++; if(shiftCnt[sh]!==undefined)shiftCnt[sh]++; if(isHoliday(d)) holCount++;} else manualDays++; rowVals.push(sh); }
-      else{ if(isHoliday(d)) holOff++; rowVals.push(offBlocked(doc.id,d)?'假':'OFF'); } // 預假標「假」
+      else{ if(isHoliday(d)) holOff++; rowVals.push(offBlocked(doc.id,d)?'OFF':'off'); } // 預假=大寫OFF、一般休假=小寫off
     }
     const offCount=doc.type==='full'?Math.max(0,empDays-den-manualDays):'';
     const shN=k=>doc.type==='full'&&shiftCnt[k]?shiftCnt[k]:'';
@@ -5322,8 +5333,8 @@ async function exportExcel(){
       if(colNumber>1&&colNumber<=1+dates.length){
         const v=cell.value;
         if(v==='D'||v==='E'||v==='N'||v==='D12'||v==='N12'||v==='H') xlsxFillFont(cell,XLSX_FILL[v]);
-        else if(v==='假') xlsxFillFont(cell,XLSX_FILL.PRELEAVE);
-        else if(v==='OFF') xlsxFillFont(cell,XLSX_FILL.OFF);
+        else if(v==='OFF') xlsxFillFont(cell,XLSX_FILL.PRELEAVE); // 預假(大寫)
+        else if(v==='off') xlsxFillFont(cell,XLSX_FILL.OFF);       // 一般休假(小寫)
         else if(v==='－') xlsxFillFont(cell,XLSX_FILL.NA);
       } else {
         cell.font={bold:true};
@@ -5410,6 +5421,55 @@ async function exportExcel(){
       } else {
         cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF5F8F8'}};
       }
+    });
+  }
+
+  // ---- 分頁4：統計報表 ----
+  const ws4=wb.addWorksheet(`統計報表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',xSplit:1,ySplit:1}]});
+  const stx={};
+  for(const doc of state.doctors) stx[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0,consecMin:0,a1:0,sp:0,h:0};
+  for(const d of dates){
+    const ds=state.schedule[d]||{}; const hol=isHoliday(d);
+    for(const sh of SHIFTS){
+      (ds[sh]||[]).forEach((nid,i)=>{
+        if(!nid||!stx[nid]) return;
+        const s=stx[nid]; s[sh]++; if(hol) s.hol++;
+        const role=ds.roles&&ds.roles[sh]&&ds.roles[sh][i];
+        if(role==='組長') s.a1++;
+        if(s.lastShift&&s.lastShift!==sh) s.transitions++;
+        s.lastShift=sh;
+      });
+    }
+    for(const sh of MANUAL_SHIFTS) for(const nid of (ds[sh]||[])){ if(nid&&stx[nid]){ if(sh==='H') stx[nid].h++; else stx[nid].sp++; } }
+  }
+  for(const doc of state.doctors){
+    const s=stx[doc.id]; let cur=0; const runs=[];
+    for(const d of dates){
+      const ds=state.schedule[d]||{};
+      const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||MANUAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
+      if(worked){ cur++; } else { if(cur>0) runs.push(cur); cur=0; }
+    }
+    if(cur>0) runs.push(cur);
+    s.consecMax=runs.length?Math.max(...runs):0;
+    s.consecMin=runs.length?Math.min(...runs):0;
+  }
+  const header4=['護理師','D班數','E班數','N班數','A1天數','D12/N12','H班數','總班數','總時數','假日班數','轉班次','最長連班','最短連上'];
+  const hRow4=ws4.addRow(header4);
+  hRow4.eachCell(cell=>{ cell.font={bold:true}; cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders; cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}}; });
+  ws4.getColumn(1).width=14;
+  for(let i=2;i<=header4.length;i++) ws4.getColumn(i).width=9;
+  for(const doc of sortedRoster(y,m)){
+    const s=stx[doc.id]; const total=s.D+s.E+s.N;
+    const hrs=calcNurseTotalHours(doc.id,dates);
+    const row=ws4.addRow([doc.name+(doc.type==='head'?'(管理)':''),
+      s.D||'-',s.E||'-',s.N||'-',s.a1||'-',s.sp||'-',s.h||'-',
+      total,hrs+'h',s.hol||'-',s.transitions,s.consecMax+'天',s.consecMin?s.consecMin+'天':'-']);
+    row.eachCell((cell,colNumber)=>{
+      cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders;
+      if(colNumber===1){ cell.alignment={horizontal:'left',vertical:'middle'}; cell.font={bold:true}; }
+      if(colNumber===8) cell.font={bold:true};
+      // 最短連上為1天(孤立單班)標紅底提醒
+      if(colNumber===header4.length&&s.consecMin===1) xlsxFillFont(cell,{fg:'FFFDECEA',font:'FFC0392B'});
     });
   }
 
@@ -5537,7 +5597,7 @@ function generatePDF(){
 
   // --- 統計報表 ---
   const st={};
-  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
+  for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0,a1:0,sp:0,h:0};
   for(const dateStr of dates){
     const ds=state.schedule[dateStr]||{};
     const hol=isHoliday(dateStr);
@@ -5545,10 +5605,13 @@ function generatePDF(){
       (ds[shift]||[]).forEach((nid,i)=>{
         if(!nid||!st[nid]) return;
         const s=st[nid]; s[shift]++; if(hol) s.hol++;
+        const role=ds.roles&&ds.roles[shift]&&ds.roles[shift][i];
+        if(role==='組長') s.a1++;
         if(s.lastShift&&s.lastShift!==shift) s.transitions++; // 任何換班別都算一次轉班
         s.lastShift=shift;
       });
     }
+    for(const sh of MANUAL_SHIFTS) for(const nid of (ds[sh]||[])){ if(nid&&st[nid]){ if(sh==='H') st[nid].h++; else st[nid].sp++; } }
   }
   for(const doc of state.doctors){
     const s=st[doc.id]; let cur=0; const runs=[];
@@ -5566,6 +5629,7 @@ function generatePDF(){
     const hrs=calcNurseTotalHours(doc.id,dates);
     const minCell=s.consecMin===1?`<td style="background:#fdecea;color:#c0392b;font-weight:700">1天</td>`:`<td>${s.consecMin?s.consecMin+'天':'-'}</td>`;
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
+      <td>${s.a1||'-'}</td><td>${s.sp||'-'}</td><td>${s.h||'-'}</td>
       <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>${minCell}</tr>`;
   }).join('');
 
@@ -5629,7 +5693,7 @@ function generatePDF(){
   </div>
   <div class="pb">
   <h2>四、統計報表</h2>
-  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th><th>最短連上</th></tr></thead>
+  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>A1天數</th><th>D12/N12</th><th>H班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th><th>最短連上</th></tr></thead>
   <tbody>${statsRows}</tbody></table>
   </div>
   <div class="pb">
