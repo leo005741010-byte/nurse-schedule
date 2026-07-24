@@ -548,7 +548,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>✅ 完成本月</b>：本月班表排定後按此鈕（需輸入密碼），標記為完成——完成後所有班表都不能修改（月班總表、排班表編輯、自動排班、清空、還原重做、載入都會被擋下）。再按一次輸入密碼即可取消完成、恢復編輯。</li>
         <li><b>↩ 還原／↪ 重做</b>：可回復上一步操作。</li>
         <li><b>💾 儲存／📂 載入</b>：儲存會把目前所有資料（班表／護理師／預假／設定）存成一個檔案；載入可從先前儲存的檔案完整回復（會覆蓋目前資料）。<b>建議每次大幅調整前先按儲存保平安</b>，也可用來把資料搬到另一台電腦。</li>
-        <li><b>匯出</b>：CSV、Excel（月班總表＋排班表）、PDF（月班總表＋排班表＋統計＋預假清單）。</li>
+        <li><b>匯出</b>：CSV、Excel（月班總表＋排班表＋工作總表）、PDF（月班總表＋排班表＋工作總表＋統計＋預假清單）。</li>
         <li><b>☁️ 雲端</b>：資料自動同步；不同裝置開同一網址即共用。</li>
       </ul>
 
@@ -4358,7 +4358,8 @@ function renderMasterGrid(){
   const y=state.year, m=state.month;
   // 進畫面/每次編輯後先把位置擺正(把卡在支援格的人移進空標準格、移除空支援格)，
   // 順手修好既有的髒資料；有更動才存檔，之後就穩定不再變(不會造成雲端同步迴圈)。
-  if(!_normalizing && normalizeMonthRoles(y,m)) autoSave();
+  // 本月已完成(鎖定)時不做位置正規化：鎖定承諾「不再修改」，即使是自動整理也不動它。
+  if(!_normalizing && !isCurrentMonthLocked() && normalizeMonthRoles(y,m)) autoSave();
   const allDates=monthDates(y,m);
   // 點選護理師時，日期欄只顯示該人有上班的日期(篩選)，方便一眼看出排班日；
   // 再點一次(或改點日期)取消篩選、還原顯示全部日期。月合計欄一律以整月為準，不受篩選影響。
@@ -4557,7 +4558,7 @@ function wkSelectDate(dateStr){
 }
 function renderWorkGrid(){
   const y=state.year, m=state.month;
-  if(!_normalizing && normalizeMonthRoles(y,m)) autoSave(); // 進畫面先把位置擺正(同月班總表)
+  if(!_normalizing && !isCurrentMonthLocked() && normalizeMonthRoles(y,m)) autoSave(); // 進畫面先把位置擺正(同月班總表；鎖定月不動)
   const allDates=monthDates(y,m);
   // 換月後若原本反白的是別的月份的日期，先清掉，避免篩不到人整張表看起來像沒反應。
   if(_wkSelDate&&!allDates.includes(_wkSelDate)) _wkSelDate=null;
@@ -5500,6 +5501,40 @@ function generatePDF(){
   }
   const calHTML=`<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:16px;">${wdHeaders}${calCells}</div>`;
 
+  // --- 工作總表(位置代號) ---
+  const WK_PDF_BG={D:'#fff8e1',E:'#e3f2fd',N:'#f3e5f5',H:'#eceff1',S:'#ffe0b2'};
+  const WK_PDF_FG={D:'#8a4b00',E:'#0d47a1',N:'#4a148c',H:'#263238',S:'#8a3b00'};
+  let wkHead=`<tr><th>護理師</th>`+dates.map(d=>{
+    const isHol=isHoliday(d);
+    return `<th style="${isHol?'background:#fde8e8;':''}color:${isHol?'#c0392b':'inherit'};font-weight:700">${parseInt(d.slice(-2))}<br>${dowNames[getDOW(d)]}</th>`;
+  }).join('')+WORK_ROLE_CODES.map(r=>`<th>${ROLE_ABBR[r]}</th>`).join('')+`<th>總班數</th><th>放假數</th><th>假日班</th></tr>`;
+  // 備註列(與畫面工作總表相同，資料共用 dayNotes)
+  const wkNoteRow=`<tr><td style="color:#888">備註</td>`+dates.map(d=>{
+    const note=(state.dayNotes&&state.dayNotes[d])||'';
+    return `<td style="background:#fffde7;font-size:7px;color:#7a5b00;font-weight:700">${escAttr(note)}</td>`;
+  }).join('')+`<td></td>`.repeat(WORK_ROLE_CODES.length+3)+`</tr>`;
+  const wkRows=sortedRoster(y,m).map(doc=>{
+    const cnt={}; WORK_ROLE_CODES.forEach(r=>cnt[r]=0);
+    let total=0, holWork=0, offCount=0;
+    const cells=dates.map(d=>{
+      const wknd=isHoliday(d);
+      if(doc.type!=='full') return `<td style="${wknd?'background:#fde8e8;':''}"></td>`;
+      if(!isEmployedOnDate(doc.id,d)) return `<td style="background:#e0e0e0;color:#aaa">－</td>`;
+      const sh=shiftOfNurseOnDate(doc.id,d);
+      if(!sh){ offCount++; return `<td style="${wknd?'background:#fde8e8;':''}color:#ccc">OFF</td>`; }
+      let code=sh, key=sh==='H'?'H':(SPECIAL_SHIFTS.includes(sh)?'S':sh);
+      if(SHIFTS.includes(sh)){
+        total++; if(wknd) holWork++;
+        const role=roleOfNurseOnDate(doc.id,d,sh);
+        if(role){ code=ROLE_ABBR[role]||role; if(cnt[role]!==undefined) cnt[role]++; }
+      }
+      return `<td style="background:${WK_PDF_BG[key]};color:${WK_PDF_FG[key]};font-weight:700">${code}</td>`;
+    }).join('');
+    const sums=WORK_ROLE_CODES.map(r=>`<td>${doc.type==='full'&&cnt[r]?cnt[r]:'-'}</td>`).join('')
+      +`<td><b>${doc.type==='full'?total:'-'}</b></td><td>${doc.type==='full'?offCount:'-'}</td><td>${doc.type==='full'?holWork:'-'}</td>`;
+    return `<tr><td style="text-align:left">${doc.name}${doc.type==='head'?'(管理)':''}</td>${cells}${sums}</tr>`;
+  }).join('');
+
   // --- 統計報表 ---
   const st={};
   for(const doc of state.doctors) st[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0};
@@ -5516,18 +5551,22 @@ function generatePDF(){
     }
   }
   for(const doc of state.doctors){
-    const s=st[doc.id]; let cur=0;
+    const s=st[doc.id]; let cur=0; const runs=[];
     for(const dateStr of dates){
       const ds=state.schedule[dateStr]||{};
       const worked=SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id))||MANUAL_SHIFTS.some(sh=>(ds[sh]||[]).includes(doc.id));
-      if(worked){cur++;s.consecMax=Math.max(s.consecMax,cur);}else cur=0;
+      if(worked){ cur++; } else { if(cur>0) runs.push(cur); cur=0; }
     }
+    if(cur>0) runs.push(cur);
+    s.consecMax=runs.length?Math.max(...runs):0;
+    s.consecMin=runs.length?Math.min(...runs):0; // 最短連上(與畫面統計報表一致)
   }
   const statsRows=state.doctors.map(doc=>{
     const s=st[doc.id]; const total=s.D+s.E+s.N;
     const hrs=calcNurseTotalHours(doc.id,dates);
+    const minCell=s.consecMin===1?`<td style="background:#fdecea;color:#c0392b;font-weight:700">1天</td>`:`<td>${s.consecMin?s.consecMin+'天':'-'}</td>`;
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
-      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
+      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>${minCell}</tr>`;
   }).join('');
 
   const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
@@ -5574,7 +5613,7 @@ function generatePDF(){
     th{background:#0d5c4a;color:#fff;}
     table.mg-table{table-layout:fixed;}
     table.mg-table th:first-child,table.mg-table td:first-child{width:62px;font-size:11px;font-weight:600;text-align:left;padding-left:5px;}
-    table.mg-table th:nth-last-child(-n+4),table.mg-table td:nth-last-child(-n+4){width:32px;font-size:8px;}
+    table.mg-table th:nth-last-child(-n+8),table.mg-table td:nth-last-child(-n+8){width:26px;font-size:8px;}
     @media print{ @page{size:A4 landscape;margin:8mm;} .pb{page-break-before:always;margin-top:0;} }
   </style></head><body>
   <h1>天晟護理排班 ${monthStr}</h1>
@@ -5585,12 +5624,16 @@ function generatePDF(){
   ${calHTML}
   </div>
   <div class="pb">
-  <h2>三、統計報表</h2>
-  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th></tr></thead>
+  <h2>三、工作總表（位置）</h2>
+  <table class="mg-table" style="table-layout:fixed">${wkHead}${wkNoteRow}${wkRows}</table>
+  </div>
+  <div class="pb">
+  <h2>四、統計報表</h2>
+  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>總班數</th><th>總時數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th><th>最短連上</th></tr></thead>
   <tbody>${statsRows}</tbody></table>
   </div>
   <div class="pb">
-  <h2>四、預假/預班清單</h2>
+  <h2>五、預假/預班清單</h2>
   <table><thead><tr><th>護理師</th><th>日期</th><th>類型</th><th>備註</th></tr></thead>
   <tbody>${prHTML}</tbody></table>
   </div>
