@@ -124,6 +124,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 /* ===== 工作總表：格內顯示位置代號，底色區分 D/E/N/H/特班/OFF ===== */
 .wk-legend{display:inline-block;padding:2px 9px;border:1px solid #ccc;border-radius:10px;font-size:11px;font-weight:700;color:#333;line-height:1.5;}
 .wk-hint{font-size:11px;color:#78909c;margin-left:auto;}
+/* 護理師清單的個人偏好徽章 */
+.pref-badge{display:inline-block;padding:1px 6px;border-radius:9px;font-size:10px;font-weight:700;white-space:nowrap;margin:1px 0;cursor:help;}
+.pb-cluster{background:#e8f5e9;color:#1b5e20;border:1px solid #a5d6a7;}
+.pb-single{background:#fff3e0;color:#e65100;border:1px solid #ffcc80;}
+.pb-more{background:#ede7f6;color:#4527a0;border:1px solid #b39ddb;}
+.pb-less{background:#e3f2fd;color:#0d47a1;border:1px solid #90caf9;}
 #work-table{border-collapse:collapse;background:#fff;font-size:12px;box-shadow:0 1px 5px rgba(0,0,0,.12);}
 #work-table th,#work-table td{border:1px solid #e3e6e8;padding:3px 4px;text-align:center;white-space:nowrap;}
 #work-table th{background:#0d5c4a;color:#fff;position:sticky;top:0;z-index:3;padding:4px 2px;line-height:1.3;font-weight:700;}
@@ -367,7 +373,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th>操作</th>
+          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th title="個人偏好，自動排班盡量配合但不強求">個人偏好</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -3703,6 +3709,13 @@ function renderNurseTable(){
     // 位置優先(當月)：顯示偏好階級與其代表位置；未設定顯示「—」。
     const rolePref=d.type==='full'?getRolePref(d.id,state.year,state.month):'';
     const prefRoleName={L:'組長',T:'檢傷',A2:'重症',B:'留觀'}[rolePref]||'';
+    // 個人偏好徽章(軟性偏好，一眼看出誰有特殊需求)
+    const pf=d.prefs||{};
+    const pfBadges=[];
+    if(pf.clusterLeave) pfBadges.push(`<span class="pref-badge pb-cluster" title="連續上班放長假：盡量把班排在一起，換取較長的連續休假">連上放長假</span>`);
+    if(pf.allowSingleDay) pfBadges.push(`<span class="pref-badge pb-single" title="可接受單點上班：不套用「不排孤立單班」限制，可排成休－上1天－休">可單點</span>`);
+    if(pf.nightConsec==='upto6') pfBadges.push(`<span class="pref-badge pb-more" title="大夜可連上到6天(放寬個人上限，仍在勞基法七休一內)">大夜可連6</span>`);
+    if(pf.nightConsec==='max4') pfBadges.push(`<span class="pref-badge pb-less" title="大夜盡量最多連上4天(軟性偏好，硬界線仍為全域上限)">大夜最多4</span>`);
     return `<tr>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
@@ -3714,6 +3727,7 @@ function renderNurseTable(){
       <td>${d.type==='full'?`<span class="senior-badge ${isSenior(d.id)?'sr-senior':'sr-junior'}">${isSenior(d.id)?'資深':'資淺'}</span>`:'-'}</td>
       <td>${d.type==='full'?wrStr:'-'}</td>
       <td>${d.type==='full'?supportStr:'-'}</td>
+      <td style="text-align:left">${d.type!=='full'?'-':(pfBadges.length?pfBadges.join(' '):'<span style="color:#bbb">—</span>')}</td>
       <td><button class="btn-sm btn-edit" onclick="openNurseModal('${d.id}')">編輯</button><button class="btn-sm btn-del" onclick="deleteDoc('${d.id}')">刪除</button></td>
     </tr>`;
   }).join('');
