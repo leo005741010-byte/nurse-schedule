@@ -642,6 +642,16 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
       </select>
     </div>
     <div class="check-row"><input type="checkbox" id="doc-allow-support"><label for="doc-allow-support">可跳班支援其他班別 (勾選才能在休假天數平衡時跨班別支援)</label></div>
+    <h3 title="以下為個人偏好，自動排班會盡量配合，但不強求；與鐵則衝突時仍以鐵則為準">個人偏好（盡量配合）</h3>
+    <div class="check-row"><input type="checkbox" id="doc-cluster-leave"><label for="doc-cluster-leave" title="評分時偏好把班接在一起、少另起新的一段，休假自然連成較長的假">連續上班放長假（班盡量排在一起，換長假）</label></div>
+    <div class="check-row"><input type="checkbox" id="doc-single-day"><label for="doc-single-day" title="勾選後，此人不套用「不排孤立單班」的限制，可以被排成休－上1天－休">可接受單點上班（上1休1）</label></div>
+    <div class="form-row"><label>大夜連上偏好</label>
+      <select id="doc-night-consec" title="可連到6天＝放寬此人的大夜連上上限(仍不超過勞基法七休一的6天)；最多連4天＝盡量不超過4天，屬軟性偏好">
+        <option value="">依全域設定</option>
+        <option value="upto6">可連上到6天（放寬，可超出預設5天）</option>
+        <option value="max4">最多連上4天（盡量）</option>
+      </select>
+    </div>
     <div class="form-row"><label id="doc-rolepref-title" title="設定後為強制：這個人只要上班就一定排在該位置，不會被排到其他位置(例如 L 級選「T」＝整月只上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。※同一班別的同一個位置只能一個人選(例如白班不可以兩個人都選 L／組長)，重複選會被擋下。">位置優先(當月)</label>
       <select id="doc-rolepref"></select>
     </div>
@@ -771,8 +781,19 @@ function roleAllowed(level,role){
   return (LEVEL_CAP[level]||[]).includes(role);
 }
 function defPrefs(shiftType,gender){
-  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior'};
+  return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior',
+    clusterLeave:false, allowSingleDay:false, nightConsec:''};
 }
+// ===== 護理師個人偏好(全部屬「盡量配合」的軟性偏好，不是鐵則) =====
+// clusterLeave  : 連續上班放長假 → 評分時偏好把班接在一起，休假自然連成長假
+// allowSingleDay: 可接受單點上班(上1休1) → 對這個人放寬「不排孤立單班」
+// nightConsec   : 'upto6' 大夜可連到6天(放寬上限)／'max4' 大夜盡量最多連4天(軟性扣分)
+function prefOf(nurseId){
+  const doc=state.doctors.find(x=>x.id===nurseId);
+  return (doc&&doc.prefs)||{};
+}
+// 此人是否接受「上1休1」的單點上班(接受者不套用孤立單班限制)
+function acceptsSingleDay(nurseId){ return !!prefOf(nurseId).allowSingleDay; }
 const LEVEL_ORDER={L:0,T:1,A2:2,B:3};
 // 各角色的「代表階級」(該角色所屬的位置層級)，供「位置優先」比對。流動/支援任何階級皆可，無代表階級。
 const ROLE_BASE_LEVEL={組長:'L',檢傷:'T',重症:'A2',留觀:'B'};
@@ -1184,6 +1205,16 @@ function restOK(nurseId,date,shift,sched){
   }
   return true;
 }
+// 往前計算「已連續休假幾天」(只算確認休假；相鄰月尚未排班者不算，避免誤判)。
+// 供「連續上班放長假」偏好判斷：假才剛開始就別急著把人叫回來上班。
+function offDaysBefore(nurseId,date,sched){
+  let n=0,cur=addDays(date,-1);
+  for(let i=0;i<10;i++){
+    if(_neighborShiftState(nurseId,cur,sched)!=='off') break;
+    n++; cur=addDays(cur,-1);
+  }
+  return n;
+}
 function consecDaysBefore(nurseId,date,sched){
   let consec=0, cur=addDays(date,-1);
   for(let i=0;i<25;i++){
@@ -1197,7 +1228,11 @@ function consecDaysBefore(nurseId,date,sched){
 // 這裡同時檢查往前、往後的連續天數，確保指派後整段連班仍不超過該護理師當月班別的連班上限。
 function consecCapFor(nurseId,date){
   const homeShift=getNurseShiftTypeAtDate(nurseId,date);
-  return state.maxConsecByShift[homeShift]||MAX_CONSEC;
+  let cap=state.maxConsecByShift[homeShift]||MAX_CONSEC;
+  // 個人偏好「大夜可連到6天」：把此人的大夜連上上限放寬到至少6天
+  // (仍在勞基法七休一的6天內；屬放寬而非強制，不會逼他一定要連6天)
+  if(homeShift==='N'&&prefOf(nurseId).nightConsec==='upto6') cap=Math.max(cap,6);
+  return cap;
 }
 function wouldExceedConsec(nurseId,date,sched){
   let back=0, cur=addDays(date,-1);
@@ -1429,6 +1464,7 @@ function _neighborShiftState(nurseId,dateStr,sched){
 // 使用者要求不可出現，但月份邊界(相鄰月份尚未排班)不算孤立(見 _neighborShiftState)。
 function isIsolatedWorkDay(nurseId,date,sched){
   if(!isAssignedThatDay(nurseId,date,sched)) return false;
+  if(acceptsSingleDay(nurseId)) return false; // 個人偏好：可接受上1休1
   const prev=_neighborShiftState(nurseId,addDays(date,-1),sched);
   const next=_neighborShiftState(nurseId,addDays(date,1),sched);
   return prev==='off'&&next==='off';
@@ -1438,11 +1474,13 @@ function isIsolatedWorkDay(nurseId,date,sched){
 // 同樣採用邊界寬待：相鄰月份尚未排班的日子不會被當成「確認休假」而誤擋移轉。
 function moveWouldIsolate(giverId,takerId,date,sched){
   const prev=addDays(date,-1), next=addDays(date,1);
-  // taker 於 date 上班後，若前後兩天皆「確認休假」→ taker 變孤立單班
-  if(_neighborShiftState(takerId,prev,sched)==='off'&&_neighborShiftState(takerId,next,sched)==='off') return true;
+  // taker 於 date 上班後，若前後兩天皆「確認休假」→ taker 變孤立單班(接受單點上班者不擋)
+  if(!acceptsSingleDay(takerId)&&_neighborShiftState(takerId,prev,sched)==='off'&&_neighborShiftState(takerId,next,sched)==='off') return true;
   // giver 於 date 休假後，其相鄰的上班日可能變孤立(僅在該上班日的「外側鄰居」確認休假時成立)
-  if(isAssignedThatDay(giverId,prev,sched)&&_neighborShiftState(giverId,addDays(date,-2),sched)==='off') return true;
-  if(isAssignedThatDay(giverId,next,sched)&&_neighborShiftState(giverId,addDays(date,2),sched)==='off') return true;
+  if(!acceptsSingleDay(giverId)){
+    if(isAssignedThatDay(giverId,prev,sched)&&_neighborShiftState(giverId,addDays(date,-2),sched)==='off') return true;
+    if(isAssignedThatDay(giverId,next,sched)&&_neighborShiftState(giverId,addDays(date,2),sched)==='off') return true;
+  }
   return false;
 }
 // 「不在預假限制天數人員」若填了當月休假天數，該數字為【強制】目標：休假天數必須剛好等於它，
@@ -1624,6 +1662,22 @@ function scoreNurse(nurseId, date, shift, role, sched){
   if(last&&last.shift===shift){
     const yRole=roleOfNurseInSched(nurseId,addDays(date,-1),sched);
     if(yRole&&yRole===role) score+=6;
+  }
+  // 個人偏好(軟性，盡量配合)：
+  //  連續上班放長假 → 接續既有連班加分、另起新一段扣分，讓班擠在一起、休假連成長假
+  //  大夜最多連4天 → 已連4天以上再排大夜就扣分(只是偏好，仍以連上上限為硬界線)
+  const _pf=prefOf(nurseId);
+  if(_pf.clusterLeave||_pf.nightConsec==='max4'){
+    const cb=consecDaysBefore(nurseId,date,sched);
+    if(_pf.clusterLeave){
+      if(cb>0) score+=14;                       // 已在連班中 → 接著上，把班擠成一段
+      else {
+        // 目前在休假：假才剛開始(1~2天)就重扣，讓假連成一段長假；已休夠了才比較願意回來
+        const ob=offDaysBefore(nurseId,date,sched);
+        score-=(ob>0&&ob<3)?18:4;
+      }
+    }
+    if(_pf.nightConsec==='max4'&&shift==='N'&&cb>=4) score-=20;
   }
   // #6 月底盡量不要太長連班(非強制)：最後一週，連班已偏長者再上班扣分。
   const dnum=parseInt(date.slice(-2));
@@ -3167,7 +3221,26 @@ function scheduleQuality(newSched,y,m){
       else if(r.type==='nooff'&&!aOn&&!bOn&&!(offBlocked(r.a,dd)&&offBlocked(r.b,dd))) pairViolations++;
     }
   }
-  return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread};
+  // 個人偏好未達成度(最低優先的加分項)：只在所有鐵則與公平性都同分時，才用它挑出
+  // 比較貼近個人偏好的那一份。數字越小越貼近。
+  let prefMiss=0;
+  for(const doc of state.doctors){
+    if(doc.type!=='full') continue;
+    const pf=doc.prefs||{};
+    if(!pf.clusterLeave&&pf.nightConsec!=='max4') continue;
+    const wr=[], or_=[]; let cw=0, co=0;
+    for(const dt of dates){
+      if(isAssignedThatDay(doc.id,dt,newSched)){ cw++; if(co){or_.push(co);co=0;} }
+      else { co++; if(cw){wr.push(cw);cw=0;} }
+    }
+    if(cw) wr.push(cw); if(co) or_.push(co);
+    if(pf.clusterLeave){
+      prefMiss+=or_.filter(x=>x===1).length;   // 零碎的單天休假
+      prefMiss+=wr.filter(x=>x<=2).length;     // 太短的上班段
+    }
+    if(pf.nightConsec==='max4') prefMiss+=wr.filter(x=>x>4).length; // 大夜連上超過4天的段數
+  }
+  return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread,prefMiss};
 }
 function isQualityBetter(q,best){
   if(!best) return true;
@@ -3188,7 +3261,9 @@ function isQualityBetter(q,best){
   if(q.maxOffNotSenior!==best.maxOffNotSenior) return q.maxOffNotSenior<best.maxOffNotSenior;
   // 再比整體「資深多假、資淺少假」的完整度(顛倒配對越少越好)，排在班數全距之前。
   if(q.seniorityInversions!==best.seniorityInversions) return q.seniorityInversions<best.seniorityInversions;
-  return q.spread<best.spread;
+  if(q.spread!==best.spread) return q.spread<best.spread;
+  // 最後才比個人偏好貼近度(所有鐵則與公平性同分時的加分題)
+  return (q.prefMiss||0)<(best.prefMiss||0);
 }
 const AUTO_SCHEDULE_ATTEMPTS=10;
 async function autoSchedule(){
@@ -3731,6 +3806,9 @@ function openNurseModal(id){
   document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
   document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
+  document.getElementById('doc-cluster-leave').checked=!!d.prefs.clusterLeave;
+  document.getElementById('doc-single-day').checked=!!d.prefs.allowSingleDay;
+  document.getElementById('doc-night-consec').value=d.prefs.nightConsec||'';
   const rpTitle=document.getElementById('doc-rolepref-title');
   if(rpTitle) rpTitle.textContent=`位置優先 (${state.year}年${state.month+1}月)`;
   populateRolePref(d.prefs.level||'L', isEdit?getRolePref(d.id,state.year,state.month):'');
@@ -3751,6 +3829,9 @@ function saveDoc(){
   const gender=document.getElementById('doc-gender').value;
   const seniority=document.getElementById('doc-seniority').value;
   const allowSupport=document.getElementById('doc-allow-support').checked;
+  const clusterLeave=document.getElementById('doc-cluster-leave').checked;
+  const allowSingleDay=document.getElementById('doc-single-day').checked;
+  const nightConsec=document.getElementById('doc-night-consec').value;
   const rolePref=document.getElementById('doc-rolepref').value;
   const type=document.getElementById('doc-type').value;
   const color=document.getElementById('doc-color').value;
@@ -3777,12 +3858,13 @@ function saveDoc(){
   if(id){
     const d=state.doctors.find(x=>x.id===id);
     d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.seniority=seniority; d.prefs.allowSupport=allowSupport;
+    d.prefs.clusterLeave=clusterLeave; d.prefs.allowSingleDay=allowSingleDay; d.prefs.nightConsec=nightConsec;
     setNurseShiftType(id,state.year,state.month,shiftRadio.value);
     setWorkRange(id,state.year,state.month,wr);
     setRolePref(id,state.year,state.month,rolePref);
   } else {
     const newId='n_'+(_idCnt++);
-    const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport};
+    const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport, clusterLeave, allowSingleDay, nightConsec};
     state.doctors.push({id:newId,name,type,color,prefs});
     setNurseShiftType(newId,state.year,state.month,shiftRadio.value);
     setWorkRange(newId,state.year,state.month,wr);
