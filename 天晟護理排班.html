@@ -464,7 +464,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <thead>
           <tr>
             <th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th title="12小時特班 D12+N12 合計天數">D12/N12</th><th title="行政班(H)天數">H班數</th><th title="D/E/N 一般班 + H行政班 的合計天數">總班數</th><th>總時數</th><th title="當月擔任組長(A1)的天數">A1天數</th>
-            <th>假日班數</th><th>轉班次</th><th>最長連班</th><th title="當月最短的一段連續上班天數；為1天(且前後都休)會紅底標示，方便抓出孤立單班">最短連上</th>
+            <th>假日班數</th><th>轉班次</th><th>最長連班</th>
           </tr>
         </thead>
         <tbody id="stats-tbody"></tbody>
@@ -4112,7 +4112,6 @@ function renderStats(){
     }
     if(cur>0) runs.push(cur);
     s.consecMax=runs.length?Math.max(...runs):0;
-    s.consecMin=runs.length?Math.min(...runs):0;
     const islandDates=[];
     for(const dateStr of dates){ if(isIsolatedWorkDay(doc.id,dateStr,state.schedule)) islandDates.push(parseInt(dateStr.slice(-2))); }
     s.islandDates=islandDates;
@@ -4128,7 +4127,6 @@ function renderStats(){
       <td>${s.sp||'-'}</td><td>${s.h||'-'}</td>
       <td><strong>${total}</strong></td><td>${hrs}h</td><td>${s.a1||'-'}</td>
       <td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>
-      <td${s.islandDates&&s.islandDates.length?' style="background:#fdecea;color:#c0392b;font-weight:700" title="有只上一天班(前後都休)：'+s.islandDates.join('、')+'號"':''}>${s.consecMin?s.consecMin+'天':'-'}</td>
     </tr>`;
   }).join('');
 
@@ -5427,7 +5425,7 @@ async function exportExcel(){
   // ---- 分頁4：統計報表 ----
   const ws4=wb.addWorksheet(`統計報表_${y}${String(m+1).padStart(2,'0')}`,{views:[{state:'frozen',xSplit:1,ySplit:1}]});
   const stx={};
-  for(const doc of state.doctors) stx[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0,consecMin:0,a1:0,sp:0,h:0};
+  for(const doc of state.doctors) stx[doc.id]={D:0,E:0,N:0,hol:0,transitions:0,lastShift:null,consecMax:0,a1:0,sp:0,h:0};
   for(const d of dates){
     const ds=state.schedule[d]||{}; const hol=isHoliday(d);
     for(const sh of SHIFTS){
@@ -5451,9 +5449,8 @@ async function exportExcel(){
     }
     if(cur>0) runs.push(cur);
     s.consecMax=runs.length?Math.max(...runs):0;
-    s.consecMin=runs.length?Math.min(...runs):0;
   }
-  const header4=['護理師','D班數','E班數','N班數','D12/N12','H班數','總班數','總時數','A1天數','假日班數','轉班次','最長連班','最短連上'];
+  const header4=['護理師','D班數','E班數','N班數','D12/N12','H班數','總班數','總時數','A1天數','假日班數','轉班次','最長連班'];
   const hRow4=ws4.addRow(header4);
   hRow4.eachCell(cell=>{ cell.font={bold:true}; cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders; cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFF0F2F5'}}; });
   ws4.getColumn(1).width=14;
@@ -5463,13 +5460,11 @@ async function exportExcel(){
     const hrs=calcNurseTotalHours(doc.id,dates);
     const row=ws4.addRow([doc.name+(doc.type==='head'?'(管理)':''),
       s.D||'-',s.E||'-',s.N||'-',s.sp||'-',s.h||'-',
-      total,hrs+'h',s.a1||'-',s.hol||'-',s.transitions,s.consecMax+'天',s.consecMin?s.consecMin+'天':'-']);
+      total,hrs+'h',s.a1||'-',s.hol||'-',s.transitions,s.consecMax+'天']);
     row.eachCell((cell,colNumber)=>{
       cell.alignment={horizontal:'center',vertical:'middle'}; cell.border=allBorders;
       if(colNumber===1){ cell.alignment={horizontal:'left',vertical:'middle'}; cell.font={bold:true}; }
       if(colNumber===7) cell.font={bold:true}; // 總班數
-      // 最短連上為1天(孤立單班)標紅底提醒
-      if(colNumber===header4.length&&s.consecMin===1) xlsxFillFont(cell,{fg:'FFFDECEA',font:'FFC0392B'});
     });
   }
 
@@ -5622,15 +5617,13 @@ function generatePDF(){
     }
     if(cur>0) runs.push(cur);
     s.consecMax=runs.length?Math.max(...runs):0;
-    s.consecMin=runs.length?Math.min(...runs):0; // 最短連上(與畫面統計報表一致)
   }
   const statsRows=state.doctors.map(doc=>{
     const s=st[doc.id]; const total=s.D+s.E+s.N+s.h; // 總班數含H行政班
     const hrs=calcNurseTotalHours(doc.id,dates);
-    const minCell=s.consecMin===1?`<td style="background:#fdecea;color:#c0392b;font-weight:700">1天</td>`:`<td>${s.consecMin?s.consecMin+'天':'-'}</td>`;
     return `<tr><td style="text-align:left">${doc.name}</td><td>${s.D||'-'}</td><td>${s.E||'-'}</td><td>${s.N||'-'}</td>
       <td>${s.sp||'-'}</td><td>${s.h||'-'}</td>
-      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.a1||'-'}</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td>${minCell}</tr>`;
+      <td><b>${total}</b></td><td>${hrs}h</td><td>${s.a1||'-'}</td><td>${s.hol||'-'}</td><td>${s.transitions}</td><td>${s.consecMax}天</td></tr>`;
   }).join('');
 
   const monthPrefix=`${y}-${String(m+1).padStart(2,'0')}-`;
@@ -5693,7 +5686,7 @@ function generatePDF(){
   </div>
   <div class="pb">
   <h2>四、統計報表</h2>
-  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>D12/N12</th><th>H班數</th><th>總班數</th><th>總時數</th><th>A1天數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th><th>最短連上</th></tr></thead>
+  <table><thead><tr><th>護理師</th><th>D班數</th><th>E班數</th><th>N班數</th><th>D12/N12</th><th>H班數</th><th>總班數</th><th>總時數</th><th>A1天數</th><th>假日班數</th><th>轉班次</th><th>最長連班</th></tr></thead>
   <tbody>${statsRows}</tbody></table>
   </div>
   <div class="pb">
