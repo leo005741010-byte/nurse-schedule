@@ -531,6 +531,8 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li>各角色人數、可否跨班別支援、每月班別（該月主要上哪一班）皆在此區設定，並可逐月獨立記錄。</li>
         <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b style="color:#c0392b">只有清單第1筆是強制</b>，第2筆以後一律只是<b>盡量達成</b>——因為同時要求多組配對會互相打架、根本排不出班。想換哪一筆強制，按該筆的<b>「設為強制」</b>移到第1筆即可；清單上每筆都會標示<b style="color:#c0392b">強制</b>或<b>盡量</b>。強制那筆若是<b>不能同時放假</b>＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數／指定休假天數／不製造孤立單班」等軟性規則，排上後該格會鎖定不再被挪走。<b style="color:#c0392b">唯一例外：兩人當天都登記了預假</b>——只有一人有預假時，另一人仍會被強制排班。在月班總表或當日視窗手動把兩人都改成OFF會被系統擋下（盡量型的則不會擋）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
         <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月固定上哪個位置（可選自己的階級或更低階級）。<b style="color:#c0392b">設定後為強制</b>——這個人只要上班就一定被排在該位置，不會出現在其他位置（例如 L 級選「T」＝整月只上檢傷）。<b>同一班別的同一個位置只能一個人選</b>（例如白班不可兩人同選 L／組長），重複選會被擋下。</li>
+        <li><b>個人偏好（盡量配合，不強求）</b>：編輯護理師可勾選，清單的「個人偏好」欄會以彩色徽章顯示。與鐵則或公平性衝突時仍以鐵則為準。<br>
+          ①<b>連續上班放長假</b>＝班盡量排在一起、休假連成長假；②<b>可接受單點上班(上1休1)</b>＝此人不套用「不排孤立單班」限制；③<b>大夜連上偏好</b>＝「可連到6天」放寬此人的大夜連上上限（統計報表也不會誤報超限）／「最多連4天」盡量不超過4天。</li>
       </ul>
 
       <h3 class="help-h3">📝 四、預假／預班</h3>
@@ -3233,18 +3235,36 @@ function scheduleQuality(newSched,y,m){
   for(const doc of state.doctors){
     if(doc.type!=='full') continue;
     const pf=doc.prefs||{};
-    if(!pf.clusterLeave&&pf.nightConsec!=='max4') continue;
-    const wr=[], or_=[]; let cw=0, co=0;
+    const isN=getNurseShiftType(doc.id,y,m)==='N';
+    const wantMax4=pf.nightConsec==='max4'&&isN; // max4 只對大夜班人員有意義(與scoreNurse一致)
+    if(!pf.clusterLeave&&!wantMax4) continue;
+    // 首段連班/休假可能是上月月底的延續，先算出上月尾端的連續上班/休假天數當 lead-in，
+    // 避免「上月連上3天＋本月月初2天」的5天連班被誤算成太短的2天段。
+    let leadWork=0, leadOff=0;
+    {
+      let cur=addDays(dates[0],-1);
+      if(isAssignedThatDay(doc.id,cur,state.schedule)){
+        for(let i=0;i<7&&isAssignedThatDay(doc.id,cur,state.schedule);i++){ leadWork++; cur=addDays(cur,-1); }
+      } else if(_neighborShiftState(doc.id,cur,state.schedule)==='off'){
+        for(let i=0;i<7&&_neighborShiftState(doc.id,cur,state.schedule)==='off';i++){ leadOff++; cur=addDays(cur,-1); }
+      }
+    }
+    const wr=[], or_=[]; let cw=0, co=0, first=true;
     for(const dt of dates){
-      if(isAssignedThatDay(doc.id,dt,newSched)){ cw++; if(co){or_.push(co);co=0;} }
-      else { co++; if(cw){wr.push(cw);cw=0;} }
+      if(isAssignedThatDay(doc.id,dt,newSched)){
+        if(first){ cw=leadWork; first=false; }
+        cw++; if(co){or_.push(co);co=0;}
+      } else {
+        if(first){ co=leadOff; first=false; }
+        co++; if(cw){wr.push(cw);cw=0;}
+      }
     }
     if(cw) wr.push(cw); if(co) or_.push(co);
     if(pf.clusterLeave){
       prefMiss+=or_.filter(x=>x===1).length;   // 零碎的單天休假
       prefMiss+=wr.filter(x=>x<=2).length;     // 太短的上班段
     }
-    if(pf.nightConsec==='max4') prefMiss+=wr.filter(x=>x>4).length; // 大夜連上超過4天的段數
+    if(wantMax4) prefMiss+=wr.filter(x=>x>4).length; // 大夜連上超過4天的段數
   }
   return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread,prefMiss};
 }
@@ -4230,7 +4250,10 @@ function renderStats(){
   for(const doc of state.doctors){
     if(doc.type!=='full') continue;
     const s=st[doc.id];
-    const capForDoc=state.maxConsecByShift[getNurseShiftType(doc.id,_statsYear,_statsMonth)]||MAX_CONSEC;
+    const homeShiftStat=getNurseShiftType(doc.id,_statsYear,_statsMonth);
+    let capForDoc=state.maxConsecByShift[homeShiftStat]||MAX_CONSEC;
+    // 個人偏好「大夜可連到6天」者以其個人上限判斷，避免合法的6天連班被誤報
+    if(homeShiftStat==='N'&&(doc.prefs||{}).nightConsec==='upto6') capForDoc=Math.max(capForDoc,6);
     if(s.consecMax>capForDoc) viols.push(`⚠ ${doc.name} 連班超過上限(${s.consecMax}天 > ${capForDoc}天)`);
     if(s.transitions>MAX_TRANSITIONS) viols.push(`⚠ ${doc.name} 轉班次數${s.transitions}次，超過上限（${MAX_TRANSITIONS}次以內）`);
   }
