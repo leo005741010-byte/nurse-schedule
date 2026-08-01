@@ -15,7 +15,45 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 #header h1{font-size:17px;font-weight:700;flex:1;min-width:140px;}
 .nav-btn{background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.4);color:#fff;padding:5px 10px;border-radius:4px;cursor:pointer;font-size:13px;}
 .nav-btn:hover{background:rgba(255,255,255,0.35);}
-.hdr-sep{width:1px;height:22px;background:rgba(255,255,255,.28);margin:0 2px;flex-shrink:0;}
+/* ===== 工具列按鈕系統（僅作用於 #header，其他分頁的 .action-btn 維持原樣） =====
+   依「功能」分色而非每顆一色：主操作=實心綠、狀態鈕=啟用才實心、
+   破壞性=紅調、輸出類=紫藍調、資料類=最低調，並用細分隔線分組。 */
+#header .action-btn{
+  height:30px;padding:0 11px;border-radius:7px;font-size:12px;font-weight:600;
+  display:inline-flex;align-items:center;white-space:nowrap;cursor:pointer;
+  background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);color:#fff;
+  transition:background .15s,border-color .15s,box-shadow .15s,transform .06s;
+}
+#header .action-btn:hover:not(:disabled){background:rgba(255,255,255,.26);border-color:rgba(255,255,255,.4);transform:none;box-shadow:none;filter:none;}
+#header .action-btn:active:not(:disabled){transform:translateY(1px);}
+#header .action-btn:disabled{opacity:.32;cursor:default;}
+#header .action-btn:disabled:hover{background:rgba(255,255,255,.13);border-color:rgba(255,255,255,.22);}
+/* 主操作：唯一實心亮色 */
+#header .tb-key{background:#1f9d55;border-color:#27b062;box-shadow:0 1px 4px rgba(0,0,0,.25);}
+#header .tb-key:hover:not(:disabled){background:#25b062;border-color:#3cc077;}
+/* 破壞性操作 */
+#header .tb-danger{background:rgba(239,83,80,.20);border-color:rgba(239,83,80,.5);color:#ffd7d5;}
+#header .tb-danger:hover:not(:disabled){background:rgba(239,83,80,.34);border-color:rgba(239,83,80,.75);}
+/* 輸出類（CSV/Excel/PDF） */
+#header .tb-out{background:rgba(167,139,250,.17);border-color:rgba(167,139,250,.38);color:#e7e0ff;}
+#header .tb-out:hover:not(:disabled){background:rgba(167,139,250,.30);border-color:rgba(167,139,250,.6);}
+/* 資料類（儲存/載入/雲端）：最低調 */
+#header .tb-data{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16);color:#c7d3e0;font-size:11px;}
+#header .tb-data:hover:not(:disabled){background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.32);color:#fff;}
+/* 分組分隔線 */
+.hdr-sep{width:1px;height:18px;background:rgba(255,255,255,.20);margin:0 1px;flex-shrink:0;}
+/* 月份切換膠囊：◀ 年月 ▶ 一體成型 */
+.month-nav{display:inline-flex;align-items:center;height:32px;border-radius:9px;
+  background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.24);}
+.month-nav .mn-arrow{background:none;border:none;color:#fff;cursor:pointer;font-size:11px;
+  padding:0 11px;height:100%;display:flex;align-items:center;transition:background .15s;}
+.month-nav .mn-arrow:first-child{border-radius:8px 0 0 8px;}
+.month-nav .mn-arrow:last-child{border-radius:0 8px 8px 0;}
+.month-nav .mn-arrow:hover{background:rgba(255,255,255,.2);}
+.month-nav #month-label{height:100%;background:none;cursor:pointer;color:#fff;
+  border:none;border-left:1px solid rgba(255,255,255,.2);border-right:1px solid rgba(255,255,255,.2);
+  font-size:15px;font-weight:700;min-width:106px;text-align:center;letter-spacing:.5px;transition:background .15s;}
+.month-nav #month-label:hover{background:rgba(255,255,255,.16);}
 #month-label{font-size:16px;font-weight:600;min-width:90px;text-align:center;}
 .action-btn{border:none;color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;white-space:nowrap;transition:filter .12s,transform .12s,box-shadow .12s;}
 .action-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px);box-shadow:0 3px 8px rgba(0,0,0,.22);}
@@ -272,24 +310,26 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 
 <div id="header">
   <h1>🏥 天晟護理排班系統</h1>
-  <button class="nav-btn" onclick="changeMonth(-1)">&#9664; 上月</button>
-  <button id="month-label" class="nav-btn" onclick="openMonthPicker()" style="font-size:16px;font-weight:600;min-width:90px;padding:5px 10px;cursor:pointer" title="點擊選擇月份"></button>
-  <button class="nav-btn" onclick="changeMonth(1)">下月 &#9654;</button>
+  <div class="month-nav">
+    <button class="mn-arrow" onclick="changeMonth(-1)" title="上個月">&#9664;</button>
+    <button id="month-label" onclick="openMonthPicker()" title="點擊選擇月份"></button>
+    <button class="mn-arrow" onclick="changeMonth(1)" title="下個月">&#9654;</button>
+  </div>
   <span class="hdr-sep"></span>
-  <button class="action-btn btn-green" onclick="autoSchedule()">⚡ 自動排班</button>
-  <button id="btn-lock" class="action-btn" style="background:#757575;color:#fff" onclick="toggleLock()">✅ 完成本月</button>
-  <button class="action-btn btn-orange" onclick="clearSchedule()">🗑 清空</button>
-  <button id="btn-undo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="undoLast()" disabled title="無可還原操作">↩ 還原</button>
-  <button id="btn-redo" class="action-btn" style="background:#5d4037;opacity:0.4" onclick="redoLast()" disabled title="無可重做操作">↪ 重做</button>
+  <button class="action-btn tb-key" onclick="autoSchedule()">⚡ 自動排班</button>
+  <button id="btn-lock" class="action-btn" onclick="toggleLock()">✅ 完成本月</button>
+  <button class="action-btn tb-danger" onclick="clearSchedule()">🗑 清空</button>
+  <button id="btn-undo" class="action-btn" onclick="undoLast()" disabled title="無可還原操作">↩ 還原</button>
+  <button id="btn-redo" class="action-btn" onclick="redoLast()" disabled title="無可重做操作">↪ 重做</button>
   <span class="hdr-sep"></span>
-  <button class="action-btn btn-blue" onclick="exportCSV()">📊 匯出CSV</button>
-  <button class="action-btn" style="background:#1e7145;color:#fff" onclick="exportExcel()">📗 匯出Excel</button>
-  <button class="action-btn" style="background:#6a1b9a;color:#fff" onclick="generatePDF()">🖨 生成PDF</button>
+  <button class="action-btn tb-out" onclick="exportCSV()">📊 匯出CSV</button>
+  <button class="action-btn tb-out" onclick="exportExcel()">📗 匯出Excel</button>
+  <button class="action-btn tb-out" onclick="generatePDF()">🖨 生成PDF</button>
   <span id="_autosave_ind" style="font-size:11px;color:#a5d6a7;opacity:0;transition:opacity .4s">✓ 已自動存檔</span>
   <span class="hdr-sep"></span>
-  <button class="action-btn btn-purple" onclick="openCloudSettings()" style="font-size:11px">☁️ 雲端設定</button>
-  <button class="action-btn" style="background:#00838f;color:#fff;font-size:11px" onclick="backupJSON()" title="把目前所有資料(班表/護理師/預假/設定)儲存成一個檔案">💾 儲存</button>
-  <button class="action-btn" style="background:#5d4037;color:#fff;font-size:11px" onclick="document.getElementById('restore-file-input').click()" title="從先前儲存的檔案載入全部資料(會覆蓋目前資料)">📂 載入</button>
+  <button class="action-btn tb-data" onclick="openCloudSettings()">☁️ 雲端設定</button>
+  <button class="action-btn tb-data" onclick="backupJSON()" title="把目前所有資料(班表/護理師/預假/設定)儲存成一個檔案">💾 儲存</button>
+  <button class="action-btn tb-data" onclick="document.getElementById('restore-file-input').click()" title="從先前儲存的檔案載入全部資料(會覆蓋目前資料)">📂 載入</button>
   <input type="file" id="restore-file-input" accept="application/json,.json" style="display:none" onchange="restoreJSON(this)">
   <span id="_cloud_status" style="font-size:11px;color:#ef9a9a">☁️ 未連線</span>
 </div>
@@ -1075,14 +1115,14 @@ function updateUndoBtn(){
   const b=document.getElementById('btn-undo'); if(!b) return;
   const locked=isCurrentMonthLocked();
   const ok=_undoStack.length>0&&!locked;
-  b.disabled=!ok; b.style.opacity=ok?'1':'0.4';
+  b.disabled=!ok;
   b.title=locked?'本月已完成，班表無法修改':(_undoStack.length?`可還原 ${_undoStack.length} 步`:'無可還原操作');
 }
 function updateRedoBtn(){
   const b=document.getElementById('btn-redo'); if(!b) return;
   const locked=isCurrentMonthLocked();
   const ok=_redoStack.length>0&&!locked;
-  b.disabled=!ok; b.style.opacity=ok?'1':'0.4';
+  b.disabled=!ok;
   b.title=locked?'本月已完成，班表無法修改':(_redoStack.length?`可重做 ${_redoStack.length} 步`:'無可重做操作');
 }
 // 完成本月按鈕外觀需隨「目前檢視月份」的完成狀態即時變化，否則使用者無法一眼看出
@@ -1091,7 +1131,13 @@ function updateLockBtn(){
   const b=document.getElementById('btn-lock'); if(!b) return;
   const locked=isCurrentMonthLocked();
   b.textContent=locked?'🔒 本月已完成(點擊取消)':'✅ 完成本月';
-  b.style.background=locked?'#c0392b':'#757575';
+  // 狀態鈕：未完成=與其他工具鈕相同的線框樣式；已完成=實心紅+光環(唯一的狀態強調色)
+  if(locked){
+    b.style.background='#b3261e'; b.style.borderColor='#e05a52'; b.style.color='#fff';
+    b.style.boxShadow='0 0 0 2px rgba(239,83,80,.35)';
+  } else {
+    b.style.background=''; b.style.borderColor=''; b.style.color=''; b.style.boxShadow='';
+  }
   b.title=locked?`${state.year}年${state.month+1}月已完成，班表不可修改；點擊輸入密碼取消完成`:`${state.year}年${state.month+1}月未完成；點擊輸入密碼將本月標記為完成，之後所有班表都不能修改`;
 }
 function toggleDocFilter(docId){ _filterDocId=(_filterDocId===docId)?null:docId; renderCalendar(); }
