@@ -112,6 +112,9 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
 .color-dot{width:14px;height:14px;border-radius:50%;display:inline-block;vertical-align:middle;}
 .btn-sm{padding:3px 7px;border:none;border-radius:4px;cursor:pointer;font-size:10px;margin:1px;transition:filter .12s;}
 .btn-sm:hover{filter:brightness(1.12);}
+.ord-btn{background:#eef3f1;color:#0d5c4a;border:1px solid #cfdcd8;font-weight:700;padding:2px 5px;line-height:1;}
+.ord-btn:hover:not(:disabled){background:#dcebe6;border-color:#0d5c4a;}
+.ord-btn:disabled{opacity:.3;cursor:default;filter:none;}
 .btn-edit{background:#3498db;color:#fff;}.btn-del{background:#e74c3c;color:#fff;}
 .level-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#fff;}
 .lvl-L{background:#2e7d32;}.lvl-T{background:#1565c0;}.lvl-A2{background:#e67e22;}.lvl-B{background:#95a5a6;}
@@ -422,12 +425,15 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <button onclick="changeNurseMonth(1)" style="padding:4px 10px;border:1px solid #0d5c4a;border-radius:4px;background:#e6f5f1;color:#0d5c4a;cursor:pointer;font-size:13px;font-weight:700">&#9654;</button>
         <button class="action-btn btn-orange" onclick="resetMonthToLastMonth()" style="font-size:11px">↺ 重設為沿用上月</button>
       </div>
-      <button class="action-btn btn-green" onclick="openNurseModal()">+ 新增護理師</button>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="action-btn btn-gray" onclick="resetNurseOrder()" style="font-size:11px" title="清除自訂的人員順序，回到預設(D→E→N，組內依階級)">↕ 恢復預設排序</button>
+        <button class="action-btn btn-green" onclick="openNurseModal()">+ 新增護理師</button>
+      </div>
     </div>
     <table id="nurse-table">
       <thead>
         <tr>
-          <th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th title="個人偏好，自動排班盡量配合但不強求">個人偏好</th><th>操作</th>
+          <th title="用 ▲▼ 調整同一班別組內的顯示順序(月班總表/工作總表/排班表同步)">順序</th><th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th title="個人偏好，自動排班盡量配合但不強求">個人偏好</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -959,8 +965,51 @@ function sortedRoster(y,m){
     (groups[st]||groups.other).push(d);
   }
   const byLevel=(a,b)=>(LEVEL_ORDER[a.prefs.level]??9)-(LEVEL_ORDER[b.prefs.level]??9);
-  groups.D.sort(byLevel); groups.E.sort(byLevel); groups.N.sort(byLevel); groups.other.sort(byLevel);
-  return [...head,...groups.D,...groups.E,...groups.N,...groups.other,...support.sort(byLevel)];
+  // 組內排序：有自訂順序者依自訂順序排在前，其餘退回原本的階級排序(L→T→A2→B)。
+  // 使用者第一次按上下箭頭時會把該組現有順序整組寫入，之後就完全依自訂順序。
+  const byOrder=(a,b)=>{
+    const oa=state.nurseOrder?state.nurseOrder[a.id]:undefined;
+    const ob=state.nurseOrder?state.nurseOrder[b.id]:undefined;
+    if(oa!==undefined&&ob!==undefined) return oa-ob;
+    if(oa!==undefined) return -1;
+    if(ob!==undefined) return 1;
+    return byLevel(a,b);
+  };
+  groups.D.sort(byOrder); groups.E.sort(byOrder); groups.N.sort(byOrder); groups.other.sort(byOrder);
+  return [...head,...groups.D,...groups.E,...groups.N,...groups.other,...support.sort(byOrder)];
+}
+// 取得某人在人員清單中所屬的排序群組(head/D/E/N/other/support)，上下移動只在同組內進行。
+function rosterGroupKey(doc,y,m){
+  if(doc.type==='head') return 'head';
+  if(doc.type==='support') return 'support';
+  const st=getNurseShiftType(doc.id,y,m);
+  return ['D','E','N'].includes(st)?st:'other';
+}
+// 上下移動人員順序：把同組現有顯示順序整組固化成序號，再與相鄰者交換。
+function moveNurseOrder(nurseId,delta){
+  const y=state.year,m=state.month;
+  const doc=state.doctors.find(x=>x.id===nurseId); if(!doc) return;
+  const key=rosterGroupKey(doc,y,m);
+  const group=sortedRoster(y,m).filter(d=>rosterGroupKey(d,y,m)===key);
+  const i=group.findIndex(d=>d.id===nurseId);
+  const j=i+delta;
+  if(i<0||j<0||j>=group.length) return;
+  pushUndo();
+  if(!state.nurseOrder) state.nurseOrder={};
+  [group[i],group[j]]=[group[j],group[i]];
+  group.forEach((d,idx)=>{ state.nurseOrder[d.id]=idx; }); // 整組固化，順序才穩定
+  autoSave();
+  renderNurseTable(); renderMasterGrid(); renderWorkGrid(); renderCalendar();
+}
+// 清除自訂順序，回到預設(D→E→N，組內依階級)
+function resetNurseOrder(){
+  if(!state.nurseOrder||!Object.keys(state.nurseOrder).length){ showToast('目前就是預設順序','warn'); return; }
+  if(!confirm('確定要清除自訂的人員順序，恢復成預設排序(D→E→N，組內依階級)？')) return;
+  pushUndo();
+  state.nurseOrder={};
+  autoSave();
+  renderNurseTable(); renderMasterGrid(); renderWorkGrid(); renderCalendar();
+  showToast('✅ 已恢復預設排序');
 }
 // 月班總表點選日期篩選時，排序依「該日實際上的班別」(而非整月的當月班別)分組排列，
 // 因跨班別支援的人當天實際上的班可能跟他整月的當月班別不同，若仍照整月分組會讓
@@ -1008,6 +1057,7 @@ let state = {
   avoidPairs: [],
   pairRules: [],
   posLocks: [],
+  nurseOrder: {},   // 人員清單的自訂順序 {nurseId:序號}；同一班別組內有效，未設定者依階級排
   doctors: [
     {id:'head',name:'許嘉君',type:'head',color:'#212121',prefs:defPrefs('D')},
     {id:'n1',name:'宋品儒',type:'full',color:'#1565c0',prefs:defPrefs('D')},
@@ -1053,7 +1103,7 @@ function snapshotUndoable(){
     doctors:state.doctors, holidays:[...state.holidays], minRestHours:state.minRestHours, roleCounts:state.roleCounts,
     workDateRange:state.workDateRange, maxConsecByShift:state.maxConsecByShift,
     maxOffDays:state.maxOffDays, maxOffHolidayDays:state.maxOffHolidayDays,
-    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs, pairRules:state.pairRules, posLocks:state.posLocks
+    longLeaveExempt:state.longLeaveExempt, longLeaveDays:state.longLeaveDays, avoidPairs:state.avoidPairs, pairRules:state.pairRules, posLocks:state.posLocks, nurseOrder:state.nurseOrder
   });
 }
 function restoreUndoable(snap){
@@ -1067,6 +1117,7 @@ function restoreUndoable(snap){
   state.avoidPairs=snap.avoidPairs||[];
   state.pairRules=snap.pairRules||[];
   state.posLocks=snap.posLocks||[];
+  state.nurseOrder=snap.nurseOrder||{};
 }
 function rerenderAfterUndoRedo(){
   renderCalendar(); renderMasterGrid(); renderPRList(); renderPRCalGrid();
@@ -3778,7 +3829,8 @@ function renderNurseTable(){
   materializeMonthShiftTypes(state.year,state.month);
   const lbl=document.getElementById('nurse-month-label');
   if(lbl) lbl.textContent=`${state.year}年${state.month+1}月`;
-  document.getElementById('nurse-tbody').innerHTML=sortedRoster(state.year,state.month).map(d=>{
+  const roster=sortedRoster(state.year,state.month);
+  document.getElementById('nurse-tbody').innerHTML=roster.map(d=>{
     const shiftStr=d.type==='full'?getNurseShiftType(d.id,state.year,state.month):'-';
     const lvl=d.prefs.level||'L';
     const genderLabel=d.prefs.gender==='M'?'男':'女';
@@ -3796,7 +3848,14 @@ function renderNurseTable(){
     if(pf.allowSingleDay) pfBadges.push(`<span class="pref-badge pb-single" title="可接受單點上班：不套用「不排孤立單班」限制，可排成休－上1天－休">可單點</span>`);
     if(pf.nightConsec==='upto6') pfBadges.push(`<span class="pref-badge pb-more" title="大夜可連上到6天(放寬個人上限，仍在勞基法七休一內)">大夜可連6</span>`);
     if(pf.nightConsec==='max4') pfBadges.push(`<span class="pref-badge pb-less" title="大夜盡量最多連上4天(軟性偏好，硬界線仍為全域上限)">大夜最多4</span>`);
+    const gKey=rosterGroupKey(d,state.year,state.month);
+    const gArr=roster.filter(x=>rosterGroupKey(x,state.year,state.month)===gKey);
+    const gi=gArr.findIndex(x=>x.id===d.id);
+    const ordCell=gArr.length<2?'<span style="color:#ccc">—</span>':
+      `<button class="btn-sm ord-btn" onclick="moveNurseOrder('${d.id}',-1)" ${gi<=0?'disabled':''} title="上移(同班別組內)">▲</button>`+
+      `<button class="btn-sm ord-btn" onclick="moveNurseOrder('${d.id}',1)" ${gi>=gArr.length-1?'disabled':''} title="下移(同班別組內)">▼</button>`;
     return `<tr>
+      <td style="white-space:nowrap">${ordCell}</td>
       <td><span class="color-dot" style="background:${d.color}"></span></td>
       <td>${d.name}</td>
       <td>${d.type==='head'?'管理職':d.type==='support'?'支援外單位':'輪班'}</td>
@@ -5190,7 +5249,7 @@ function serializeState(){
     maxConsecByShift:state.maxConsecByShift||{D:6,E:6,N:5},
     maxOffDays:state.maxOffDays??null,maxOffHolidayDays:state.maxOffHolidayDays??null,
     longLeaveExempt:state.longLeaveExempt||{},longLeaveDays:state.longLeaveDays||{},
-    avoidPairs:state.avoidPairs||[],pairRules:state.pairRules||[],posLocks:state.posLocks||[],idCnt:_idCnt,lockedMonths:[..._lockedMonths]
+    avoidPairs:state.avoidPairs||[],pairRules:state.pairRules||[],posLocks:state.posLocks||[],nurseOrder:state.nurseOrder||{},idCnt:_idCnt,lockedMonths:[..._lockedMonths]
   };
 }
 // 舊版資料相容：shiftTypes{D,E,N}複選 → shiftType(單選,已停用) → defaultShiftType(當月未設定時的預設)；補上性別預設值
@@ -5245,6 +5304,7 @@ function applyData(d){
   if(Array.isArray(d.pairRules)) state.pairRules=d.pairRules;
   else state.pairRules=(d.avoidPairs||[]).map(p=>({a:p[0],b:p[1],type:'nowork',start:null,end:null}));
   state.posLocks=Array.isArray(d.posLocks)?d.posLocks:[];
+  state.nurseOrder=(d.nurseOrder&&typeof d.nurseOrder==='object')?d.nurseOrder:{};
   if(d.idCnt) _idCnt=d.idCnt;
   _lockedMonths.clear(); (d.lockedMonths||[]).forEach(k=>_lockedMonths.add(k));
   // 修正舊資料可能殘留的「D12/N12與一般班(D/E/N)同時存在」衝突(此規則為後續才加入，
