@@ -5429,14 +5429,27 @@ function restoreJSON(input){
   const file=input.files&&input.files[0];
   input.value=''; // 清掉，讓同一檔案可再次選取觸發 change
   if(!file) return;
-  if(isCurrentMonthLocked()){ showToast('🔒 本月已完成，請先取消完成再載入','warn'); return; }
+  if(isCurrentMonthLocked()){
+    // 用不會自動消失的提示：原本 2.2 秒就消失，使用者常沒看到、誤以為「載入沒反應」
+    showToast(`🔒 ${state.year}年${state.month+1}月已標記「完成本月」，為保護班表不被覆蓋，載入已取消。請先點表頭的「🔒 本月已完成」輸入密碼取消完成，再載入一次。（點此關閉）`,'warn',true);
+    setSchedResult(`🔒 <b>載入已取消</b>：${state.year}年${state.month+1}月已標記「完成本月」，班表受保護不可覆蓋。<br>請先點表頭的「🔒 本月已完成」輸入密碼取消完成，再重新載入檔案。`,'warn');
+    return;
+  }
   const reader=new FileReader();
   reader.onload=e=>{
     let data;
     try{ data=JSON.parse(e.target.result); }
     catch(err){ showToast('❌ 檔案格式錯誤，不是有效的儲存檔','warn'); return; }
     if(!data||typeof data!=='object'||!Array.isArray(data.doctors)||typeof data.schedule!=='object'){
-      showToast('❌ 這不是本系統的儲存檔(缺少 doctors/schedule)','warn'); return;
+      showToast('❌ 這不是本系統的儲存檔(缺少 doctors/schedule)','warn',true); return;
+    }
+    // 擋下其他系統的備份檔：醫師版排班備份的欄位長得很像(也有 doctors/schedule)，
+    // 若誤載會把整份護理師名單直接換成醫師名單。有 _app 就比對，沒有就看醫師版特徵欄位。
+    const isOtherApp=(data._app&&data._app!=='tienSheng-nurse-schedule')
+      ||(!data._app&&(data.defaultSplit!==undefined||data.holidaySplit!==undefined));
+    if(isOtherApp){
+      showToast('❌ 這是「醫師版排班」的備份檔，不是護理排班的儲存檔，已取消載入(避免覆蓋護理師名單)。請改選護理排班自己「💾 儲存」出來的檔案。（點此關閉）','warn',true);
+      return;
     }
     const bakInfo=data._backupAt?`\n儲存時間：${new Date(data._backupAt).toLocaleString()}`:'';
     const cnt=data.doctors.length, days=Object.keys(data.schedule).length;
@@ -5447,7 +5460,7 @@ function restoreJSON(input){
     _prCalYear=state.year; _prCalMonth=state.month;
     _prListYear=state.year; _prListMonth=state.month;
     _statsYear=state.year; _statsMonth=state.month;
-    renderCalendar(); renderMasterGrid(); renderNurseTable(); renderPRList(); renderPRCalGrid(); renderStats();
+    renderCalendar(); renderMasterGrid(); renderWorkGrid(); renderNurseTable(); renderPRList(); renderPRCalGrid(); renderStats();
     updateUndoBtn(); updateRedoBtn(); updateLockBtn();
     showToast('✅ 已載入檔案，全部資料已回復');
   };
