@@ -434,7 +434,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <table id="nurse-table">
       <thead>
         <tr>
-          <th title="用 ▲▼ 調整同一班別組內的顯示順序(月班總表/工作總表/排班表同步)">順序</th><th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th title="個人偏好，自動排班盡量配合但不強求">個人偏好</th><th>操作</th>
+          <th title="用 ▲▼ 調整同一班別組內的顯示順序(月班總表/工作總表/排班表同步)">順序</th><th>色</th><th>姓名</th><th>類型</th><th>性別</th><th>當月班別</th><th>階級</th><th title="臨床能力進階(N/N1~N4)，用於匯出班表的職級欄">職級</th><th>位置優先</th><th>年資</th><th>當月工作日期</th><th>可跳班支援</th><th title="個人偏好，自動排班盡量配合但不強求">個人偏好</th><th>操作</th>
         </tr>
       </thead>
       <tbody id="nurse-tbody"></tbody>
@@ -710,6 +710,16 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <option value="B">B — 只能上留觀</option>
       </select>
     </div>
+    <div class="form-row"><label title="臨床能力進階制度的職級，僅用於顯示與匯出班表(C欄)，不影響自動排班">職級</label>
+      <select id="doc-rank" title="臨床能力進階(N/N1/N2/N3/N4)；僅用於顯示與匯出班表的職級欄，不影響排班邏輯">
+        <option value="">（不指定）</option>
+        <option value="N">N</option>
+        <option value="N1">N1</option>
+        <option value="N2">N2</option>
+        <option value="N3">N3</option>
+        <option value="N4">N4</option>
+      </select>
+    </div>
     <div class="check-row"><input type="checkbox" id="doc-allow-support"><label for="doc-allow-support">可跳班支援其他班別 (勾選才能在休假天數平衡時跨班別支援)</label></div>
     <h3 title="以下為個人偏好，自動排班會盡量配合，但不強求；與鐵則衝突時仍以鐵則為準">個人偏好（盡量配合）</h3>
     <div class="check-row"><input type="checkbox" id="doc-cluster-leave"><label for="doc-cluster-leave" title="評分時偏好把班接在一起、少另起新的一段，休假自然連成較長的假">連續上班放長假（班盡量排在一起，換長假）</label></div>
@@ -851,7 +861,7 @@ function roleAllowed(level,role){
 }
 function defPrefs(shiftType,gender){
   return {defaultShiftType:shiftType||'D', level:'L', gender:gender||'F', allowSupport:true, seniority:'senior',
-    clusterLeave:false, allowSingleDay:false, nightConsec:''};
+    clusterLeave:false, allowSingleDay:false, nightConsec:'', rank:''};
 }
 // ===== 護理師個人偏好(全部屬「盡量配合」的軟性偏好，不是鐵則) =====
 // clusterLeave  : 連續上班放長假 → 評分時偏好把班接在一起，休假自然連成長假
@@ -3863,6 +3873,7 @@ function renderNurseTable(){
       <td>${d.type==='full'?genderLabel:'-'}</td>
       <td>${d.type==='full'?`<span class="slot-tag tag-${shiftStr}" style="display:inline-flex;width:auto;padding:1px 8px">${shiftStr}</span>`:'-'}</td>
       <td>${d.type==='full'?`<span class="level-badge lvl-${lvl}">${LEVEL_LABEL[lvl]}</span>`:'-'}</td>
+      <td>${(d.prefs&&d.prefs.rank)?d.prefs.rank:'<span style="color:#bbb">—</span>'}</td>
       <td>${d.type!=='full'?'-':(rolePref?`<span class="rolepref-badge" title="自動排班會優先把他排到「${prefRoleName}」位置">${rolePref}／${prefRoleName}</span>`:'<span style="color:#bbb">—</span>')}</td>
       <td>${d.type==='full'?`<span class="senior-badge ${isSenior(d.id)?'sr-senior':'sr-junior'}">${isSenior(d.id)?'資深':'資淺'}</span>`:'-'}</td>
       <td>${d.type==='full'?wrStr:'-'}</td>
@@ -3959,6 +3970,7 @@ function openNurseModal(id){
   document.getElementById('shift-E').checked=(st==='E');
   document.getElementById('shift-N').checked=(st==='N');
   document.getElementById('doc-level').value=d.prefs.level||'L';
+  document.getElementById('doc-rank').value=d.prefs.rank||'';
   document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
   document.getElementById('doc-cluster-leave').checked=!!d.prefs.clusterLeave;
   document.getElementById('doc-single-day').checked=!!d.prefs.allowSingleDay;
@@ -3980,6 +3992,7 @@ function saveDoc(){
   const shiftRadio=document.querySelector('input[name="shift-type"]:checked');
   if(!shiftRadio){showToast('請選擇班別','warn');return;}
   const level=document.getElementById('doc-level').value;
+  const rank=document.getElementById('doc-rank').value;
   const gender=document.getElementById('doc-gender').value;
   const seniority=document.getElementById('doc-seniority').value;
   const allowSupport=document.getElementById('doc-allow-support').checked;
@@ -4012,13 +4025,13 @@ function saveDoc(){
   if(id){
     const d=state.doctors.find(x=>x.id===id);
     d.name=name; d.type=type; d.color=color; d.prefs.level=level; d.prefs.gender=gender; d.prefs.seniority=seniority; d.prefs.allowSupport=allowSupport;
-    d.prefs.clusterLeave=clusterLeave; d.prefs.allowSingleDay=allowSingleDay; d.prefs.nightConsec=nightConsec;
+    d.prefs.clusterLeave=clusterLeave; d.prefs.allowSingleDay=allowSingleDay; d.prefs.nightConsec=nightConsec; d.prefs.rank=rank;
     setNurseShiftType(id,state.year,state.month,shiftRadio.value);
     setWorkRange(id,state.year,state.month,wr);
     setRolePref(id,state.year,state.month,rolePref);
   } else {
     const newId='n_'+(_idCnt++);
-    const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport, clusterLeave, allowSingleDay, nightConsec};
+    const prefs={defaultShiftType:shiftRadio.value, level, gender, seniority, allowSupport, clusterLeave, allowSingleDay, nightConsec, rank};
     state.doctors.push({id:newId,name,type,color,prefs});
     setNurseShiftType(newId,state.year,state.month,shiftRadio.value);
     setWorkRange(newId,state.year,state.month,wr);
@@ -5563,6 +5576,7 @@ async function exportShiftTable(){
     const roster=sortedRoster(y,m);
     const fillRow=(doc,row,seq)=>{
       if(seq!==null) ws.getCell(row,1).value=seq;
+      if(doc.prefs&&doc.prefs.rank) ws.getCell(row,3).value=doc.prefs.rank; // C欄職級
       ws.getCell(row,4).value=doc.name;
       dates.forEach((d,i)=>{
         if(!isEmployedOnDate(doc.id,d)) return;         // 未在職留白
