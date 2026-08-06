@@ -5619,6 +5619,9 @@ async function exportShiftTable(){
       dates.forEach((d,i)=>{
         if(!isEmployedOnDate(doc.id,d)) return;         // 未在職留白
         const sh=shiftOfNurseOnDate(doc.id,d);
+        // 護理長/支援外單位不在本系統排班(查無班別是常態)，整列留白供手動填寫；
+        // 不能把「查無資料」寫成整排 off，會蓋掉原本該手填 H/OFF 的格子。
+        if(!sh&&doc.type!=='full') return;
         ws.getCell(row,TPL_FIRST_COL+i).value=tplShiftCode(sh,offBlocked(doc.id,d));
       });
     };
