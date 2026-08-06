@@ -593,7 +593,7 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
         <li><b>🔗 配對限制設定</b>：可設定兩位護理師的關係——<b style="color:#c0392b">只有清單第1筆是強制</b>，第2筆以後一律只是<b>盡量達成</b>——因為同時要求多組配對會互相打架、根本排不出班。想換哪一筆強制，按該筆的<b>「設為強制」</b>移到第1筆即可；清單上每筆都會標示<b style="color:#c0392b">強制</b>或<b>盡量</b>。強制那筆若是<b>不能同時放假</b>＝當天一定至少一人上班；沒有空缺時會把別人換下來讓其中一人頂上，必要時還會放寬「一個月最多2種班別／轉班次數／指定休假天數／不製造孤立單班」等軟性規則，排上後該格會鎖定不再被挪走。<b style="color:#c0392b">唯一例外：兩人當天都登記了預假</b>——只有一人有預假時，另一人仍會被強制排班。在月班總表或當日視窗手動把兩人都改成OFF會被系統擋下（盡量型的則不會擋）；<b>要同時上班</b>為盡量達成。未達成者會在統計報表列出。日期留空＝整月每天適用；填「幾號到幾號」＝只在該區間內適用。</li>
         <li><b>位置優先（當月）</b>：編輯護理師時可設定他這個月固定上哪個位置（可選自己的階級或更低階級）。<b style="color:#c0392b">設定後為強制</b>——這個人只要上班就一定被排在該位置，不會出現在其他位置（例如 L 級選「T」＝整月只上檢傷）。<b>同一班別的同一個位置只能一個人選</b>（例如白班不可兩人同選 L／組長），重複選會被擋下。</li>
         <li><b>個人偏好（盡量配合，不強求）</b>：編輯護理師可勾選，清單的「個人偏好」欄會以彩色徽章顯示。與鐵則或公平性衝突時仍以鐵則為準。<br>
-          ①<b>連續上班放長假</b>＝班盡量排在一起、休假連成長假；②<b>可接受單點上班(上1休1)</b>＝此人不套用「不排孤立單班」限制；③<b>大夜連上偏好</b>＝「可連到6天」放寬此人的大夜連上上限（統計報表也不會誤報超限）／「最多連4天」盡量不超過4天。</li>
+          ①<b>連續上班放長假</b>＝班盡量排在一起、休假連成長假；②<b>可接受單點上班(上1休1)</b>＝此人不套用「不排孤立單班」限制；③<b>大夜最多連上</b>＝可選 4／5／6 天，不選＝依全域設定。選的天數高於全域上限＝放寬此人的上限（統計報表也不會誤報超限）；低於全域＝盡量不超過該天數（軟性）。</li>
       </ul>
 
       <h3 class="help-h3">📝 四、預假／預班</h3>
@@ -724,11 +724,12 @@ body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;backgro
     <h3 title="以下為個人偏好，自動排班會盡量配合，但不強求；與鐵則衝突時仍以鐵則為準">個人偏好（盡量配合）</h3>
     <div class="check-row"><input type="checkbox" id="doc-cluster-leave"><label for="doc-cluster-leave" title="評分時偏好把班接在一起、少另起新的一段，休假自然連成較長的假">連續上班放長假（班盡量排在一起，換長假）</label></div>
     <div class="check-row"><input type="checkbox" id="doc-single-day"><label for="doc-single-day" title="勾選後，此人不套用「不排孤立單班」的限制，可以被排成休－上1天－休">可接受單點上班（上1休1）</label></div>
-    <div class="form-row"><label>大夜連上偏好</label>
-      <select id="doc-night-consec" title="可連到6天＝放寬此人的大夜連上上限(仍不超過勞基法七休一的6天)；最多連4天＝盡量不超過4天，屬軟性偏好">
+    <div class="form-row"><label>大夜最多連上</label>
+      <select id="doc-night-consec" title="此人大夜的「最多連上」天數。選的天數高於全域上限＝放寬此人的上限(仍不超過勞基法七休一的6天)；低於全域＝盡量不超過(軟性偏好)。不選＝依全域設定">
         <option value="">依全域設定</option>
-        <option value="upto6">可連上到6天（放寬，可超出預設5天）</option>
-        <option value="max4">最多連上4天（盡量）</option>
+        <option value="4">最多連上 4 天</option>
+        <option value="5">最多連上 5 天</option>
+        <option value="6">最多連上 6 天</option>
       </select>
     </div>
     <div class="form-row"><label id="doc-rolepref-title" title="設定後為強制：這個人只要上班就一定排在該位置，不會被排到其他位置(例如 L 級選「T」＝整月只上檢傷)。可選自己的階級或更低階級；留「不指定」＝依原本規則。※同一班別的同一個位置只能一個人選(例如白班不可以兩個人都選 L／組長)，重複選會被擋下。">位置優先(當月)</label>
@@ -866,7 +867,17 @@ function defPrefs(shiftType,gender){
 // ===== 護理師個人偏好(全部屬「盡量配合」的軟性偏好，不是鐵則) =====
 // clusterLeave  : 連續上班放長假 → 評分時偏好把班接在一起，休假自然連成長假
 // allowSingleDay: 可接受單點上班(上1休1) → 對這個人放寬「不排孤立單班」
-// nightConsec   : 'upto6' 大夜可連到6天(放寬上限)／'max4' 大夜盡量最多連4天(軟性扣分)
+// nightConsec   : 大夜個人「最多連上」天數('4'/'5'/'6'；空=依全域設定)。
+//                 大於全域上限＝放寬此人的硬上限；小於全域上限＝軟性偏好(盡量不超過，評分扣分)。
+//                 舊值 'upto6'/'max4' 於載入時遷移為 '6'/'4'。
+function nightConsecOf(prefsOrId){
+  const pf=typeof prefsOrId==='string'?prefOf(prefsOrId):(prefsOrId||{});
+  const v=pf.nightConsec;
+  if(v==='upto6') return 6;
+  if(v==='max4') return 4;
+  const n=parseInt(v);
+  return (n>=1&&n<=10)?n:null;
+}
 function prefOf(nurseId){
   const doc=state.doctors.find(x=>x.id===nurseId);
   return (doc&&doc.prefs)||{};
@@ -1359,9 +1370,12 @@ function consecDaysBefore(nurseId,date,sched){
 function consecCapFor(nurseId,date){
   const homeShift=getNurseShiftTypeAtDate(nurseId,date);
   let cap=state.maxConsecByShift[homeShift]||MAX_CONSEC;
-  // 個人偏好「大夜可連到6天」：把此人的大夜連上上限放寬到至少6天
-  // (仍在勞基法七休一的6天內；屬放寬而非強制，不會逼他一定要連6天)
-  if(homeShift==='N'&&prefOf(nurseId).nightConsec==='upto6') cap=Math.max(cap,6);
+  // 個人「最多連上」設定大於全域上限時，放寬此人的硬上限到該天數
+  // (仍受勞基法七休一約束；屬放寬而非強制)。小於全域時不降硬上限，用評分軟性達成。
+  if(homeShift==='N'){
+    const nc=nightConsecOf(nurseId);
+    if(nc) cap=Math.max(cap,Math.min(nc,6));
+  }
   return cap;
 }
 function wouldExceedConsec(nurseId,date,sched){
@@ -1797,7 +1811,8 @@ function scoreNurse(nurseId, date, shift, role, sched){
   //  連續上班放長假 → 接續既有連班加分、另起新一段扣分，讓班擠在一起、休假連成長假
   //  大夜最多連4天 → 已連4天以上再排大夜就扣分(只是偏好，仍以連上上限為硬界線)
   const _pf=prefOf(nurseId);
-  if(_pf.clusterLeave||_pf.nightConsec==='max4'){
+  const _nc=nightConsecOf(_pf);
+  if(_pf.clusterLeave||_nc){
     const cb=consecDaysBefore(nurseId,date,sched);
     if(_pf.clusterLeave){
       if(cb>0) score+=14;                       // 已在連班中 → 接著上，把班擠成一段
@@ -1807,7 +1822,7 @@ function scoreNurse(nurseId, date, shift, role, sched){
         score-=(ob>0&&ob<3)?18:4;
       }
     }
-    if(_pf.nightConsec==='max4'&&shift==='N'&&cb>=4) score-=20;
+    if(_nc&&shift==='N'&&cb>=_nc) score-=20; // 已連到個人上限，再排大夜就扣分(盡量不超過)
   }
   // #6 月底盡量不要太長連班(非強制)：最後一週，連班已偏長者再上班扣分。
   const dnum=parseInt(date.slice(-2));
@@ -3358,8 +3373,8 @@ function scheduleQuality(newSched,y,m){
     if(doc.type!=='full') continue;
     const pf=doc.prefs||{};
     const isN=getNurseShiftType(doc.id,y,m)==='N';
-    const wantMax4=pf.nightConsec==='max4'&&isN; // max4 只對大夜班人員有意義(與scoreNurse一致)
-    if(!pf.clusterLeave&&!wantMax4) continue;
+    const ncq=nightConsecOf(pf), wantMax=isN&&ncq; // 個人連上天數只對大夜班人員有意義(與scoreNurse一致)
+    if(!pf.clusterLeave&&!wantMax) continue;
     // 首段連班/休假可能是上月月底的延續，先算出上月尾端的連續上班/休假天數當 lead-in，
     // 避免「上月連上3天＋本月月初2天」的5天連班被誤算成太短的2天段。
     let leadWork=0, leadOff=0;
@@ -3386,7 +3401,7 @@ function scheduleQuality(newSched,y,m){
       prefMiss+=or_.filter(x=>x===1).length;   // 零碎的單天休假
       prefMiss+=wr.filter(x=>x<=2).length;     // 太短的上班段
     }
-    if(wantMax4) prefMiss+=wr.filter(x=>x>4).length; // 大夜連上超過4天的段數
+    if(wantMax) prefMiss+=wr.filter(x=>x>ncq).length; // 大夜連上超過個人選定天數的段數
   }
   return {empty,longLeaveMiss,pairViolations,isolated,threeShiftTypes,transitionExcess,seniorityViolations,maxOffNotSenior,maxShiftNotJunior,seniorityInversions,spread,prefMiss};
 }
@@ -3857,8 +3872,12 @@ function renderNurseTable(){
     const pfBadges=[];
     if(pf.clusterLeave) pfBadges.push(`<span class="pref-badge pb-cluster" title="連續上班放長假：盡量把班排在一起，換取較長的連續休假">連上放長假</span>`);
     if(pf.allowSingleDay) pfBadges.push(`<span class="pref-badge pb-single" title="可接受單點上班：不套用「不排孤立單班」限制，可排成休－上1天－休">可單點</span>`);
-    if(pf.nightConsec==='upto6') pfBadges.push(`<span class="pref-badge pb-more" title="大夜可連上到6天(放寬個人上限，仍在勞基法七休一內)">大夜可連6</span>`);
-    if(pf.nightConsec==='max4') pfBadges.push(`<span class="pref-badge pb-less" title="大夜盡量最多連上4天(軟性偏好，硬界線仍為全域上限)">大夜最多4</span>`);
+    { const ncB=nightConsecOf(pf);
+      if(ncB){
+        const gN=state.maxConsecByShift.N||MAX_CONSEC;
+        if(ncB>gN) pfBadges.push(`<span class="pref-badge pb-more" title="大夜連上上限放寬到${ncB}天(高於全域${gN}天；仍在勞基法七休一內)">大夜連${ncB}</span>`);
+        else pfBadges.push(`<span class="pref-badge pb-less" title="大夜盡量最多連上${ncB}天(軟性偏好，硬界線仍為全域${gN}天)">大夜≤${ncB}</span>`);
+      } }
     const gKey=rosterGroupKey(d,state.year,state.month);
     const gArr=roster.filter(x=>rosterGroupKey(x,state.year,state.month)===gKey);
     const gi=gArr.findIndex(x=>x.id===d.id);
@@ -3974,7 +3993,7 @@ function openNurseModal(id){
   document.getElementById('doc-allow-support').checked=(d.prefs.allowSupport!==false);
   document.getElementById('doc-cluster-leave').checked=!!d.prefs.clusterLeave;
   document.getElementById('doc-single-day').checked=!!d.prefs.allowSingleDay;
-  document.getElementById('doc-night-consec').value=d.prefs.nightConsec||'';
+  { const ncM=nightConsecOf(d.prefs); document.getElementById('doc-night-consec').value=ncM?String(ncM):''; }
   const rpTitle=document.getElementById('doc-rolepref-title');
   if(rpTitle) rpTitle.textContent=`位置優先 (${state.year}年${state.month+1}月)`;
   populateRolePref(d.prefs.level||'L', isEdit?getRolePref(d.id,state.year,state.month):'');
@@ -4386,7 +4405,7 @@ function renderStats(){
     const homeShiftStat=getNurseShiftType(doc.id,_statsYear,_statsMonth);
     let capForDoc=state.maxConsecByShift[homeShiftStat]||MAX_CONSEC;
     // 個人偏好「大夜可連到6天」者以其個人上限判斷，避免合法的6天連班被誤報
-    if(homeShiftStat==='N'&&(doc.prefs||{}).nightConsec==='upto6') capForDoc=Math.max(capForDoc,6);
+    { const ncS=nightConsecOf(doc.prefs||{}); if(homeShiftStat==='N'&&ncS) capForDoc=Math.max(capForDoc,Math.min(ncS,6)); }
     if(s.consecMax>capForDoc) viols.push(`⚠ ${doc.name} 連班超過上限(${s.consecMax}天 > ${capForDoc}天)`);
     if(s.transitions>MAX_TRANSITIONS) viols.push(`⚠ ${doc.name} 轉班次數${s.transitions}次，超過上限（${MAX_TRANSITIONS}次以內）`);
   }
@@ -5281,6 +5300,8 @@ function migrateDoctorPrefs(doctors){
     }
     delete doc.prefs.shiftType;
     if(!doc.prefs.level) doc.prefs.level='L';
+    if(doc.prefs.nightConsec==='upto6') doc.prefs.nightConsec='6';
+    if(doc.prefs.nightConsec==='max4') doc.prefs.nightConsec='4';
     if(!doc.prefs.gender) doc.prefs.gender='F';
     if(doc.prefs.allowSupport===undefined) doc.prefs.allowSupport=true;
   }
