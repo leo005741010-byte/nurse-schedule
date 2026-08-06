@@ -5544,15 +5544,53 @@ function tplShiftCode(sh,isPreOff){
   if(sh==='N12') return 'N8';
   return sh;
 }
+// 有些院內電腦會擋掉 cdnjs，導致 ExcelJS 沒載到、匯出當然做不出檔案。
+// 這裡在真正要用的時候再檢查一次，沒有的話依序改用備援來源動態載入。
+function loadScriptOnce(src){
+  return new Promise((res,rej)=>{
+    const el=document.createElement('script');
+    el.src=src; el.async=true;
+    el.onload=()=>res(true); el.onerror=()=>rej(new Error('load fail: '+src));
+    document.head.appendChild(el);
+  });
+}
+async function ensureExcelJS(){
+  if(window.ExcelJS) return true;
+  const srcs=[
+    'https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js',
+    'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js',
+    'https://unpkg.com/exceljs@4.4.0/dist/exceljs.min.js'
+  ];
+  for(const src of srcs){
+    try{ await loadScriptOnce(src); if(window.ExcelJS) return true; }catch(e){}
+  }
+  return !!window.ExcelJS;
+}
+// 產出的檔案在下載前先自我檢查：xlsx 必須是 ZIP(前四碼 PK)且不能過小。
+// 避免把壞檔或空檔存到使用者電腦上，讓 Excel 開啟時才報「無法讀取」。
+async function downloadXlsxChecked(buf,filename){
+  const u8=new Uint8Array(buf);
+  const okZip=u8.length>4&&u8[0]===0x50&&u8[1]===0x4B&&u8[2]===0x03&&u8[3]===0x04;
+  if(!okZip||u8.length<2000) throw new Error(`產生的檔案不完整(${u8.length} bytes)，未下載`);
+  const blob=new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  const url=URL.createObjectURL(blob);
+  if(window.navigator&&window.navigator.msSaveOrOpenBlob){ // 舊版 Edge/IE
+    window.navigator.msSaveOrOpenBlob(blob,filename); URL.revokeObjectURL(url); return;
+  }
+  const a=document.createElement('a');
+  a.href=url; a.download=filename; a.style.display='none';
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); },1500);
+}
 function b64ToArrayBuffer(b64){
   const bin=atob(b64), len=bin.length, u8=new Uint8Array(len);
   for(let i=0;i<len;i++) u8[i]=bin.charCodeAt(i);
   return u8.buffer;
 }
 async function exportShiftTable(){
-  if(!window.ExcelJS){ showToast('❌ Excel元件載入失敗，請檢查網路連線','warn'); return; }
   const y=state.year, m=state.month, dates=monthDates(y,m);
   try{
+    if(!await ensureExcelJS()) throw new Error('Excel元件(ExcelJS)無法載入，可能是網路或院內防火牆擋住了外部程式庫，請確認可連線後再試');
     const wb=new ExcelJS.Workbook();
     await wb.xlsx.load(b64ToArrayBuffer(SHIFT_TPL_B64));
     const ws=wb.getWorksheet('班表')||wb.worksheets[0];
@@ -5601,14 +5639,13 @@ async function exportShiftTable(){
     put(roster.filter(d=>d.type==='support'),TPL_ROWS.other,'支援');
 
     const buf=await wb.xlsx.writeBuffer();
-    const a=document.createElement('a');
-    a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-    a.download=`班表${String(y-1911)}.${String(m+1).padStart(2,'0')}.xlsx`;
-    a.click();
+    // 檔名不放中間的小數點：`班表115.08.xlsx` 在部分瀏覽器/下載工具會被截成
+    // 「班表115.08」而失去 .xlsx 副檔名，Excel 就會開不起來。
+    await downloadXlsxChecked(buf,`班表${String(y-1911)}年${String(m+1).padStart(2,'0')}月.xlsx`);
     if(overflow.length) showToast('⚠ 已匯出，但：'+overflow.join('；'),'warn',true);
     else showToast('✅ 班表已匯出（格式與單位原本的班表相同）');
   }catch(e){
-    showToast('❌ 匯出失敗：'+e.message,'warn',true);
+    showToast('❌ 匯出班表失敗：'+(e&&e.message?e.message:e)+'（點此關閉）','warn',true);
   }
 }
 
@@ -5629,7 +5666,7 @@ function xlsxFillFont(cell,def){
   cell.font={...(cell.font||{}),color:{argb:def.font},bold:true};
 }
 async function exportExcel(){
-  if(!window.ExcelJS){ showToast('❌ Excel匯出元件載入失敗，請檢查網路連線','warn'); return; }
+  if(!await ensureExcelJS()){ showToast('❌ Excel匯出元件無法載入，可能是網路或院內防火牆擋住了外部程式庫，請確認可連線後再試（點此關閉）','warn',true); return; }
   const y=state.year, m=state.month;
   const dates=monthDates(y,m);
   const dowNames=['一','二','三','四','五','六','日'];
@@ -5821,11 +5858,12 @@ async function exportExcel(){
   }
 
   const buf=await wb.xlsx.writeBuffer();
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  a.download=`天晟護理排班_${y}_${m+1}.xlsx`;
-  a.click();
-  showToast('✅ Excel已匯出');
+  try{
+    await downloadXlsxChecked(buf,`天晟護理排班_${y}_${m+1}.xlsx`);
+    showToast('✅ Excel已匯出');
+  }catch(e){
+    showToast('❌ Excel匯出失敗：'+(e&&e.message?e.message:e)+'（點此關閉）','warn',true);
+  }
 }
 
 function generatePDF(){
