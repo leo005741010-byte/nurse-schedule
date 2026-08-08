@@ -5623,14 +5623,28 @@ async function exportShiftTable(){
     const ws=wb.getWorksheet('班表')||wb.worksheets[0];
     ws.getCell('C1').value=y;
     ws.getCell('C2').value=m+1;          // 日期/星期由範本公式自動長出來
-    // ExcelJS 不支援 duplicateValues 型別的設定格式化條件，載入後會被丟掉。
-    // 姓名欄「重複值標紅」用等價的公式條件重建，維持與原班表相同的行為。
-    (ws.conditionalFormattings||[]).forEach(cf=>{
-      if(cf.ref==='D7:D64'){   // 載入時規則還在，但寫檔時才會被丟掉，故一律換成等價公式版
-        cf.rules=[{type:'expression',priority:192,formulae:['COUNTIF($D$7:$D$64,D7)>1'],
-          style:{fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFFC7CE'}},font:{color:{argb:'FF9C0006'}}}}];
-      }
-    });
+    // ExcelJS 有些設定格式化條件的型別(如 duplicateValues)不支援：載入時規則還在，
+    // 但寫檔時會被默默丟掉，只留下 <conditionalFormatting sqref="..."/> 這種沒有任何
+    // cfRule 的空元素。OOXML 規範要求至少一條 cfRule，嚴格版本的 Excel 會判定檔案
+    // 損毀而跳出「部分內容有問題」的修復提示(寬鬆版本則忽略)——這正是部分電腦開不起來的原因。
+    // 因此在寫檔前先自行處理：能換成等價公式的就換，換不掉的整塊移除，不留空元素。
+    const CF_OK=new Set(['expression','cellIs','top10','aboveAverage','dataBar','colorScale','iconSet','containsText','timePeriod']);
+    const colOf=ref=>String(ref||'').split(':')[0].replace(/[0-9]/g,'')||'A';
+    const rowOf=ref=>String(ref||'').split(':')[0].replace(/[^0-9]/g,'')||'1';
+    ws.conditionalFormattings=(ws.conditionalFormattings||[]).map(cf=>{
+      const rules=(cf.rules||[]).map(r=>{
+        // 「重複值標紅」改用等價公式重建，維持與原班表相同的行為
+        if(r.type==='duplicateValues'){
+          const c=colOf(cf.ref), r1=rowOf(cf.ref), last=String(cf.ref).split(':')[1]||'';
+          const lastRow=last.replace(/[^0-9]/g,'')||r1;
+          return {type:'expression',priority:r.priority||1,
+            formulae:[`COUNTIF($${c}$${r1}:$${c}$${lastRow},${c}${r1})>1`],
+            style:r.style||{fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFFC7CE'}},font:{color:{argb:'FF9C0006'}}}};
+        }
+        return r;
+      }).filter(r=>r&&CF_OK.has(r.type));
+      return {...cf,rules};
+    }).filter(cf=>cf.rules&&cf.rules.length);   // 沒有規則的整塊移除，避免產生空元素
     if(ws.pageSetup) ws.pageSetup.useFirstPageNumber=false; // 與原班表一致
     // 當日備註(第6列)
     dates.forEach((d,i)=>{
