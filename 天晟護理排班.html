@@ -5614,77 +5614,85 @@ function b64ToArrayBuffer(b64){
   for(let i=0;i<len;i++) u8[i]=bin.charCodeAt(i);
   return u8.buffer;
 }
+// xlsx 就是一個 zip。這裡用 JSZip 只把 sheet1.xml 裡「已存在且有樣式」的空儲存格填上值，
+// 其餘部件(styles/theme/條件式格式/合併/凍結/列印設定…)原封不動照抄，
+// 因此輸出檔與範本除了我填的值以外逐位元組相同。
+// 之所以不走 ExcelJS 寫檔：它會整份重寫 sheet1.xml(改 namespace、把 inline string 轉
+// sharedStrings、丟掉它不支援的規則型別…)，部分 Excel 版本會判定 sheet1.xml 有 XML 錯誤
+// 而跳出「部分內容有問題」的修復提示。
+async function ensureJSZip(){
+  if(window.JSZip) return true;
+  const srcs=['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+              'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js',
+              'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'];
+  for(const src of srcs){ try{ await loadScriptOnce(src); if(window.JSZip) return true; }catch(e){} }
+  return !!window.JSZip;
+}
+function xmlEsc(v){
+  return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+}
+// 把 vals(Map: 儲存格位址 → 值) 填進 sheet XML；只動這些格、保留原本的樣式索引 s
+function fillSheetXml(xml,vals){
+  let hit=0;
+  const out=xml.replace(/<c r="([A-Z]+\d+)"([^>]*?)(\/>|>[\s\S]*?<\/c>)/g,(m,ref,attrs,tail)=>{
+    if(!vals.has(ref)) return m;
+    hit++;
+    const sm=attrs.match(/\ss="(\d+)"/);
+    const sAttr=sm?` s="${sm[1]}"`:'';
+    const v=vals.get(ref);
+    if(v===null||v===undefined||v==='') return `<c r="${ref}"${sAttr}/>`;
+    if(typeof v==='number') return `<c r="${ref}"${sAttr}><v>${v}</v></c>`;
+    return `<c r="${ref}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+  });
+  return {xml:out,hit};
+}
+function colLetter(n){ let s=''; while(n>0){ const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=(n-r-1)/26; } return s; }
+
 async function exportShiftTable(){
   const y=state.year, m=state.month, dates=monthDates(y,m);
   try{
-    if(!await ensureExcelJS()) throw new Error('Excel元件(ExcelJS)無法載入，可能是網路或院內防火牆擋住了外部程式庫，請確認可連線後再試');
-    const wb=new ExcelJS.Workbook();
-    await wb.xlsx.load(b64ToArrayBuffer(SHIFT_TPL_B64));
-    const ws=wb.getWorksheet('班表')||wb.worksheets[0];
-    ws.getCell('C1').value=y;
-    ws.getCell('C2').value=m+1;          // 日期/星期由範本公式自動長出來
-    // ExcelJS 有些設定格式化條件的型別(如 duplicateValues)不支援：載入時規則還在，
-    // 但寫檔時會被默默丟掉，只留下 <conditionalFormatting sqref="..."/> 這種沒有任何
-    // cfRule 的空元素。OOXML 規範要求至少一條 cfRule，嚴格版本的 Excel 會判定檔案
-    // 損毀而跳出「部分內容有問題」的修復提示(寬鬆版本則忽略)——這正是部分電腦開不起來的原因。
-    // 因此在寫檔前先自行處理：能換成等價公式的就換，換不掉的整塊移除，不留空元素。
-    const CF_OK=new Set(['expression','cellIs','top10','aboveAverage','dataBar','colorScale','iconSet','containsText','timePeriod']);
-    const colOf=ref=>String(ref||'').split(':')[0].replace(/[0-9]/g,'')||'A';
-    const rowOf=ref=>String(ref||'').split(':')[0].replace(/[^0-9]/g,'')||'1';
-    ws.conditionalFormattings=(ws.conditionalFormattings||[]).map(cf=>{
-      const rules=(cf.rules||[]).map(r=>{
-        // 「重複值標紅」改用等價公式重建，維持與原班表相同的行為
-        if(r.type==='duplicateValues'){
-          const c=colOf(cf.ref), r1=rowOf(cf.ref), last=String(cf.ref).split(':')[1]||'';
-          const lastRow=last.replace(/[^0-9]/g,'')||r1;
-          return {type:'expression',priority:r.priority||1,
-            formulae:[`COUNTIF($${c}$${r1}:$${c}$${lastRow},${c}${r1})>1`],
-            style:r.style||{fill:{type:'pattern',pattern:'solid',bgColor:{argb:'FFFFC7CE'}},font:{color:{argb:'FF9C0006'}}}};
-        }
-        return r;
-      }).filter(r=>r&&CF_OK.has(r.type));
-      return {...cf,rules};
-    }).filter(cf=>cf.rules&&cf.rules.length);   // 沒有規則的整塊移除，避免產生空元素
-    if(ws.pageSetup) ws.pageSetup.useFirstPageNumber=false; // 與原班表一致
-    // 當日備註(第6列)
-    dates.forEach((d,i)=>{
+    if(!await ensureJSZip()) throw new Error('壓縮元件(JSZip)無法載入，可能是網路或院內防火牆擋住了外部程式庫，請確認可連線後再試');
+    const zip=await JSZip.loadAsync(b64ToArrayBuffer(SHIFT_TPL_B64));
+    const path='xl/worksheets/sheet1.xml';
+    let xml=await zip.file(path).async('string');
+
+    const vals=new Map();
+    vals.set('C1',y); vals.set('C2',m+1);            // 日期/星期由範本既有公式自動長出
+    dates.forEach((d,i)=>{                            // 當日備註(第6列)
       const note=(state.dayNotes&&state.dayNotes[d])||'';
-      if(note) ws.getCell(6,TPL_FIRST_COL+i).value=note;
+      if(note) vals.set(`${colLetter(TPL_FIRST_COL+i)}6`,note);
     });
-    // 依班別把人填進對應區塊
     const roster=sortedRoster(y,m);
-    const fillRow=(doc,row,seq)=>{
-      if(seq!==null) ws.getCell(row,1).value=seq;
-      if(doc.prefs&&doc.prefs.rank) ws.getCell(row,3).value=doc.prefs.rank; // C欄職級
-      ws.getCell(row,4).value=doc.name;
+    const put=(doc,row,seq)=>{
+      if(seq!==null) vals.set('A'+row,seq);
+      if(doc.prefs&&doc.prefs.rank) vals.set('C'+row,doc.prefs.rank);
+      vals.set('D'+row,doc.name);
       dates.forEach((d,i)=>{
-        if(!isEmployedOnDate(doc.id,d)) return;         // 未在職留白
+        if(!isEmployedOnDate(doc.id,d)) return;       // 未在職留白
         const sh=shiftOfNurseOnDate(doc.id,d);
-        // 護理長/支援外單位不在本系統排班(查無班別是常態)，整列留白供手動填寫；
-        // 不能把「查無資料」寫成整排 off，會蓋掉原本該手填 H/OFF 的格子。
-        if(!sh&&doc.type!=='full') return;
-        ws.getCell(row,TPL_FIRST_COL+i).value=tplShiftCode(sh,offBlocked(doc.id,d));
+        if(!sh&&doc.type!=='full') return;            // 護理長/支援不由本系統排班，整列留白供手填
+        vals.set(`${colLetter(TPL_FIRST_COL+i)}${row}`,tplShiftCode(sh,offBlocked(doc.id,d)));
       });
     };
     const overflow=[];
-    // 護理長
     const head=roster.find(d=>d.type==='head');
-    if(head) fillRow(head,TPL_ROWS.head,null);
-    // D/E/N 三組 + 其他(支援)
-    const put=(list,range,label)=>{
+    if(head) put(head,TPL_ROWS.head,null);
+    const fill=(list,range,label)=>{
       const [from,to]=range, cap=to-from+1;
-      list.slice(0,cap).forEach((doc,i)=>fillRow(doc,from+i,i+1));
+      list.slice(0,cap).forEach((doc,i)=>put(doc,from+i,i+1));
       if(list.length>cap) overflow.push(`${label}班 ${list.length} 人(版面僅 ${cap} 列，多出 ${list.length-cap} 人未填入)`);
     };
     const fulls=roster.filter(d=>d.type==='full');
-    put(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='D'),TPL_ROWS.D,'白');
-    put(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='E'),TPL_ROWS.E,'小夜');
-    put(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='N'),TPL_ROWS.N,'大夜');
-    put(roster.filter(d=>d.type==='support'),TPL_ROWS.other,'支援');
+    fill(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='D'),TPL_ROWS.D,'白');
+    fill(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='E'),TPL_ROWS.E,'小夜');
+    fill(fulls.filter(d=>getNurseShiftType(d.id,y,m)==='N'),TPL_ROWS.N,'大夜');
+    fill(roster.filter(d=>d.type==='support'),TPL_ROWS.other,'支援');
 
-    const buf=await wb.xlsx.writeBuffer();
-    // 檔名不放中間的小數點：`班表115.08.xlsx` 在部分瀏覽器/下載工具會被截成
-    // 「班表115.08」而失去 .xlsx 副檔名，Excel 就會開不起來。
+    const res=fillSheetXml(xml,vals);
+    if(!res.hit) throw new Error('範本格式不符，沒有任何儲存格被填入');
+    zip.file(path,res.xml);
+    const buf=await zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
     await downloadXlsxChecked(buf,`班表${String(y-1911)}年${String(m+1).padStart(2,'0')}月.xlsx`);
     if(overflow.length) showToast('⚠ 已匯出，但：'+overflow.join('；'),'warn',true);
     else showToast('✅ 班表已匯出（格式與單位原本的班表相同）');
